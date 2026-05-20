@@ -76,7 +76,7 @@ export default function LecturerDashboard() {
           }
         } catch (error) {
           setSetupError("Network error. Please try again.");
-        } finaly {
+        } finally {
           setIsStarting(false);
         }
       },
