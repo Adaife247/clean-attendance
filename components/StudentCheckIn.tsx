@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw } from 'lucide-react';
 
 interface Telemetry {
   lat: number;
@@ -15,12 +15,63 @@ interface Props {
 }
 
 export default function StudentCheckIn({ sessionId }: Props) {
-  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'>('idle'); 
+  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
-  
-  // NEW: State to hold the matric number right inside the component
   const [matricNumber, setMatricNumber] = useState('');
 
+  // --- THE SYNC ENGINE ---
+  // This runs automatically in the background when the phone connects to the internet
+  const syncOfflineQueue = async () => {
+    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    if (queue.length === 0) return;
+
+    setStatus('syncing');
+    const remainingQueue = [];
+    let successCount = 0;
+
+    for (const item of queue) {
+      try {
+        const res = await fetch('/api/verify-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+        });
+        
+        // 409 means they were already verified (duplicate check-in)
+        if (res.ok || res.status === 409) {
+          successCount++;
+        } else {
+          remainingQueue.push(item);
+        }
+      } catch (e) {
+        remainingQueue.push(item); // Still offline, keep it in the vault
+      }
+    }
+
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
+
+    if (successCount > 0 && remainingQueue.length === 0) {
+      setStatus('success');
+    } else if (remainingQueue.length > 0) {
+      setStatus('offline-queued');
+    }
+  };
+
+  // Listen for the exact millisecond the phone gets network back
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineQueue);
+    syncOfflineQueue(); // Try to sync immediately on page load just in case
+    return () => window.removeEventListener('online', syncOfflineQueue);
+  }, []);
+
+  const queueOfflinePayload = (telemetry: Telemetry[]) => {
+    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    existing.push({ session: sessionId, matric: matricNumber, telemetry, timestamp: Date.now() });
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+    setStatus('offline-queued');
+  };
+
+  // --- THE CHECK-IN ENGINE ---
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
@@ -29,6 +80,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
       });
+      
       const result = await response.json();
       
       if ((response.ok && result.status === 'verified') || response.status === 409) {
@@ -40,17 +92,21 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setErrorMessage(result.message || "You are too far from the lecture hall.");
         setStatus('failed');
       }
-    } catch (error) {
-      setErrorMessage("Server connection lost. Please try again.");
-      setStatus('failed');
+    } catch (error: any) {
+      // THE INTERCEPTOR: If the fetch crashes due to no internet, catch it here.
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        queueOfflinePayload(gpsTelemetry);
+      } else {
+        setErrorMessage("Server connection lost. Please try again.");
+        setStatus('failed');
+      }
     }
   };
 
   const startCheckIn = () => {
-    // Prevent clicking if no matric number is entered
     if (matricNumber.length < 5) return;
-
     setStatus('locating');
+
     if (!navigator.geolocation) {
       setErrorMessage("Your browser doesn't support location services.");
       setStatus('failed');
@@ -65,7 +121,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (pings.length > 0) {
         sendPayloadToVercel(pings);
       } else {
-        setErrorMessage("Network timeout. We couldn't get a strong GPS lock.");
+        setErrorMessage("We couldn't get a strong GPS lock indoors.");
         setStatus('failed');
       }
     }, 15000);
@@ -113,7 +169,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'idle' && (
           <div className="space-y-4">
-            {/* NEW: The Input Field merged into the idle state */}
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <User size={18} className="text-gray-400" />
@@ -126,19 +181,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-gray-900 transition-all uppercase placeholder:text-sm placeholder:font-medium"
               />
             </div>
-
             <button 
               onClick={startCheckIn} 
               disabled={matricNumber.length < 5}
               className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-semibold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Navigation size={20} className="text-gray-300" />
-              Confirm Attendance
+              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
             </button>
           </div>
         )}
 
-        {/* ... (The rest of the loading/success/error states remain exactly the same) */}
         {(status === 'locating' || status === 'verifying') && (
           <div className="py-6 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-gray-900 animate-spin mb-4" />
@@ -146,6 +198,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
               {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
             </p>
             <p className="text-xs text-gray-400 mt-2">Do not close your browser</p>
+          </div>
+        )}
+
+        {status === 'syncing' && (
+          <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
+            <RefreshCcw className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+            <p className="text-blue-900 font-bold">Network Restored</p>
+            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
+          </div>
+        )}
+
+        {/* NEW: The Offline State */}
+        {status === 'offline-queued' && (
+          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
+            <WifiOff className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
+              Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
+            </p>
           </div>
         )}
 
