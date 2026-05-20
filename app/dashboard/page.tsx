@@ -16,27 +16,20 @@ interface DashboardData {
 }
 
 export default function LecturerDashboard() {
-  // Phase Management State
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  
-  // Setup Screen State
   const [courseInput, setCourseInput] = useState('');
   const [isStarting, setIsStarting] = useState(false);
   const [setupError, setSetupError] = useState('');
-
-  // Ledger State
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
 
-  // Check if an active session survived a page refresh
   useEffect(() => {
     const savedSession = localStorage.getItem('active_attendance_session');
     if (savedSession) setActiveSessionId(savedSession);
   }, []);
 
-  // --- PHASE 1: SESSION CREATION ---
   const startNewSession = () => {
     if (!courseInput.trim()) {
       setSetupError("Please enter a course code.");
@@ -52,7 +45,6 @@ export default function LecturerDashboard() {
       return;
     }
 
-    // Grab the lecturer's exact coordinates to anchor the geofence
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         setSetupError("Creating database session...");
@@ -88,7 +80,6 @@ export default function LecturerDashboard() {
     );
   };
 
-  // Close the active geofenced session
   const endSession = () => {
     if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
       localStorage.removeItem('active_attendance_session');
@@ -98,7 +89,6 @@ export default function LecturerDashboard() {
     }
   };
 
-  // --- PHASE 2: LIVE LEDGER ENGINE ---
   const fetchDashboardData = async () => {
     if (!activeSessionId) return;
     try {
@@ -113,7 +103,6 @@ export default function LecturerDashboard() {
     }
   };
 
-  // Poll the database every 3 seconds for active sessions
   useEffect(() => {
     if (activeSessionId) {
       fetchDashboardData();
@@ -142,11 +131,14 @@ export default function LecturerDashboard() {
     }
   };
 
+  // THE FULLY FIXED CSV EXPORT ENGINE
   const exportToCSV = () => {
     if (!data || data.logs.length === 0) return;
     const headers = ["Matric Number", "Status", "Time"];
     const rows = data.logs.map(log => [log.matricNumber, log.status.toUpperCase(), log.time]);
+    
     const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
+    
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -156,11 +148,9 @@ export default function LecturerDashboard() {
     document.body.removeChild(link);
   };
 
-  // FIX: Dynamic domain resolution for sharing with students
   const copyInviteLink = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    
     navigator.clipboard.writeText(link);
     alert("Check-in link copied! Send this to the students.");
   };
@@ -168,8 +158,8 @@ export default function LecturerDashboard() {
   // --- RENDER PHASE 1: SETUP SCREEN ---
   if (!activeSessionId) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center">
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-6 md:p-8 text-center">
           <div className="bg-blue-50 text-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
             <MapPin size={28} strokeWidth={2.5} />
           </div>
@@ -203,72 +193,73 @@ export default function LecturerDashboard() {
 
   // --- RENDER PHASE 2: LIVE LEDGER DASHBOARD ---
   return (
-    <div className="min-h-screen bg-[#F9FAFB] p-8 font-sans text-gray-900">
+    <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto">
         
-        {/* Header Console */}
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Live Attendance</h1>
-            <div className="flex items-center gap-4 mt-2">
-              <p className="text-gray-500 font-medium flex items-center gap-2">
+        {/* Mobile-Optimized Header Console */}
+        <div className="flex flex-col md:flex-row md:justify-between items-start md:items-end gap-6 mb-8">
+          <div className="w-full md:w-auto">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Live Attendance</h1>
+            <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-3 md:mt-2">
+              <p className="text-gray-500 font-medium flex items-center gap-2 w-full md:w-auto mb-2 md:mb-0">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                 {data?.course || 'Loading...'}
               </p>
               <button 
                 onClick={copyInviteLink} 
-                className="flex items-center gap-1.5 text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-md hover:bg-gray-200 transition-colors border border-gray-200"
+                className="flex-1 md:flex-none justify-center flex items-center gap-1.5 text-xs font-semibold bg-gray-100 text-gray-600 px-3 py-2 md:py-1.5 rounded-md hover:bg-gray-200 transition-colors border border-gray-200"
               >
-                <Copy size={12} /> Copy Student Link
+                <Copy size={12} /> Copy Link
               </button>
               <button 
                 onClick={endSession} 
-                className="flex items-center gap-1.5 text-xs font-semibold bg-red-50 text-red-600 px-3 py-1.5 rounded-md hover:bg-red-100 transition-colors border border-red-200 ml-2"
+                className="flex-1 md:flex-none justify-center flex items-center gap-1.5 text-xs font-semibold bg-red-50 text-red-600 px-3 py-2 md:py-1.5 rounded-md hover:bg-red-100 transition-colors border border-red-200"
               >
-                <XCircle size={12} /> End Lecture
+                <XCircle size={12} /> End
               </button>
             </div>
           </div>
-          <div className="flex items-end gap-6">
-            <div className="text-right">
-              <p className="text-3xl font-bold">{data?.logs.length || 0}</p>
-              <p className="text-sm text-gray-500 font-medium">Total Check-ins</p>
+          
+          <div className="flex w-full md:w-auto items-end justify-between md:justify-end gap-6 border-t md:border-t-0 border-gray-200 pt-4 md:pt-0">
+            <div className="text-left md:text-right">
+              <p className="text-2xl md:text-3xl font-bold">{data?.logs.length || 0}</p>
+              <p className="text-xs md:text-sm text-gray-500 font-medium">Total Check-ins</p>
             </div>
             <button 
               onClick={exportToCSV} 
               disabled={!data || data.logs.length === 0} 
-              className="flex items-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
+              className="flex items-center gap-2 bg-green-600 text-white px-4 md:px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
             >
-              <Download size={18} /> Export CSV
+              <Download size={16} /> <span className="hidden md:inline">Export</span> CSV
             </button>
           </div>
         </div>
 
-        {/* Device Failure Manual Entry Bar */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 mb-6 flex gap-3 items-center">
-          <div className="bg-blue-50 p-2 rounded-xl text-blue-600">
+        {/* Mobile-Optimized Manual Entry Bar */}
+        <div className="bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+          <div className="hidden md:flex bg-blue-50 p-2 rounded-xl text-blue-600">
             <UserPlus size={20} />
           </div>
           <input 
             type="text" 
-            placeholder="Enter Matric Number (e.g., CSC/2021/001)" 
+            placeholder="Matric Number (e.g., CSC/2021/001)" 
             value={manualMatric} 
             onChange={(e) => setManualMatric(e.target.value)} 
             onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
-            className="flex-1 bg-transparent border-none outline-none font-medium placeholder:text-gray-400 focus:ring-0" 
+            className="flex-1 bg-gray-50 md:bg-transparent border border-gray-200 md:border-none p-3 md:p-0 rounded-xl md:rounded-none outline-none font-medium placeholder:text-gray-400 focus:ring-2 md:focus:ring-0 focus:ring-gray-900 transition-all" 
           />
           <button 
             onClick={() => handleManualOverride(manualMatric)} 
             disabled={!manualMatric.trim() || isOverriding} 
-            className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all"
+            className="w-full md:w-auto bg-gray-900 text-white px-6 py-3 md:py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center"
           >
             {isOverriding ? <RefreshCw size={18} className="animate-spin" /> : "Force Check-In"}
           </button>
         </div>
 
-        {/* Real-time Ledger Ledger */}
+        {/* Real-time Ledger */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+          <div className="flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50 gap-2">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
               <Users size={18} /> Student Ledger
             </h3>
@@ -277,30 +268,30 @@ export default function LecturerDashboard() {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse whitespace-nowrap md:whitespace-normal">
               <thead>
                 <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                  <th className="px-6 py-4 font-semibold">Matric Number</th>
-                  <th className="px-6 py-4 font-semibold">Time</th>
-                  <th className="px-6 py-4 font-semibold">System Status</th>
-                  <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                  <th className="px-4 md:px-6 py-4 font-semibold">Matric Number</th>
+                  <th className="px-4 md:px-6 py-4 font-semibold">Time</th>
+                  <th className="px-4 md:px-6 py-4 font-semibold">Status</th>
+                  <th className="px-4 md:px-6 py-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {data?.logs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 font-medium">
+                    <td colSpan={4} className="px-4 md:px-6 py-12 text-center text-gray-500 font-medium whitespace-normal">
                       Waiting for students to check in...
                     </td>
                   </tr>
                 ) : (
                   data?.logs.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-gray-900">{log.matricNumber}</td>
-                      <td className="px-6 py-4 text-gray-500 flex items-center gap-2 text-sm">
-                        <Clock size={14} /> {log.time}
+                      <td className="px-4 md:px-6 py-3 md:py-4 font-medium text-gray-900">{log.matricNumber}</td>
+                      <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm">
+                        <Clock size={14} className="hidden md:block" /> {log.time}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 md:px-6 py-3 md:py-4">
                         {log.status === 'verified' ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
                             <CheckCircle size={12} /> Verified
@@ -311,13 +302,13 @@ export default function LecturerDashboard() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-4 md:px-6 py-3 md:py-4 text-right">
                         {log.status !== 'verified' && (
                           <button 
                             onClick={() => handleManualOverride(log.matricNumber)} 
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
+                            className="inline-flex items-center justify-center gap-1 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
                           >
-                            <ShieldCheck size={14} /> Override
+                            <ShieldCheck size={14} /> <span className="hidden md:inline">Override</span>
                           </button>
                         )}
                       </td>
