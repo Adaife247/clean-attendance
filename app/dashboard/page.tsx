@@ -37,11 +37,13 @@ export default function LecturerDashboard() {
     }
     setIsStarting(true);
     setSetupError("Acquiring podium coordinates...");
+    
     if (!navigator.geolocation) {
       setSetupError("Location services not supported by your browser.");
       setIsStarting(false);
       return;
     }
+    
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         setSetupError("Creating database session...");
@@ -152,19 +154,19 @@ export default function LecturerDashboard() {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
-          <div className="bg-blue-50 text-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-            <MapPin size={28} strokeWidth={2.5} />
+          <div className="bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-600/20">
+            <ShieldCheck size={32} strokeWidth={2.5} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Start Lecture</h2>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h2>
           <p className="text-gray-500 mt-2 text-sm font-medium mb-8">
             Create a secure geofence anchored to your current location.
           </p>
           <input 
             type="text" 
-            placeholder="e.g. CSC 401"
+            placeholder="Course Code (e.g. CSC 401)"
             value={courseInput}
             onChange={(e) => setCourseInput(e.target.value)}
-            className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-center font-bold text-xl py-4 rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-blue-500 transition-all uppercase"
+            className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-center font-bold text-xl py-4 rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-blue-600 transition-all uppercase"
           />
           <button 
             onClick={startNewSession}
@@ -172,7 +174,7 @@ export default function LecturerDashboard() {
             className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-semibold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
           >
             {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <Play size={20} />}
-            {isStarting ? "Anchoring..." : "Establish Geofence"}
+            {isStarting ? "Anchoring Geofence..." : "Establish Geofence"}
           </button>
           {setupError && <p className="text-sm text-red-500 font-medium mt-4">{setupError}</p>}
         </div>
@@ -184,10 +186,14 @@ export default function LecturerDashboard() {
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Bulletproof Mobile Header */}
+        {/* Bulletproof Mobile Header with CampusCheck Branding */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={20} className="text-blue-600" />
+                <span className="text-sm font-bold text-blue-600 uppercase tracking-wider">CampusCheck</span>
+              </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Live Attendance</h1>
               <div className="flex items-center gap-2 mt-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -195,7 +201,7 @@ export default function LecturerDashboard() {
               </div>
             </div>
             
-            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto">
+            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
               <div>
                 <p className="text-2xl font-bold text-gray-900">{data?.logs.length || 0}</p>
                 <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Total Check-ins</p>
@@ -238,7 +244,7 @@ export default function LecturerDashboard() {
               value={manualMatric} 
               onChange={(e) => setManualMatric(e.target.value)} 
               onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
-              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-medium focus:border-gray-400 transition-all placeholder:text-gray-400" 
+              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-medium focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-all placeholder:text-gray-400" 
             />
             <button 
               onClick={() => handleManualOverride(manualMatric)} 
@@ -255,7 +261,7 @@ export default function LecturerDashboard() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex flex-row items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
             <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-              <Users size={18} /> Ledger
+              <Users size={18} /> Verified Ledger
             </h3>
             <span className="text-xs text-gray-400 font-medium">
               Updated: {lastRefreshed || 'Just now'}
