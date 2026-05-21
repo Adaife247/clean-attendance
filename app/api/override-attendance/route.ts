@@ -1,58 +1,49 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export async function POST(request: Request) {
   try {
-    const { sessionId, matricNumber } = await request.json();
+    const body = await request.json();
+    
+    // Aggressive catching: Look for every possible way your frontend might name these variables
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
 
-    if (!sessionId || !matricNumber) {
-      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
     }
 
-    const cleanMatric = matricNumber.trim().toUpperCase();
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
 
-    // 1. Get or Create the Student Profile (Handles dead phones/new students)
-    let { data: student } = await supabase
-      .from('profiles')
-      .select('student_id')
+    // Check if they are already flagged
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
 
-    if (!student) {
-      const { data: newStudent, error: insertError } = await supabase
-        .from('profiles')
-        .insert([{ matric_number: cleanMatric, full_name: "Manual Entry" }])
-        .select('student_id')
-        .single();
-        
-      if (insertError) throw new Error("Failed to create profile");
-      student = newStudent;
-    }
-
-    // 2. UPSERT the Ledger (If they exist, update to verified. If not, insert them as verified)
-    const { error: upsertError } = await supabase
-      .from('attendance_logs')
-      .upsert({ 
+    if (existingLog) {
+      // Update existing flagged student
+      await supabase.from('attendance_logs').update({ 
+        status: 'verified', 
+        device_info: JSON.stringify({ method: "Manual Override - Updated" }) 
+      }).eq('id', existingLog.id);
+    } else {
+      // Insert new student
+      await supabase.from('attendance_logs').insert([{
         session_id: sessionId,
-        student_id: student.student_id,
+        matric_number: cleanMatric,
         status: 'verified',
-        telemetry_metadata: { note: "Manual override by lecturer" }
-      }, { 
-        onConflict: 'session_id,student_id' // Uses our unique constraint to prevent duplicates!
-      });
-
-    if (upsertError) {
-      throw new Error(upsertError.message);
+        device_info: JSON.stringify({ method: "Manual Override - Inserted" })
+      }]);
     }
 
-    return NextResponse.json({ status: 'success', message: `${cleanMatric} manually verified.` }, { status: 200 });
-
+    return NextResponse.json({ message: "Success" });
   } catch (error) {
-    console.error("Override API Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("Override Error:", error);
+    return NextResponse.json({ message: "Error" }, { status: 500 });
   }
 }

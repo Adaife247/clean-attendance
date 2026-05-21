@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck } from 'lucide-react';
 
 interface Telemetry {
   lat: number;
@@ -20,7 +20,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [matricNumber, setMatricNumber] = useState('');
 
   // --- THE SYNC ENGINE ---
-  // This runs automatically in the background when the phone connects to the internet
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -37,14 +36,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
           body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
         });
         
-        // 409 means they were already verified (duplicate check-in)
         if (res.ok || res.status === 409) {
           successCount++;
         } else {
           remainingQueue.push(item);
         }
       } catch (e) {
-        remainingQueue.push(item); // Still offline, keep it in the vault
+        remainingQueue.push(item); 
       }
     }
 
@@ -57,10 +55,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // Listen for the exact millisecond the phone gets network back
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
-    syncOfflineQueue(); // Try to sync immediately on page load just in case
+    syncOfflineQueue(); 
     return () => window.removeEventListener('online', syncOfflineQueue);
   }, []);
 
@@ -93,7 +90,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed');
       }
     } catch (error: any) {
-      // THE INTERCEPTOR: If the fetch crashes due to no internet, catch it here.
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
         queueOfflinePayload(gpsTelemetry);
       } else {
@@ -157,18 +153,21 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
         
-        <div className="mb-8">
-          <div className="bg-gray-50 text-gray-900 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 ring-1 ring-gray-100">
-            <MapPin size={28} strokeWidth={2.5} />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Active Session</h2>
-          <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
+        
+        <div className="flex justify-center items-center gap-2 mb-8 mt-2">
+          <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
         </div>
 
         {status === 'idle' && (
           <div className="space-y-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <User size={18} className="text-gray-400" />
@@ -178,13 +177,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 placeholder="Matric Number (e.g. CSC/2021/001)"
                 value={matricNumber}
                 onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-gray-900 transition-all uppercase placeholder:text-sm placeholder:font-medium"
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
               />
             </div>
             <button 
               onClick={startCheckIn} 
               disabled={matricNumber.length < 5}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-semibold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Navigation size={20} className="text-gray-300" /> Confirm Attendance
             </button>
@@ -193,26 +192,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {(status === 'locating' || status === 'verifying') && (
           <div className="py-6 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-gray-900 animate-spin mb-4" />
-            <p className="text-gray-700 font-semibold animate-pulse">
+            <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+            <p className="text-gray-700 font-bold animate-pulse">
               {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
             </p>
-            <p className="text-xs text-gray-400 mt-2">Do not close your browser</p>
+            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
           </div>
         )}
 
         {status === 'syncing' && (
           <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
-            <RefreshCcw className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+            <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-blue-900 font-bold">Network Restored</p>
             <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
           </div>
         )}
 
-        {/* NEW: The Offline State */}
         {status === 'offline-queued' && (
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
-            <WifiOff className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+            <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
             <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
               Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
@@ -243,12 +241,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
             <button 
               onClick={() => setStatus('idle')} 
-              className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-semibold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
+              className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
             >
               Try Again
             </button>
           </div>
         )}
+        
+        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
+          Secured by CampusCheck Zero-Trust Architecture
+        </p>
       </div>
     </div>
   );

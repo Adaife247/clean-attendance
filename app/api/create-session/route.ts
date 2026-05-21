@@ -1,38 +1,27 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export async function POST(request: Request) {
   try {
-    const { courseCode, latitude, longitude } = await request.json();
+    const body = await request.json();
+    // Catch both camelCase and snake_case
+    const courseId = body.courseId || body.course_id; 
+    
+    if (!courseId) return NextResponse.json({ error: "Missing course ID" }, { status: 400 });
 
-    if (!courseCode || !latitude || !longitude) {
-      return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
-    }
+    const { data, error } = await supabase.from('sessions').insert([{
+      course_id: courseId, // Force it to map to your database column
+      lat: body.latitude,
+      lng: body.longitude,
+      status: 'active'
+    }]).select('id').single();
 
-    // Insert the new session and instantly return the generated ID
-    const { data, error } = await supabase
-      .from('lecture_sessions')
-      .insert([
-        { 
-          course_code: courseCode.toUpperCase(), 
-          anchor_latitude: latitude, 
-          anchor_longitude: longitude, 
-          is_active: true 
-        }
-      ])
-      .select('session_id')
-      .single();
-
-    if (error) throw new Error(error.message);
-
-    return NextResponse.json({ sessionId: data.session_id }, { status: 200 });
-
+    if (error) throw error;
+    return NextResponse.json({ sessionId: data.id });
   } catch (error) {
-    console.error("Session Creation Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("Create Session Error:", error);
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
   }
 }

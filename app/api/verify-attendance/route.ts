@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -25,45 +24,55 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { sessionId, matricNumber, telemetry } = body;
+    const cleanMatric = matricNumber.toUpperCase().trim();
 
-    if (!sessionId || !matricNumber || !telemetry || telemetry.length === 0) {
+    if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA
+    // 1. GET THE LECTURER'S SESSION DATA & COURSE ROSTER
     const { data: session, error: sessionError } = await supabase
-      .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active')
-      .eq('session_id', sessionId)
+      .from('sessions')
+      .select(`
+        lat, 
+        lng, 
+        status,
+        courses ( roster )
+      `)
+      .eq('id', sessionId)
       .single();
 
     if (sessionError || !session) {
       return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     }
-    if (!session.is_active) {
+    if (session.status !== 'active') {
       return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
     }
 
-    // 2. OPEN ENROLLMENT: Get or Create Student Profile
-    let { data: student } = await supabase
-      .from('profiles')
-      .select('student_id')
-      .eq('matric_number', matricNumber)
-      .single();
-
-    if (!student) {
-      // If student doesn't exist, silently create them (Open Enrollment)
-      const { data: newStudent, error: insertError } = await supabase
-        .from('profiles')
-        .insert([{ matric_number: matricNumber, full_name: "Student Profile" }])
-        .select('student_id')
-        .single();
-        
-      if (insertError) throw new Error("Failed to create profile");
-      student = newStudent;
+    // 2. SMART ROSTER ENFORCEMENT
+    // Check if the student is on the roster (if roster exists)
+    const roster = (session as any).courses?.roster || [];
+    const isRosterEnforced = roster.length > 0;
+    
+    if (isRosterEnforced && !roster.includes(cleanMatric)) {
+      return NextResponse.json({ 
+        message: 'Unregistered: Your matric number is not on the official class list.' 
+      }, { status: 403 });
     }
 
-    // 3. THE SPOOF CATCHER MATH
+    // 3. PREVENT DUPLICATES
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    }
+
+    // 4. THE SPOOF CATCHER MATH
     let isSpoofed = false;
     let totalDrift = 0;
     const initialLat = telemetry[0].lat;
@@ -90,42 +99,39 @@ export async function POST(request: Request) {
       isSpoofed = true;
     }
 
-    // 4. THE GEOFENCE (Distance Check)
-    // Check if their first ping is within 150 meters of the lecturer
+    // 5. THE GEOFENCE (Distance Check)
     const distanceToLecturer = getDistanceInMeters(
-      session.anchor_latitude, session.anchor_longitude, 
+      session.lat, session.lng, 
       initialLat, initialLng
     );
 
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
 
-    if (distanceToLecturer <= 500000) {
+    // 50-meter Geofence logic
+    if (distanceToLecturer <= 50) {
       if (isSpoofed) {
         finalStatus = 'flagged'; // Inside radius, but using Fake GPS
-        responseMessage = "Location anomaly detected.";
+        responseMessage = "Location anomaly detected. Please see lecturer.";
       } else {
         finalStatus = 'verified'; // Inside radius and passed physics check
         responseMessage = "Verified";
       }
     }
 
-    // 5. WRITE TO THE LEDGER
+    // 6. WRITE TO THE LEDGER
     const { error: logError } = await supabase
       .from('attendance_logs')
       .insert([{
         session_id: sessionId,
-        student_id: student.student_id,
+        matric_number: cleanMatric,
         status: finalStatus,
-        telemetry_metadata: telemetry // Save the proof!
+        device_info: JSON.stringify(telemetry)
       }]);
 
-    // Handle double check-ins gracefully
-    if (logError && logError.code === '23505') {
-      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
-    }
+    if (logError) throw logError;
 
-    // 6. RETURN VERDICT TO THE UI
+    // 7. RETURN VERDICT TO THE UI
     return NextResponse.json({ 
       status: finalStatus, 
       distance: Math.round(distanceToLecturer),
