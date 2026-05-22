@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA (From the correct table)
+    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -51,18 +51,19 @@ export async function POST(request: Request) {
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating) - UPDATED to use dedicated column
     if (deviceHash) {
       const { data: sharedDevice } = await supabase
         .from('attendance_logs')
         .select('matric_number')
         .eq('session_id', sessionId)
-        .ilike('device_info', `%${deviceHash}%`) 
-        .limit(1)
+        .eq('device_hash', deviceHash)   // exact match on indexed column
         .maybeSingle();
 
       if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
-        return NextResponse.json({ message: `Device sharing blocked. Phone used by ${sharedDevice.matric_number}.` }, { status: 403 });
+        return NextResponse.json({ 
+          message: `Device sharing blocked. Phone already used by ${sharedDevice.matric_number}.` 
+        }, { status: 403 });
       }
     }
 
@@ -99,17 +100,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER
+    // 7. WRITE TO THE LEDGER with device_hash column
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry, deviceHash }) 
+      device_info: JSON.stringify({ telemetry }), // keep telemetry only
+      device_hash: deviceHash || null            // store fingerprint in dedicated column
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
 
   } catch (error) {
+    console.error("Verification API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }

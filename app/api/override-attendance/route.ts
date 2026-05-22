@@ -16,45 +16,49 @@ export async function POST(request: Request) {
 
     const cleanMatric = String(rawMatric).toUpperCase().trim();
 
-    // 1. Check if they are already flagged
+    // 1. Check if they already have a log entry
     const { data: existingLog, error: fetchError } = await supabase
       .from('attendance_logs')
-      .select('id')
+      .select('id, device_hash')
       .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
-       // PGRST116 just means "no rows found", which is normal for a new student. 
-       // Any other error is a real crash.
-       throw fetchError; 
+      throw fetchError;
     }
 
     if (existingLog) {
-      // 2. Try to update
-      const { error: updateError } = await supabase.from('attendance_logs').update({ 
-        status: 'verified', 
-        device_info: JSON.stringify({ method: "Manual Override - Updated" }) 
-      }).eq('id', existingLog.id);
+      // Update existing log: set status to verified, keep existing device_hash
+      const { error: updateError } = await supabase
+        .from('attendance_logs')
+        .update({ 
+          status: 'verified', 
+          device_info: JSON.stringify({ method: "Manual Override - Updated" })
+          // device_hash remains unchanged
+        })
+        .eq('id', existingLog.id);
       
-      if (updateError) throw updateError; // CRITICAL: Catch the error!
+      if (updateError) throw updateError;
       
     } else {
-      // 3. Try to insert
-      const { error: insertError } = await supabase.from('attendance_logs').insert([{
-        session_id: sessionId,
-        matric_number: cleanMatric,
-        status: 'verified',
-        device_info: JSON.stringify({ method: "Manual Override - Inserted" })
-      }]);
+      // Insert new log for a student who never tried to check in
+      const { error: insertError } = await supabase
+        .from('attendance_logs')
+        .insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
+          device_hash: 'manual-override'  // mark as manually added (no device fingerprint)
+        }]);
       
-      if (insertError) throw insertError; // CRITICAL: Catch the error!
+      if (insertError) throw insertError;
     }
 
     return NextResponse.json({ message: "Success" });
     
   } catch (error: any) {
-    // 4. PRINT THE EXACT POSTGRES ERROR TO THE TERMINAL
     console.error("\n================ DATABASE REJECTED OVERRIDE ================");
     console.error("Error Code:", error.code);
     console.error("Message:", error.message);
