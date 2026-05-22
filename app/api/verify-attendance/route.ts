@@ -30,30 +30,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA & COURSE ROSTER
+    // 1. GET THE LECTURER'S SESSION DATA FROM THE NEW TABLE
     const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .select(`
-        lat, 
-        lng, 
-        status,
-        courses ( roster )
-      `)
-      .eq('id', sessionId)
+      .from('lecture_sessions')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code')
+      .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) {
       return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     }
-    if (session.status !== 'active') {
+    
+    // Validate against the new boolean column
+    if (session.is_active !== true) {
       return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
     }
 
-    // 2. SMART ROSTER ENFORCEMENT
-    // Check if the student is on the roster (if roster exists)
-    const roster = (session as any).courses?.roster || [];
-    const isRosterEnforced = roster.length > 0;
+    // 2. SMART ROSTER ENFORCEMENT (Safe decoupled query)
+    let roster: string[] = [];
+    if (session.course_code) {
+      const { data: courseData } = await supabase
+        .from('courses')
+        .select('roster')
+        .eq('course_code', session.course_code)
+        .single();
+      
+      if (courseData && courseData.roster) {
+        roster = courseData.roster || [];
+      }
+    }
     
+    const isRosterEnforced = roster.length > 0;
     if (isRosterEnforced && !roster.includes(cleanMatric)) {
       return NextResponse.json({ 
         message: 'Unregistered: Your matric number is not on the official class list.' 
@@ -81,40 +88,33 @@ export async function POST(request: Request) {
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
       
-      // Trap A: Fake GPS apps often lock accuracy at exactly 1.0 or 5.0 meters
       if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
-      
-      // Trap B: Fake GPS apps sometimes output exactly 0 altitude
       if (ping.alt === 0) isSpoofed = true;
-
-      // Trap C: Check for zero drift. Real GPS jitters slightly every second.
       if (i > 0) {
         const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
         totalDrift += drift;
       }
     }
 
-    // If there are 3 pings and ZERO physical drift between them, it's a frozen fake location
     if (telemetry.length >= 3 && totalDrift === 0) {
       isSpoofed = true;
     }
 
-    // 5. THE GEOFENCE (Distance Check)
+    // 5. THE GEOFENCE (Pointing to new DB columns)
     const distanceToLecturer = getDistanceInMeters(
-      session.lat, session.lng, 
+      session.anchor_latitude, session.anchor_longitude, 
       initialLat, initialLng
     );
 
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
 
-    // 50-meter Geofence logic
     if (distanceToLecturer <= 50) {
       if (isSpoofed) {
-        finalStatus = 'flagged'; // Inside radius, but using Fake GPS
+        finalStatus = 'flagged'; 
         responseMessage = "Location anomaly detected. Please see lecturer.";
       } else {
-        finalStatus = 'verified'; // Inside radius and passed physics check
+        finalStatus = 'verified'; 
         responseMessage = "Verified";
       }
     }
@@ -129,7 +129,10 @@ export async function POST(request: Request) {
         device_info: JSON.stringify(telemetry)
       }]);
 
-    if (logError) throw logError;
+    if (logError) {
+      console.error("Database Insert Error:", logError);
+      throw logError;
+    }
 
     // 7. RETURN VERDICT TO THE UI
     return NextResponse.json({ 
