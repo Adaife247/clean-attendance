@@ -48,6 +48,7 @@ export default function LecturerDashboard() {
   // --- NEW VAULT STATE ---
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null); // Tracks which archive is downloading
 
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
@@ -192,7 +193,6 @@ export default function LecturerDashboard() {
     }
   }, [activeSessionId, viewMode]);
 
-  // THE AGGRESSIVE OVERRIDE FUNCTION
   const handleManualOverride = async (targetMatric: string) => {
     try {
       if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
@@ -221,25 +221,27 @@ export default function LecturerDashboard() {
     }
   };
 
-  // --- PROFESSIONAL EXCEL EXPORT ---
-  const exportToCSV = () => {
-    if (!data || data.logs.length === 0) return;
+  // --- DYNAMIC EXCEL EXPORT ENGINE ---
+  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
+    if (!logsToExport || logsToExport.length === 0) {
+      alert("No check-ins were recorded during this session.");
+      return;
+    }
     
-    const verifiedCount = data.logs.filter(l => l.status === 'verified').length;
-    const date = new Date().toLocaleDateString();
+    const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
 
     // Professional Header
     const header = [
-      ["OFFICIAL ATTENDANCE REPORT"],
-      ["Course Code", data.course],
-      ["Date Generated", date],
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
+      ["Course Code", courseName],
+      ["Date Generated", dateStr],
       ["Total Present", verifiedCount],
-      ["Total Records Logged", data.logs.length],
+      ["Total Records Logged", logsToExport.length],
       [], // Empty row for spacing
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
 
-    const rows = data.logs
+    const rows = logsToExport
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
       .map(log => [
         log.matricNumber, 
@@ -252,10 +254,32 @@ export default function LecturerDashboard() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `${data.course.replace(/\s+/g, '_')}_Attendance_${date.replace(/\//g, '-')}.csv`);
+    link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // --- DOWNLOAD LIVE SESSION ---
+  const exportLiveCSV = () => {
+    if (!data) return;
+    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
+  };
+
+  // --- DOWNLOAD PAST SESSION ---
+  const downloadPastSession = async (sessionId: string, dateString: string) => {
+    setDownloadingId(sessionId);
+    try {
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+      if (!response.ok) throw new Error("Failed to fetch");
+      const pastData = await response.json();
+      
+      generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
+    } catch (e) {
+      alert("Failed to download historical records. Check network.");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const copyInviteLink = () => {
@@ -352,9 +376,17 @@ export default function LecturerDashboard() {
                           <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
                           <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
                         </div>
-                        <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1.5 rounded-lg">
-                          Archived
-                        </span>
+                        
+                        {/* THIS IS THE NEW CLICKABLE DOWNLOAD BUTTON */}
+                        <button 
+                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
+                          disabled={downloadingId === session.session_id}
+                          className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        >
+                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                          {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
+                        </button>
+                        
                       </div>
                     ))}
                   </div>
@@ -394,7 +426,7 @@ export default function LecturerDashboard() {
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Check-ins</p>
               </div>
               <button 
-                onClick={exportToCSV} 
+                onClick={exportLiveCSV} 
                 disabled={!data || data.logs.length === 0} 
                 className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
               >
