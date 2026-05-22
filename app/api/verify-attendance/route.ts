@@ -22,14 +22,19 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, deviceHash } = body;
+    const { sessionId, matricNumber, telemetry, photoBase64 } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
-      return NextResponse.json({ message: "Invalid system payload structural layout" }, { status: 400 });
+      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. EVALUATE THE ENFORCED LECTURE SESSION WINDOW
+    // Enforce the biometric payload
+    if (!photoBase64) {
+      return NextResponse.json({ message: "Facial capture is required for zero-trust validation." }, { status: 400 });
+    }
+
+    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -37,14 +42,14 @@ export async function POST(request: Request) {
       .single();
 
     if (sessionError || !session) {
-      return NextResponse.json({ message: "The verification window for this token layout has expired or does not exist." }, { status: 404 });
+      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     }
     
     if (session.is_active !== true) {
-      return NextResponse.json({ message: "Operational registration limits closed for this block window." }, { status: 403 });
+      return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
     }
 
-  // 2. COURSE ROSTER SUB-QUERY ENFORCEMENT
+    // 2. SMART ROSTER ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
       const { data: courseData } = await supabase
@@ -61,11 +66,11 @@ export async function POST(request: Request) {
     const isRosterEnforced = roster.length > 0;
     if (isRosterEnforced && !roster.includes(cleanMatric)) {
       return NextResponse.json({ 
-        message: 'Identity Validation Failed: Your matric identifier is not included in the verified roster block.' 
+        message: 'Unregistered: Your matric number is not on the official class list.' 
       }, { status: 403 });
     }
 
-    // 3. RETRIEVE RECORD ENTRIES FOR DUPLICATE MATRIC ID CHECKS
+    // 3. PREVENT DUPLICATES
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -74,27 +79,10 @@ export async function POST(request: Request) {
       .single();
 
     if (existingLog) {
-      return NextResponse.json({ message: "This structural identification profile has already been logged into the current window." }, { status: 409 });
+      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // 4. THE ZERO-TRUST HARDWARE INTEGRITY ANALYSIS (Blocks Incognito Proxies)
-    if (deviceHash) {
-      const { data: sharedDevice } = await supabase
-        .from('attendance_logs')
-        .select('matric_number')
-        .eq('session_id', sessionId)
-        .ilike('device_info', `%${deviceHash}%`) 
-        .limit(1)
-        .maybeSingle();
-
-      if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
-        return NextResponse.json({ 
-          message: `Device configuration sharing restriction encountered. This physical smartphone hardware profile was already bound to an active identity ledger entry (${sharedDevice.matric_number}) during this lecture block.` 
-        }, { status: 403 });
-      }
-    }
-
-    // 5. GEO-SPOOF FRAUD FILTER ANALYSIS
+    // 4. THE SPOOF CATCHER MATH
     let isSpoofed = false;
     let totalDrift = 0;
     const initialLat = telemetry[0].lat;
@@ -114,40 +102,41 @@ export async function POST(request: Request) {
       isSpoofed = true;
     }
 
-    // 6. GEOFENCE RADIAL CALCULATIONS
+    // 5. THE GEOFENCE
     const distanceToLecturer = getDistanceInMeters(
       session.anchor_latitude, session.anchor_longitude, 
       initialLat, initialLng
     );
 
     let finalStatus = 'absent';
-    let responseMessage = `Geofence validation failed. Computed radial offset indicates you are ${Math.round(distanceToLecturer)} meters outside operational bounds.`;
+    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
 
     if (distanceToLecturer <= 50) {
       if (isSpoofed) {
         finalStatus = 'flagged'; 
-        responseMessage = "Telemetry modification markers present. Hardware configuration logged for auditing.";
+        responseMessage = "Location anomaly detected. Please see lecturer.";
       } else {
         finalStatus = 'verified'; 
         responseMessage = "Verified";
       }
     }
 
-    // 7. WRITE THE COMPREHENSIVE STRUCTURAL LOG INTO THE ATTENDANCE STORAGE
+    // 6. WRITE TO THE LEDGER (Saving the compressed photo directly into the JSON)
     const { error: logError } = await supabase
       .from('attendance_logs')
       .insert([{
         session_id: sessionId,
         matric_number: cleanMatric,
         status: finalStatus,
-        device_info: JSON.stringify({ telemetry, deviceHash }) 
+        device_info: JSON.stringify({ telemetry, photo: photoBase64 }) 
       }]);
 
     if (logError) {
-      console.error("Database Core Operational Failure:", logError);
+      console.error("Database Insert Error:", logError);
       throw logError;
     }
 
+    // 7. RETURN VERDICT
     return NextResponse.json({ 
       status: finalStatus, 
       distance: Math.round(distanceToLecturer),
@@ -155,7 +144,7 @@ export async function POST(request: Request) {
     }, { status: 200 });
 
   } catch (error) {
-    console.error("Core System Execution Interruption:", error);
-    return NextResponse.json({ message: "An unhandled exception broke execution processing workflows." }, { status: 500 });
+    console.error("API Error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }
