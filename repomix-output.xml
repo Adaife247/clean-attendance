@@ -58,6 +58,7 @@ app/globals.css
 app/layout.tsx
 app/login/page.tsx
 app/page.tsx
+app/portal/page.tsx
 CLAUDE.md
 components/StudentCheckIn.tsx
 eslint.config.mjs
@@ -1297,6 +1298,110 @@ export default function Page() {
 }
 </file>
 
+<file path="app/portal/page.tsx">
+'use client';
+import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Search, ShieldCheck, User, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+interface Record { course_code: string; total_classes: number; attended_classes: number; percentage: number; }
+
+export default function StudentPortal() {
+  const [matricNumber, setMatricNumber] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [records, setRecords] = useState<Record[] | null>(null);
+  const [error, setError] = useState('');
+
+  const fetchRecords = async () => {
+    if (matricNumber.length < 5) return;
+    setIsSearching(true);
+    setError('');
+    
+    try {
+      const cleanMatric = matricNumber.toUpperCase().trim();
+      const { data: studentLogs, error: logError } = await supabase.from('attendance_logs').select('session_id, status').eq('matric_number', cleanMatric);
+
+      if (logError || !studentLogs || studentLogs.length === 0) {
+        setError("No records found for this matric number.");
+        setRecords([]);
+        return;
+      }
+
+      const sessionIds = studentLogs.map(log => log.session_id);
+      const { data: sessions } = await supabase.from('lecture_sessions').select('session_id, course_code').in('session_id', sessionIds);
+
+      if (!sessions) return;
+
+      const courseStats = new Map<string, { total: number; attended: number }>();
+      
+      studentLogs.forEach(log => {
+        const session = sessions.find(s => s.session_id === log.session_id);
+        if (session && session.course_code) {
+          const course = session.course_code;
+          const currentStats = courseStats.get(course) || { total: 0, attended: 0 };
+          courseStats.set(course, { total: currentStats.total + 1, attended: currentStats.attended + (log.status === 'verified' ? 1 : 0) });
+        }
+      });
+
+      const finalRecords = Array.from(courseStats.entries()).map(([course, stats]) => ({
+        course_code: course, total_classes: stats.total, attended_classes: stats.attended, percentage: Math.round((stats.attended / stats.total) * 100)
+      }));
+
+      setRecords(finalRecords);
+    } catch (err) { setError("Failed to fetch records. Please try again."); } 
+    finally { setIsSearching(false); }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-8 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-900"></div>
+        <div className="text-center mb-8 mt-2">
+          <ShieldCheck size={28} className="text-gray-900 mx-auto mb-2" strokeWidth={2.5} />
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Student Portal</h1>
+          <p className="text-gray-500 mt-2 text-sm font-medium">Check your exam eligibility status.</p>
+        </div>
+
+        <div className="relative mb-4">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+          <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && fetchRecords()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-gray-900 transition-all uppercase placeholder:text-sm placeholder:font-medium" />
+        </div>
+        
+        <button onClick={fetchRecords} disabled={matricNumber.length < 5 || isSearching} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
+          {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />} {isSearching ? "Searching Ledger..." : "Check Records"}
+        </button>
+
+        {error && <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center"><p className="text-red-700 font-bold text-sm">{error}</p></div>}
+
+        {records && records.length > 0 && (
+          <div className="mt-8 space-y-4">
+            <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Your Attendance</h3>
+            {records.map((record) => (
+              <div key={record.course_code} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center">
+                <div>
+                  <p className="font-extrabold text-gray-900">{record.course_code}</p>
+                  <p className="text-xs text-gray-500 font-medium mt-1">Attended {record.attended_classes} of {record.total_classes} classes</p>
+                </div>
+                <div className="text-right">
+                  <p className={`font-black text-xl ${record.percentage >= 70 ? 'text-green-600' : 'text-red-600'}`}>{record.percentage}%</p>
+                  {record.percentage >= 70 ? (
+                    <span className="text-[10px] uppercase font-bold text-green-600 flex items-center gap-1"><CheckCircle size={10}/> Eligible</span>
+                  ) : (
+                    <span className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1"><AlertTriangle size={10}/> At Risk</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="package.json">
 {
   "name": "clean-attendance",
@@ -1421,75 +1526,6 @@ export async function GET(request: Request) {
   } catch (e: any) {
     console.error("Dashboard Data Fatal Error:", e.message);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/override-attendance/route.ts">
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    
-    const sessionId = body.sessionId || body.session_id || body.session;
-    const rawMatric = body.matricNumber || body.matric_number || body.matric;
-
-    if (!sessionId || !rawMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
-
-    // 1. Check if they are already flagged
-    const { data: existingLog, error: fetchError } = await supabase
-      .from('attendance_logs')
-      .select('id')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-       // PGRST116 just means "no rows found", which is normal for a new student. 
-       // Any other error is a real crash.
-       throw fetchError; 
-    }
-
-    if (existingLog) {
-      // 2. Try to update
-      const { error: updateError } = await supabase.from('attendance_logs').update({ 
-        status: 'verified', 
-        device_info: JSON.stringify({ method: "Manual Override - Updated" }) 
-      }).eq('id', existingLog.id);
-      
-      if (updateError) throw updateError; // CRITICAL: Catch the error!
-      
-    } else {
-      // 3. Try to insert
-      const { error: insertError } = await supabase.from('attendance_logs').insert([{
-        session_id: sessionId,
-        matric_number: cleanMatric,
-        status: 'verified',
-        device_info: JSON.stringify({ method: "Manual Override - Inserted" })
-      }]);
-      
-      if (insertError) throw insertError; // CRITICAL: Catch the error!
-    }
-
-    return NextResponse.json({ message: "Success" });
-    
-  } catch (error: any) {
-    // 4. PRINT THE EXACT POSTGRES ERROR TO THE TERMINAL
-    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
-    console.error("Error Code:", error.code);
-    console.error("Message:", error.message);
-    console.error("Details:", error.details);
-    console.error("============================================================\n");
-    
-    return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }
 </file>
@@ -1691,6 +1727,79 @@ export default function LecturerLogin() {
 }
 </file>
 
+<file path="app/api/override-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
+
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // 1. Check if they already have a log entry
+    const { data: existingLog, error: fetchError } = await supabase
+      .from('attendance_logs')
+      .select('id, device_hash')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+
+    if (existingLog) {
+      // Update existing log: set status to verified, keep existing device_hash
+      const { error: updateError } = await supabase
+        .from('attendance_logs')
+        .update({ 
+          status: 'verified', 
+          device_info: JSON.stringify({ method: "Manual Override - Updated" })
+          // device_hash remains unchanged
+        })
+        .eq('id', existingLog.id);
+      
+      if (updateError) throw updateError;
+      
+    } else {
+      // Insert new log for a student who never tried to check in
+      const { error: insertError } = await supabase
+        .from('attendance_logs')
+        .insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
+          device_hash: 'manual-override'  // mark as manually added (no device fingerprint)
+        }]);
+      
+      if (insertError) throw insertError;
+    }
+
+    return NextResponse.json({ message: "Success" });
+    
+  } catch (error: any) {
+    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
+    console.error("Error Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("Details:", error.details);
+    console.error("============================================================\n");
+    
+    return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/verify-attendance/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -1720,7 +1829,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA (From the correct table)
+    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -1745,18 +1854,19 @@ export async function POST(request: Request) {
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating) - UPDATED to use dedicated column
     if (deviceHash) {
       const { data: sharedDevice } = await supabase
         .from('attendance_logs')
         .select('matric_number')
         .eq('session_id', sessionId)
-        .ilike('device_info', `%${deviceHash}%`) 
-        .limit(1)
+        .eq('device_hash', deviceHash)   // exact match on indexed column
         .maybeSingle();
 
       if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
-        return NextResponse.json({ message: `Device sharing blocked. Phone used by ${sharedDevice.matric_number}.` }, { status: 403 });
+        return NextResponse.json({ 
+          message: `Device sharing blocked. Phone already used by ${sharedDevice.matric_number}.` 
+        }, { status: 403 });
       }
     }
 
@@ -1793,362 +1903,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER
+    // 7. WRITE TO THE LEDGER with device_hash column
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry, deviceHash }) 
+      device_info: JSON.stringify({ telemetry }), // keep telemetry only
+      device_hash: deviceHash || null            // store fingerprint in dedicated column
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
 
   } catch (error) {
+    console.error("Verification API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
-}
-</file>
-
-<file path="components/StudentCheckIn.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand } from 'lucide-react';
-
-interface Telemetry {
-  lat: number;
-  lng: number;
-  alt: number | null;
-  acc: number;
-  timestamp: number;
-}
-
-interface Props {
-  sessionId: string;
-}
-
-// --- HYBRID HARDWARE FINGERPRINT (Incognito & Opera Mini Killer) ---
-const generateDeviceFingerprint = () => {
-  try {
-    const canvas = document.createElement('canvas');
-    let fingerprintStr = '';
-
-    // 1. Font Enumeration via measureText (Bypasses Canvas Poisoning)
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const testText = "mmmmmmmmmmlli_CampusCheck";
-      const testFonts = ['Arial', 'Roboto', 'Times New Roman', 'Courier New', 'Verdana', 'sans-serif', 'serif', 'monospace'];
-      
-      testFonts.forEach(font => {
-        ctx.font = `72px ${font}`;
-        fingerprintStr += Math.round(ctx.measureText(testText).width) + '-';
-      });
-    }
-
-    // 2. WebGL GPU Data (Catches the hardware layer)
-    const gl = canvas.getContext('webgl') || (canvas.getContext('experimental-webgl') as WebGLRenderingContext);
-    let gpu = 'unknown-gpu';
-    if (gl) {
-      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-      gpu = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'fallback-gpu';
-    }
-
-    // 3. System Capabilities
-    const cores = navigator.hardwareConcurrency || 'unknown-cores';
-    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
-
-    // Mash them all together and encode it
-    const finalHash = `${fingerprintStr}|${gpu}|${cores}|${screenStr}`;
-    return btoa(finalHash); 
-    
-  } catch (e) {
-    // Ultimate fallback if their browser is completely locked down
-    return 'fallback-device-id-' + Math.floor(Math.random() * 1000000);
-  }
-};
-
-export default function StudentCheckIn({ sessionId }: Props) {
-  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
-  const [errorMessage, setErrorMessage] = useState('');
-  const [matricNumber, setMatricNumber] = useState('');
-  const [isAppealing, setIsAppealing] = useState(false);
-
-  // --- TRIGGER HAPTIC FEEDBACK ---
-  const triggerSuccessVibration = () => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]); // Double buzz
-    }
-  };
-
-  // --- OFFLINE SYNC ENGINE ---
-  const syncOfflineQueue = async () => {
-    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    if (queue.length === 0) return;
-
-    setStatus('syncing');
-    const remainingQueue = [];
-    let successCount = 0;
-
-    for (const item of queue) {
-      try {
-        const res = await fetch('/api/verify-attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceHash: item.deviceHash })
-        });
-        
-        if (res.ok || res.status === 409) {
-          successCount++;
-        } else {
-          remainingQueue.push(item);
-        }
-      } catch (e) {
-        remainingQueue.push(item); 
-      }
-    }
-
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
-
-    if (successCount > 0 && remainingQueue.length === 0) {
-      triggerSuccessVibration();
-      setStatus('success');
-    } else if (remainingQueue.length > 0) {
-      setStatus('offline-queued');
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener('online', syncOfflineQueue);
-    syncOfflineQueue(); 
-    return () => window.removeEventListener('online', syncOfflineQueue);
-  }, []);
-
-  const queueOfflinePayload = (telemetry: Telemetry[]) => {
-    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    existing.push({ session: sessionId, matric: matricNumber, telemetry, deviceHash: generateDeviceFingerprint(), timestamp: Date.now() });
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
-    setStatus('offline-queued');
-  };
-
-  // --- THE CHECK-IN ENGINE ---
-  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
-    setStatus('verifying');
-    try {
-      const response = await fetch('/api/verify-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceHash: generateDeviceFingerprint() })
-      });
-      
-      const result = await response.json();
-      
-      if ((response.ok && result.status === 'verified') || response.status === 409) {
-        triggerSuccessVibration();
-        setStatus('success');
-      } else if (result.status === 'flagged') {
-        setErrorMessage("Location anomaly detected. Please see the lecturer.");
-        setStatus('failed');
-      } else {
-        setErrorMessage(result.message || "Verification failed. See lecturer.");
-        setStatus('failed');
-      }
-    } catch (error: any) {
-      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        queueOfflinePayload(gpsTelemetry);
-      } else {
-        setErrorMessage("Server connection lost. Please try again.");
-        setStatus('failed');
-      }
-    }
-  };
-
-  const startCheckIn = () => {
-    if (matricNumber.length < 5) return;
-    setStatus('locating');
-
-    if (!navigator.geolocation) {
-      setErrorMessage("Your browser doesn't support location services.");
-      setStatus('failed');
-      return;
-    }
-
-    let pings: Telemetry[] = [];
-    let watchId: number;
-    
-    const timeoutId = setTimeout(() => {
-      if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (pings.length > 0) {
-        sendPayloadToVercel(pings);
-      } else {
-        setErrorMessage("We couldn't get a strong GPS lock indoors.");
-        setStatus('failed');
-      }
-    }, 15000);
-
-    watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        pings.push({
-          lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
-        });
-
-        if (pings.length >= 3) {
-          clearTimeout(timeoutId);
-          navigator.geolocation.clearWatch(watchId);
-          sendPayloadToVercel(pings);
-        }
-      },
-      (error) => {
-        clearTimeout(timeoutId);
-        if (error.code === 1) {
-          setStatus('denied');
-        } else {
-          setErrorMessage("Failed to grab GPS. Ensure your location is turned on.");
-          setStatus('failed');
-        }
-      },
-      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
-    );
-  };
-
-  // --- THE 1-CLICK DIGITAL APPEAL ---
-  const requestAppeal = async () => {
-    setIsAppealing(true);
-    try {
-      const response = await fetch('/api/request-override', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber })
-      });
-      if (response.ok) {
-        alert("Appeal sent! Please look at the lecturer for visual confirmation.");
-        setStatus('idle');
-      } else {
-        alert("Failed to send appeal. Please check your network.");
-      }
-    } catch (e) {
-      alert("Network error.");
-    } finally {
-      setIsAppealing(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
-        
-        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
-        
-        <div className="flex justify-center items-center gap-2 mb-8 mt-2">
-          <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
-        </div>
-
-        {status === 'idle' && (
-          <div className="space-y-4">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <User size={18} className="text-gray-400" />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Matric Number (e.g. CSC/2021/001)"
-                value={matricNumber}
-                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
-              />
-            </div>
-            <button 
-              onClick={startCheckIn} 
-              disabled={matricNumber.length < 5}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
-            </button>
-          </div>
-        )}
-
-        {(status === 'locating' || status === 'verifying') && (
-          <div className="py-6 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-gray-700 font-bold animate-pulse">
-              {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
-            </p>
-            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
-          </div>
-        )}
-
-        {status === 'syncing' && (
-          <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
-            <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-blue-900 font-bold">Network Restored</p>
-            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
-          </div>
-        )}
-
-        {status === 'offline-queued' && (
-          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
-            <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
-              Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
-            </p>
-          </div>
-        )}
-
-        {status === 'success' && (
-          <div className="py-6 bg-green-50 rounded-2xl border border-green-100">
-            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-green-900">Verified</h3>
-            <p className="text-green-700 mt-1 text-sm font-medium">Your attendance has been recorded.</p>
-          </div>
-        )}
-
-        {status === 'denied' && (
-          <div className="py-6 bg-red-50 rounded-2xl border border-red-100 px-4">
-            <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Required</h3>
-            <p className="text-red-700 mt-2 text-sm font-medium">Please allow location access in your browser to check in.</p>
-          </div>
-        )}
-
-        {status === 'failed' && (
-          <div className="py-6 bg-orange-50 rounded-2xl border border-orange-100 px-4">
-            <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
-            <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
-            
-            <div className="mt-6 space-y-3">
-              <button 
-                onClick={() => setStatus('idle')} 
-                className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
-              >
-                Try Again
-              </button>
-              
-              <div className="border-t border-orange-200 pt-3 mt-3">
-                <button 
-                  onClick={requestAppeal}
-                  disabled={isAppealing}
-                  className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm"
-                >
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
-                  Raise Hand (Digital Appeal)
-                </button>
-              </div>
-            </div>
-
-          </div>
-        )}
-        
-        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
-          Secured by CampusCheck Zero-Trust Architecture
-        </p>
-      </div>
-    </div>
-  );
 }
 </file>
 
@@ -2694,6 +2463,226 @@ export default function LecturerDashboard() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/StudentCheckIn.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand } from 'lucide-react';
+
+interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
+interface Props { sessionId: string; }
+
+// --- RAW PHYSICAL FINGERPRINT (Incognito Masking Mitigator) ---
+const generateDeviceFingerprint = () => {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    let fontWidth = '0';
+    if (ctx) {
+      ctx.font = "72px Arial";
+      fontWidth = String(Math.round(ctx.measureText("mmmmmmmmmmlli_CampusCheck").width));
+    }
+    const cores = navigator.hardwareConcurrency || '0';
+    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
+    return `${fontWidth}-${cores}-${screenStr}`;
+  } catch (e) {
+    return 'fallback-device-id-' + Math.floor(Math.random() * 1000000);
+  }
+};
+
+export default function StudentCheckIn({ sessionId }: Props) {
+  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
+  const [errorMessage, setErrorMessage] = useState('');
+  const [matricNumber, setMatricNumber] = useState('');
+  const [isAppealing, setIsAppealing] = useState(false);
+
+  const triggerSuccessVibration = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  };
+
+  const syncOfflineQueue = async () => {
+    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    if (queue.length === 0) return;
+    setStatus('syncing');
+    const remainingQueue = [];
+    let successCount = 0;
+
+    for (const item of queue) {
+      try {
+        const res = await fetch('/api/verify-attendance', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceHash: item.deviceHash })
+        });
+        if (res.ok || res.status === 409) successCount++;
+        else remainingQueue.push(item);
+      } catch (e) { remainingQueue.push(item); }
+    }
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
+    if (successCount > 0 && remainingQueue.length === 0) { triggerSuccessVibration(); setStatus('success'); } 
+    else if (remainingQueue.length > 0) setStatus('offline-queued');
+  };
+
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineQueue);
+    syncOfflineQueue(); 
+    return () => window.removeEventListener('online', syncOfflineQueue);
+  }, []);
+
+  const queueOfflinePayload = (telemetry: Telemetry[]) => {
+    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    existing.push({ session: sessionId, matric: matricNumber, telemetry, deviceHash: generateDeviceFingerprint(), timestamp: Date.now() });
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+    setStatus('offline-queued');
+  };
+
+  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
+    setStatus('verifying');
+    try {
+      const response = await fetch('/api/verify-attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceHash: generateDeviceFingerprint() })
+      });
+      const result = await response.json();
+      if ((response.ok && result.status === 'verified') || response.status === 409) { triggerSuccessVibration(); setStatus('success'); } 
+      else if (result.status === 'flagged') { setErrorMessage("Location anomaly detected. Please see the lecturer."); setStatus('failed'); } 
+      else { setErrorMessage(result.message || "Verification failed. See lecturer."); setStatus('failed'); }
+    } catch (error: any) {
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) queueOfflinePayload(gpsTelemetry);
+      else { setErrorMessage("Server connection lost. Please try again."); setStatus('failed'); }
+    }
+  };
+
+  const startCheckIn = () => {
+    if (matricNumber.length < 5) return;
+    setStatus('locating');
+    if (!navigator.geolocation) { setErrorMessage("Your browser doesn't support location services."); setStatus('failed'); return; }
+
+    let pings: Telemetry[] = [];
+    let watchId: number;
+    
+    const timeoutId = setTimeout(() => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (pings.length > 0) sendPayloadToVercel(pings);
+      else { setErrorMessage("We couldn't get a strong GPS lock indoors."); setStatus('failed'); }
+    }, 15000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
+        if (pings.length >= 3) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); sendPayloadToVercel(pings); }
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        if (error.code === 1) setStatus('denied');
+        else { setErrorMessage("Failed to grab GPS. Ensure your location is turned on."); setStatus('failed'); }
+      },
+      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
+    );
+  };
+
+  const requestAppeal = async () => {
+    setIsAppealing(true);
+    try {
+      const response = await fetch('/api/request-override', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber })
+      });
+      if (response.ok) { alert("Appeal sent! Please look at the lecturer for visual confirmation."); setStatus('idle'); } 
+      else alert("Failed to send appeal. Please check your network.");
+    } catch (e) { alert("Network error."); } 
+    finally { setIsAppealing(false); }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
+        <div className="flex justify-center items-center gap-2 mb-8 mt-2">
+          <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
+        </div>
+
+        {status === 'idle' && (
+          <div className="space-y-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+              <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
+            </div>
+            <button onClick={startCheckIn} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
+            </button>
+          </div>
+        )}
+
+        {(status === 'locating' || status === 'verifying') && (
+          <div className="py-6 flex flex-col items-center">
+            <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+            <p className="text-gray-700 font-bold animate-pulse">{status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}</p>
+            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
+          </div>
+        )}
+
+        {status === 'syncing' && (
+          <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
+            <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+            <p className="text-blue-900 font-bold">Network Restored</p>
+            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
+          </div>
+        )}
+
+        {status === 'offline-queued' && (
+          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
+            <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.</p>
+          </div>
+        )}
+
+        {status === 'success' && (
+          <div className="py-6 bg-green-50 rounded-2xl border border-green-100">
+            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-green-900">Verified</h3>
+            <p className="text-green-700 mt-1 text-sm font-medium">Your attendance has been recorded.</p>
+          </div>
+        )}
+
+        {status === 'denied' && (
+          <div className="py-6 bg-red-50 rounded-2xl border border-red-100 px-4">
+            <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Required</h3>
+            <p className="text-red-700 mt-2 text-sm font-medium">Please allow location access in your browser to check in.</p>
+          </div>
+        )}
+
+        {status === 'failed' && (
+          <div className="py-6 bg-orange-50 rounded-2xl border border-orange-100 px-4">
+            <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
+            <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
+            <div className="mt-6 space-y-3">
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Try Again</button>
+              <div className="border-t border-orange-200 pt-3 mt-3">
+                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm">
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <a href="/portal" className="text-sm font-bold text-[#2563EB] hover:text-blue-800 transition-colors">View My Exam Eligibility Status &rarr;</a>
+          <p className="text-center text-xs font-semibold text-gray-400 mt-4">Secured by CampusCheck Zero-Trust Architecture</p>
         </div>
       </div>
     </div>

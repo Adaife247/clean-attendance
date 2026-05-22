@@ -5,6 +5,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Haversine formula to calculate distance in meters
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
@@ -19,7 +20,7 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, deviceHash } = body;
+    const { sessionId, matricNumber, telemetry } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -51,20 +52,26 @@ export async function POST(request: Request) {
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating) - UPDATED to use dedicated column
-    if (deviceHash) {
-      const { data: sharedDevice } = await supabase
-        .from('attendance_logs')
-        .select('matric_number')
-        .eq('session_id', sessionId)
-        .eq('device_hash', deviceHash)   // exact match on indexed column
-        .maybeSingle();
+    // 4. ZERO-TRUST: 48-HOUR HARDWARE COOLDOWN ENFORCEMENT
+    const { data: device, error: deviceError } = await supabase
+      .from('user_devices')
+      .select('created_at')
+      .eq('matric_number', cleanMatric)
+      .single();
 
-      if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
-        return NextResponse.json({ 
-          message: `Device sharing blocked. Phone already used by ${sharedDevice.matric_number}.` 
-        }, { status: 403 });
-      }
+    if (deviceError || !device) {
+      return NextResponse.json({ message: "Security Block: No biometric device registered to this matric number." }, { status: 403 });
+    }
+
+    const deviceRegistrationTime = new Date(device.created_at).getTime();
+    const currentTime = new Date().getTime();
+    const hoursSinceRegistration = (currentTime - deviceRegistrationTime) / (1000 * 60 * 60);
+
+    if (hoursSinceRegistration < 48) {
+      const hoursLeft = Math.ceil(48 - hoursSinceRegistration);
+      return NextResponse.json({ 
+        message: `Cooldown Active: Your device was recently reset. It will be locked for ${hoursLeft} more hours to prevent hardware sharing. Please use the Digital Hand Raise.` 
+      }, { status: 403 });
     }
 
     // 5. THE SPOOF CATCHER MATH
@@ -100,13 +107,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER with device_hash column
+    // 7. WRITE TO THE LEDGER (Device hash removed, WebAuthn replaces it)
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry }), // keep telemetry only
-      device_hash: deviceHash || null            // store fingerprint in dedicated column
+      device_info: JSON.stringify({ telemetry }),
+      device_hash: 'webauthn-secured' 
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
