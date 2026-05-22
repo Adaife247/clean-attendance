@@ -12,77 +12,61 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
   const Δφ = (lat2 - lat1) * Math.PI / 180;
   const Δλ = (lon2 - lon1) * Math.PI / 180;
 
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, photoBase64 } = body;
+    const { sessionId, matricNumber, telemetry, deviceHash } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // Enforce the biometric payload
-    if (!photoBase64) {
-      return NextResponse.json({ message: "Facial capture is required for zero-trust validation." }, { status: 400 });
-    }
-
-    // 1. GET THE LECTURER'S SESSION DATA
+    // 1. GET THE LECTURER'S SESSION DATA (From the correct table)
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError || !session) {
-      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    }
-    
-    if (session.is_active !== true) {
-      return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
-    }
+    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
 
     // 2. SMART ROSTER ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
-      const { data: courseData } = await supabase
-        .from('courses')
-        .select('roster')
-        .eq('course_code', session.course_code)
-        .single();
-      
-      if (courseData && courseData.roster) {
-        roster = courseData.roster || [];
-      }
+      const { data: courseData } = await supabase.from('courses').select('roster').eq('course_code', session.course_code).single();
+      if (courseData && courseData.roster) roster = courseData.roster;
     }
     
-    const isRosterEnforced = roster.length > 0;
-    if (isRosterEnforced && !roster.includes(cleanMatric)) {
-      return NextResponse.json({ 
-        message: 'Unregistered: Your matric number is not on the official class list.' 
-      }, { status: 403 });
+    if (roster.length > 0 && !roster.includes(cleanMatric)) {
+      return NextResponse.json({ message: 'Unregistered: Your matric number is not on the official class list.' }, { status: 403 });
     }
 
     // 3. PREVENT DUPLICATES
-    const { data: existingLog } = await supabase
-      .from('attendance_logs')
-      .select('id')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
+    const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
+    if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    if (existingLog) {
-      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    if (deviceHash) {
+      const { data: sharedDevice } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .ilike('device_info', `%${deviceHash}%`) 
+        .limit(1)
+        .maybeSingle();
+
+      if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
+        return NextResponse.json({ message: `Device sharing blocked. Phone used by ${sharedDevice.matric_number}.` }, { status: 403 });
+      }
     }
 
-    // 4. THE SPOOF CATCHER MATH
+    // 5. THE SPOOF CATCHER MATH
     let isSpoofed = false;
     let totalDrift = 0;
     const initialLat = telemetry[0].lat;
@@ -98,16 +82,10 @@ export async function POST(request: Request) {
       }
     }
 
-    if (telemetry.length >= 3 && totalDrift === 0) {
-      isSpoofed = true;
-    }
+    if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    // 5. THE GEOFENCE
-    const distanceToLecturer = getDistanceInMeters(
-      session.anchor_latitude, session.anchor_longitude, 
-      initialLat, initialLng
-    );
-
+    // 6. THE GEOFENCE
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, initialLat, initialLng);
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
 
@@ -121,30 +99,17 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. WRITE TO THE LEDGER (Saving the compressed photo directly into the JSON)
-    const { error: logError } = await supabase
-      .from('attendance_logs')
-      .insert([{
-        session_id: sessionId,
-        matric_number: cleanMatric,
-        status: finalStatus,
-        device_info: JSON.stringify({ telemetry, photo: photoBase64 }) 
-      }]);
+    // 7. WRITE TO THE LEDGER
+    await supabase.from('attendance_logs').insert([{
+      session_id: sessionId,
+      matric_number: cleanMatric,
+      status: finalStatus,
+      device_info: JSON.stringify({ telemetry, deviceHash }) 
+    }]);
 
-    if (logError) {
-      console.error("Database Insert Error:", logError);
-      throw logError;
-    }
-
-    // 7. RETURN VERDICT
-    return NextResponse.json({ 
-      status: finalStatus, 
-      distance: Math.round(distanceToLecturer),
-      message: responseMessage 
-    }, { status: 200 });
+    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
 
   } catch (error) {
-    console.error("API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }

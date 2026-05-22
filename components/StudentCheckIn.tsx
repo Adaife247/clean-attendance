@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Camera } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand } from 'lucide-react';
 
 interface Telemetry {
   lat: number;
@@ -14,41 +14,28 @@ interface Props {
   sessionId: string;
 }
 
-// --- CLIENT-SIDE COMPRESSOR (Saves Database Limits) ---
-const compressImage = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 300;
-        const scaleSize = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scaleSize;
-
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        // Compress to 60% quality JPEG (turns 5MB into ~30KB)
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-        resolve(compressedBase64);
-      };
-      img.onerror = (error) => reject(error);
-    };
-  });
+// --- HARDWARE FINGERPRINT (Silent Incognito Blocker) ---
+const generateDeviceFingerprint = () => {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
+    const gpu = debugInfo && gl ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown-gpu';
+    const cores = navigator.hardwareConcurrency || 'unknown-cores';
+    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
+    return btoa(`${gpu}-${cores}-${screenStr}`); 
+  } catch (e) {
+    return 'fallback-device-id-' + Math.random();
+  }
 };
 
 export default function StudentCheckIn({ sessionId }: Props) {
   const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
-  const [consentGiven, setConsentGiven] = useState(false);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [isAppealing, setIsAppealing] = useState(false);
 
-  // --- THE SYNC ENGINE ---
+  // --- YOUR ORIGINAL SYNC ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -62,12 +49,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            sessionId: item.session, 
-            matricNumber: item.matric, 
-            telemetry: item.telemetry,
-            photoBase64: item.photoBase64 
-          })
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceHash: item.deviceHash })
         });
         
         if (res.ok || res.status === 409) {
@@ -95,32 +77,21 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => window.removeEventListener('online', syncOfflineQueue);
   }, []);
 
-  const queueOfflinePayload = (telemetry: Telemetry[], photoBase64: string) => {
+  const queueOfflinePayload = (telemetry: Telemetry[]) => {
     const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    existing.push({ 
-      session: sessionId, 
-      matric: matricNumber, 
-      telemetry, 
-      photoBase64,
-      timestamp: Date.now() 
-    });
+    existing.push({ session: sessionId, matric: matricNumber, telemetry, deviceHash: generateDeviceFingerprint(), timestamp: Date.now() });
     localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
     setStatus('offline-queued');
   };
 
   // --- THE CHECK-IN ENGINE ---
-  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[], photoBase64: string) => {
+  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId, 
-          matricNumber, 
-          telemetry: gpsTelemetry,
-          photoBase64
-        })
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceHash: generateDeviceFingerprint() })
       });
       
       const result = await response.json();
@@ -136,7 +107,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (error: any) {
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        queueOfflinePayload(gpsTelemetry, photoBase64);
+        queueOfflinePayload(gpsTelemetry);
       } else {
         setErrorMessage("Server connection lost. Please try again.");
         setStatus('failed');
@@ -144,21 +115,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setStatus('locating');
-      try {
-        const compressedPhoto = await compressImage(file);
-        startGPSCheckIn(compressedPhoto);
-      } catch (err) {
-        setErrorMessage("Failed to process security photo.");
-        setStatus('failed');
-      }
-    }
-  };
+  const startCheckIn = () => {
+    if (matricNumber.length < 5) return;
+    setStatus('locating');
 
-  const startGPSCheckIn = (photoBase64: string) => {
     if (!navigator.geolocation) {
       setErrorMessage("Your browser doesn't support location services.");
       setStatus('failed');
@@ -171,7 +131,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) {
-        sendPayloadToVercel(pings, photoBase64);
+        sendPayloadToVercel(pings);
       } else {
         setErrorMessage("We couldn't get a strong GPS lock indoors.");
         setStatus('failed');
@@ -181,17 +141,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         pings.push({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          alt: position.coords.altitude,
-          acc: position.coords.accuracy,
-          timestamp: position.timestamp
+          lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
         });
 
         if (pings.length >= 3) {
           clearTimeout(timeoutId);
           navigator.geolocation.clearWatch(watchId);
-          sendPayloadToVercel(pings, photoBase64);
+          sendPayloadToVercel(pings);
         }
       },
       (error) => {
@@ -205,6 +161,28 @@ export default function StudentCheckIn({ sessionId }: Props) {
       },
       { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
     );
+  };
+
+  // --- THE 1-CLICK DIGITAL APPEAL ---
+  const requestAppeal = async () => {
+    setIsAppealing(true);
+    try {
+      const response = await fetch('/api/request-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber })
+      });
+      if (response.ok) {
+        alert("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setStatus('idle');
+      } else {
+        alert("Failed to send appeal. Please check your network.");
+      }
+    } catch (e) {
+      alert("Network error.");
+    } finally {
+      setIsAppealing(false);
+    }
   };
 
   return (
@@ -224,8 +202,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
               <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
             </div>
-            
-            <div className="relative mb-4">
+            <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <User size={18} className="text-gray-400" />
               </div>
@@ -237,35 +214,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
               />
             </div>
-
-            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex items-start gap-3 text-left mb-2">
-              <input 
-                type="checkbox" 
-                id="consent"
-                checked={consentGiven}
-                onChange={(e) => setConsentGiven(e.target.checked)}
-                className="mt-1 w-5 h-5 rounded border-gray-300 text-[#2563EB] focus:ring-[#2563EB]"
-              />
-              <label htmlFor="consent" className="text-xs text-gray-600 font-medium leading-relaxed cursor-pointer">
-                I consent to a live facial capture for identity verification. I understand this data is stored securely for auditing purposes and will be automatically deleted.
-              </label>
-            </div>
-
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="user" 
-              ref={cameraInputRef} 
-              onChange={handleCameraCapture} 
-              className="hidden" 
-            />
-
             <button 
-              onClick={() => cameraInputRef.current?.click()} 
-              disabled={matricNumber.length < 5 || !consentGiven}
+              onClick={startCheckIn} 
+              disabled={matricNumber.length < 5}
               className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Camera size={20} className="text-gray-300" /> Snap Selfie & Confirm
+              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
             </button>
           </div>
         )}
@@ -274,7 +228,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold animate-pulse">
-              {status === 'locating' ? "Securing coordinates & image..." : "Verifying payload..."}
+              {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
             </p>
             <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
           </div>
@@ -293,7 +247,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
             <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
-              Your network connection dropped, but your identity payload was secured. Leave this tab open. It will automatically submit when your internet returns.
+              Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
             </p>
           </div>
         )}
@@ -319,12 +273,27 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
             <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
-            <button 
-              onClick={() => setStatus('idle')} 
-              className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
-            >
-              Try Again
-            </button>
+            
+            <div className="mt-6 space-y-3">
+              <button 
+                onClick={() => setStatus('idle')} 
+                className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
+              >
+                Try Again
+              </button>
+              
+              <div className="border-t border-orange-200 pt-3 mt-3">
+                <button 
+                  onClick={requestAppeal}
+                  disabled={isAppealing}
+                  className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm"
+                >
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
+                  Raise Hand (Digital Appeal)
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
         
