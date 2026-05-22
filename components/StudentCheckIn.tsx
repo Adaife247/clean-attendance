@@ -14,42 +14,26 @@ interface Props {
   sessionId: string;
 }
 
-// --- HYBRID HARDWARE FINGERPRINT (Incognito & Opera Mini Killer) ---
+// --- RAW PHYSICAL FINGERPRINT (Incognito Killer) ---
 const generateDeviceFingerprint = () => {
   try {
+    // 1. Text Rendering Matrix (Identical across standard and incognito)
     const canvas = document.createElement('canvas');
-    let fingerprintStr = '';
-
-    // 1. Font Enumeration via measureText (Bypasses Canvas Poisoning)
     const ctx = canvas.getContext('2d');
+    let fontWidth = '0';
     if (ctx) {
-      const testText = "mmmmmmmmmmlli_CampusCheck";
-      const testFonts = ['Arial', 'Roboto', 'Times New Roman', 'Courier New', 'Verdana', 'sans-serif', 'serif', 'monospace'];
-      
-      testFonts.forEach(font => {
-        ctx.font = `72px ${font}`;
-        fingerprintStr += Math.round(ctx.measureText(testText).width) + '-';
-      });
+      ctx.font = "72px Arial";
+      fontWidth = String(Math.round(ctx.measureText("mmmmmmmmmmlli_CampusCheck").width));
     }
 
-    // 2. WebGL GPU Data (Catches the hardware layer)
-    const gl = canvas.getContext('webgl') || (canvas.getContext('experimental-webgl') as WebGLRenderingContext);
-    let gpu = 'unknown-gpu';
-    if (gl) {
-      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-      gpu = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'fallback-gpu';
-    }
-
-    // 3. System Capabilities
-    const cores = navigator.hardwareConcurrency || 'unknown-cores';
+    // 2. Hardware limits (Cannot be spoofed by browser modes)
+    const cores = navigator.hardwareConcurrency || '0';
     const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
 
-    // Mash them all together and encode it
-    const finalHash = `${fingerprintStr}|${gpu}|${cores}|${screenStr}`;
-    return btoa(finalHash); 
+    // Return raw physical string. NO Base64 encoding.
+    return `${fontWidth}-${cores}-${screenStr}`;
     
   } catch (e) {
-    // Ultimate fallback if their browser is completely locked down
     return 'fallback-device-id-' + Math.floor(Math.random() * 1000000);
   }
 };

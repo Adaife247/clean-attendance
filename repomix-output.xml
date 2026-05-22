@@ -1826,18 +1826,43 @@ interface Props {
   sessionId: string;
 }
 
-// --- HARDWARE FINGERPRINT (Silent Incognito Blocker) ---
+// --- HYBRID HARDWARE FINGERPRINT (Incognito & Opera Mini Killer) ---
 const generateDeviceFingerprint = () => {
   try {
     const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl');
-    const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
-    const gpu = debugInfo && gl ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown-gpu';
+    let fingerprintStr = '';
+
+    // 1. Font Enumeration via measureText (Bypasses Canvas Poisoning)
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const testText = "mmmmmmmmmmlli_CampusCheck";
+      const testFonts = ['Arial', 'Roboto', 'Times New Roman', 'Courier New', 'Verdana', 'sans-serif', 'serif', 'monospace'];
+      
+      testFonts.forEach(font => {
+        ctx.font = `72px ${font}`;
+        fingerprintStr += Math.round(ctx.measureText(testText).width) + '-';
+      });
+    }
+
+    // 2. WebGL GPU Data (Catches the hardware layer)
+    const gl = canvas.getContext('webgl') || (canvas.getContext('experimental-webgl') as WebGLRenderingContext);
+    let gpu = 'unknown-gpu';
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      gpu = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'fallback-gpu';
+    }
+
+    // 3. System Capabilities
     const cores = navigator.hardwareConcurrency || 'unknown-cores';
     const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
-    return btoa(`${gpu}-${cores}-${screenStr}`); 
+
+    // Mash them all together and encode it
+    const finalHash = `${fingerprintStr}|${gpu}|${cores}|${screenStr}`;
+    return btoa(finalHash); 
+    
   } catch (e) {
-    return 'fallback-device-id-' + Math.random();
+    // Ultimate fallback if their browser is completely locked down
+    return 'fallback-device-id-' + Math.floor(Math.random() * 1000000);
   }
 };
 
@@ -1854,7 +1879,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // --- YOUR ORIGINAL SYNC ENGINE ---
+  // --- OFFLINE SYNC ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
