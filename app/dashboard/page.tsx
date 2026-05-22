@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Play, Copy, XCircle, User, ChevronDown } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand } from 'lucide-react';
 
 // Directly initialize Supabase to prevent Next.js pathing errors
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -44,6 +44,10 @@ export default function LecturerDashboard() {
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
+
+  // --- NEW VAULT STATE ---
+  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
+  const [pastSessions, setPastSessions] = useState<any[]>([]);
 
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
@@ -88,6 +92,26 @@ export default function LecturerDashboard() {
     if (savedSession) setActiveSessionId(savedSession);
   }, []);
 
+  // --- FETCH PAST SESSIONS (THE VAULT) ---
+  const loadHistory = async () => {
+    const course = courses.find(c => c.id === selectedCourseId);
+    if (!course) return;
+    try {
+      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`);
+      if (response.ok) {
+        setPastSessions(await response.json());
+      }
+    } catch (e) {
+      console.error("Failed to load history");
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'history') {
+      loadHistory();
+    }
+  }, [viewMode, selectedCourseId]);
+
   const startNewSession = () => {
     if (!selectedCourseId) {
       setSetupError("Please register a course first.");
@@ -120,6 +144,7 @@ export default function LecturerDashboard() {
             const result = await response.json();
             localStorage.setItem('active_attendance_session', result.sessionId);
             setActiveSessionId(result.sessionId); 
+            setViewMode('live'); // Force back to live view if they start a new one
           } else {
             setSetupError("Failed to create session on server.");
           }
@@ -160,34 +185,23 @@ export default function LecturerDashboard() {
   };
 
   useEffect(() => {
-    if (activeSessionId) {
+    if (activeSessionId && viewMode === 'live') {
       fetchDashboardData();
       const interval = setInterval(fetchDashboardData, 3000);
       return () => clearInterval(interval);
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, viewMode]);
 
   // THE AGGRESSIVE OVERRIDE FUNCTION
   const handleManualOverride = async (targetMatric: string) => {
-    // 1. PROOF OF LIFE: This triggers before ANY logic can crash
-    alert("🟢 BUTTON CLICKED! Target: " + targetMatric);
-
     try {
-      if (!activeSessionId) {
-        alert("❌ Error: Missing Session ID");
-        return;
-      }
-
-      // 2. Ultra-safe cleanup (prevents the silent crash)
+      if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
+      
       const safeMatric = String(targetMatric || "").trim();
-      if (!safeMatric) {
-        alert("❌ Error: Matric number is empty!");
-        return;
-      }
+      if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
 
       setIsOverriding(true);
 
-      // 3. Talk to the backend
       const response = await fetch('/api/override-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -195,9 +209,8 @@ export default function LecturerDashboard() {
       });
 
       if (response.ok) {
-        alert(`✅ SUCCESS! ${safeMatric} is now Verified.`);
         setManualMatric(''); 
-        fetchDashboardData(); // Refresh the table
+        fetchDashboardData(); 
       } else {
         alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`);
       }
@@ -208,15 +221,38 @@ export default function LecturerDashboard() {
     }
   };
 
+  // --- PROFESSIONAL EXCEL EXPORT ---
   const exportToCSV = () => {
     if (!data || data.logs.length === 0) return;
-    const headers = ["Matric Number", "Status", "Time"];
-    const rows = data.logs.map(log => [log.matricNumber, log.status.toUpperCase(), log.time]);
-    const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
+    
+    const verifiedCount = data.logs.filter(l => l.status === 'verified').length;
+    const date = new Date().toLocaleDateString();
+
+    // Professional Header
+    const header = [
+      ["OFFICIAL ATTENDANCE REPORT"],
+      ["Course Code", data.course],
+      ["Date Generated", date],
+      ["Total Present", verifiedCount],
+      ["Total Records Logged", data.logs.length],
+      [], // Empty row for spacing
+      ["Matric Number", "Status", "Timestamp", "Security Flag"]
+    ];
+
+    const rows = data.logs
+      .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
+      .map(log => [
+        log.matricNumber, 
+        log.status.toUpperCase(), 
+        log.time, 
+        "Verified via Secure Platform"
+      ]);
+
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `${data.course.replace(/\s+/g, '_')}_Attendance.csv`);
+    link.setAttribute("download", `${data.course.replace(/\s+/g, '_')}_Attendance_${date.replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -229,15 +265,15 @@ export default function LecturerDashboard() {
     alert("Check-in link copied! Send this to the students.");
   };
 
-  // --- VIEW 1: IDLE / CREATE SESSION ---
-  if (!activeSessionId) {
+  // --- VIEW 1: IDLE / CREATE SESSION / VAULT ---
+  if (!activeSessionId || viewMode === 'history') {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
+          
           <div className="bg-[#2563EB] text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
             <User size={40} strokeWidth={2.5} />
           </div>
-          
           <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
             Welcome, {profile?.full_name || 'Lecturer'}
           </h2>
@@ -245,10 +281,22 @@ export default function LecturerDashboard() {
             {profile?.department || 'Faculty Member'}
           </p>
 
-          <p className="text-gray-500 text-sm font-medium mb-6">
-            Select a course to drop a dynamic geofence at your current location.
-          </p>
-          
+          {/* TAB TOGGLES */}
+          <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
+            <button 
+              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Start Class
+            </button>
+            <button 
+              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Past Records
+            </button>
+          </div>
+
           {courses.length === 0 ? (
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-4">
               <AlertTriangle className="mx-auto text-yellow-600 mb-2" size={24} />
@@ -256,7 +304,7 @@ export default function LecturerDashboard() {
               <p className="text-xs text-yellow-700 mt-1">Please go to the Course Registry to create one first.</p>
             </div>
           ) : (
-            <div className="relative mb-4">
+            <div className="relative mb-6">
               <select 
                 value={selectedCourseId}
                 onChange={(e) => setSelectedCourseId(e.target.value)}
@@ -272,15 +320,48 @@ export default function LecturerDashboard() {
             </div>
           )}
 
-          <button 
-            onClick={startNewSession}
-            disabled={isStarting || courses.length === 0}
-            className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
-          >
-            {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
-            {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
-          </button>
-          {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
+          {/* DYNAMIC CONTENT BASED ON TAB */}
+          {viewMode === 'live' ? (
+            <div>
+              <p className="text-gray-500 text-sm font-medium mb-4">
+                Drop a dynamic geofence at your current location.
+              </p>
+              <button 
+                onClick={startNewSession}
+                disabled={isStarting || courses.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+              >
+                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
+                {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
+              </button>
+              {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
+            </div>
+          ) : (
+            <div className="text-left border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                 <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {pastSessions.length === 0 ? (
+                  <p className="p-6 text-center text-sm font-bold text-gray-400">No past records found for this course.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {pastSessions.map(session => (
+                      <div key={session.session_id} className="p-4 hover:bg-gray-50 transition-colors flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
+                        </div>
+                        <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1.5 rounded-lg">
+                          Archived
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -400,6 +481,10 @@ export default function LecturerDashboard() {
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200">
                             <CheckCircle size={12} strokeWidth={2.5} /> Verified
                           </span>
+                        ) : log.status === 'pending_override' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 animate-pulse">
+                            <Hand size={12} strokeWidth={2.5} /> Raised Hand
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
                             <AlertTriangle size={12} strokeWidth={2.5} /> Flagged
@@ -412,7 +497,7 @@ export default function LecturerDashboard() {
                             onClick={() => handleManualOverride(log.matricNumber)} 
                             className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
                           >
-                            <ShieldCheck size={14} /> Override
+                            <ShieldCheck size={14} /> Accept
                           </button>
                         )}
                       </td>

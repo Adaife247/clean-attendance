@@ -35,6 +35,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
 
+  // --- TRIGGER HAPTIC FEEDBACK ---
+  const triggerSuccessVibration = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]); // Double buzz
+    }
+  };
+
   // --- YOUR ORIGINAL SYNC ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
@@ -65,6 +72,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
 
     if (successCount > 0 && remainingQueue.length === 0) {
+      triggerSuccessVibration();
       setStatus('success');
     } else if (remainingQueue.length > 0) {
       setStatus('offline-queued');
@@ -97,6 +105,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const result = await response.json();
       
       if ((response.ok && result.status === 'verified') || response.status === 409) {
+        triggerSuccessVibration();
         setStatus('success');
       } else if (result.status === 'flagged') {
         setErrorMessage("Location anomaly detected. Please see the lecturer.");
