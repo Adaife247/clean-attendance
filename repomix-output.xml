@@ -1,0 +1,2679 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+AGENTS.md
+app/api/admin-login/route.ts
+app/api/attendance-history/route.ts
+app/api/create-session/route.ts
+app/api/dashboard-data/route.ts
+app/api/override-attendance/route.ts
+app/api/request-override/route.ts
+app/api/verify-attendance/route.ts
+app/dashboard/analytics/page.tsx
+app/dashboard/courses/page.tsx
+app/dashboard/layout.tsx
+app/dashboard/page.tsx
+app/favicon.ico
+app/globals.css
+app/layout.tsx
+app/login/page.tsx
+app/page.tsx
+CLAUDE.md
+components/StudentCheckIn.tsx
+eslint.config.mjs
+middleware_backup.ts
+next.config.ts
+package.json
+postcss.config.mjs
+public/file.svg
+public/globe.svg
+public/manifest.json
+public/next.svg
+public/vercel.svg
+public/window.svg
+README.md
+tsconfig.json
+utils/supabase.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="AGENTS.md">
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+</file>
+
+<file path="app/api/admin-login/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+
+export async function POST(request: Request) {
+  try {
+    const { password } = await request.json();
+
+    // HARDCODED PASSWORD (For testing. In production, put this in your .env file)
+    const CORRECT_PASSWORD = "fuoye2026"; 
+
+    if (password === CORRECT_PASSWORD) {
+      // Next.js 15 requires awaiting the cookies API before setting them
+      const cookieStore = await cookies();
+      
+      // Give them the secure HTTP-only cookie that lasts for 8 hours
+      cookieStore.set({
+        name: 'attendance_admin_token',
+        value: 'verified',
+        httpOnly: true,
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 8, // 8 hours
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ message: "Invalid password" }, { status: 401 });
+  } catch (error) {
+    console.error("Login API Error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/attendance-history/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const courseCode = searchParams.get('courseCode');
+
+  if (!courseCode) return NextResponse.json({ message: "Missing course code" }, { status: 400 });
+
+  const { data: sessions, error } = await supabase
+    .from('lecture_sessions')
+    .select('session_id, created_at, course_code')
+    .eq('course_code', courseCode)
+    .order('created_at', { ascending: false });
+
+  if (error) return NextResponse.json({ message: "Database error" }, { status: 500 });
+  return NextResponse.json(sessions || []);
+}
+</file>
+
+<file path="app/api/request-override/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const { sessionId, matricNumber } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    if (!sessionId || !cleanMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    // Check if they are already in the system
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id, status')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      if (existingLog.status === 'verified') {
+        return NextResponse.json({ message: "You are already verified." }, { status: 409 });
+      }
+      
+      // Update their failed/flagged status to the appeal queue
+      await supabase.from('attendance_logs').update({ 
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" }) 
+      }).eq('id', existingLog.id);
+      
+    } else {
+      // Insert them directly into the appeal queue
+      await supabase.from('attendance_logs').insert([{
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" })
+      }]);
+    }
+
+    return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
+
+  } catch (error: any) {
+    return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/dashboard/analytics/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { BarChart3, TrendingUp, AlertTriangle, Users, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default function AnalyticsPage() {
+  const [courses, setCourses] = useState<any[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+  const [stats, setStats] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const { data, error } = await supabase.from('courses').select('id, course_code');
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          setCourses(data);
+          setSelectedCourseCode(data[0].course_code); 
+        } else {
+          setIsLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Error fetching courses:", err);
+        setErrorMessage("Could not load courses.");
+        setIsLoading(false);
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCourseCode) return;
+
+    const generateAnalytics = async () => {
+      setIsLoading(true);
+      setErrorMessage(null);
+      
+      try {
+        // Optimized case-insensitive query
+        const { data: sessions, error: sessionError } = await supabase
+          .from('lecture_sessions')
+          .select('session_id, created_at')
+          .ilike('course_code', selectedCourseCode.trim())
+          .order('created_at', { ascending: true });
+
+        if (sessionError) throw sessionError;
+
+        if (!sessions || sessions.length === 0) {
+          setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
+          return;
+        }
+
+        const sessionIds = sessions.map(s => s.session_id);
+        const { data: logs, error: logError } = await supabase
+          .from('attendance_logs')
+          .select('matric_number, status, session_id')
+          .in('session_id', sessionIds);
+
+        if (logError) throw logError;
+
+        const safeLogs = logs || []; 
+
+        const trendData = sessions.map((session, index) => {
+          const sessionLogs = safeLogs.filter(l => l.session_id === session.session_id);
+          const verifiedCount = sessionLogs.filter(l => l.status === 'verified').length;
+          
+          const dateLabel = session.created_at 
+            ? new Date(session.created_at).toLocaleDateString() 
+            : 'Unknown Date';
+
+          return {
+            label: `Class ${index + 1}`,
+            date: dateLabel,
+            count: verifiedCount,
+            height: verifiedCount > 0 ? Math.min((verifiedCount / 100) * 100, 100) : 5 
+          };
+        });
+
+        const flaggedLogs = safeLogs.filter(l => l.status === 'flagged');
+        const flagCounts = flaggedLogs.reduce((acc: any, log) => {
+          acc[log.matric_number] = (acc[log.matric_number] || 0) + 1;
+          return acc;
+        }, {});
+
+        const flaggedStudents = Object.keys(flagCounts)
+          .map(matric => ({ matric, count: flagCounts[matric] }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5); 
+
+        const totalVerified = safeLogs.filter(l => l.status === 'verified').length;
+        const avgAttendance = Math.round(totalVerified / sessions.length);
+
+        setStats({
+          totalSessions: sessions.length,
+          avgAttendance,
+          flaggedStudents,
+          trendData
+        });
+
+      } catch (err: any) {
+        console.error("Analytics Calculation Error:", err);
+        setErrorMessage(err.message || "An error occurred fetching the data.");
+        setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    generateAnalytics();
+  }, [selectedCourseCode]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB]" size={32} />
+              Historical Analytics
+            </h1>
+            <p className="text-gray-500 font-medium mt-1">Track attendance trends and identify at-risk students.</p>
+          </div>
+
+          <select 
+            value={selectedCourseCode} 
+            onChange={(e) => setSelectedCourseCode(e.target.value)}
+            disabled={courses.length === 0}
+            className="bg-white border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] disabled:opacity-50 cursor-pointer"
+          >
+            {courses.length === 0 ? (
+              <option>No Courses Found</option>
+            ) : (
+              courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
+            )}
+          </select>
+        </div>
+
+        {errorMessage && (
+          <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 font-bold flex items-center gap-2">
+            <AlertTriangle size={20} />
+            {errorMessage}
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="h-64 flex flex-col items-center justify-center space-y-4">
+            <div className="w-10 h-10 border-4 border-blue-200 border-t-[#2563EB] rounded-full animate-spin"></div>
+            <p className="font-bold text-gray-400">Crunching data...</p>
+          </div>
+        ) : !stats || stats.totalSessions === 0 ? (
+          
+          <div className="h-64 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 text-gray-400 shadow-sm transition-all">
+            <Calendar size={48} className="mb-4 opacity-50 text-gray-300" />
+            <p className="font-bold text-gray-500">No lecture sessions recorded for {selectedCourseCode} yet.</p>
+            <p className="text-sm mt-2">Start a dynamic geofence session to begin tracking data.</p>
+          </div>
+          
+        ) : (
+          
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Avg. Attendance</p>
+                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.avgAttendance}</h3>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-xl"><Users className="text-[#2563EB]" size={24} /></div>
+                </div>
+                <p className="text-sm font-bold text-green-600 mt-4 flex items-center gap-1"><ArrowUpRight size={16}/> Students per class</p>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Total Sessions</p>
+                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.totalSessions}</h3>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-xl"><Calendar className="text-purple-600" size={24} /></div>
+                </div>
+                <p className="text-sm font-bold text-gray-400 mt-4">Classes held this semester</p>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">High-Risk Students</p>
+                    <h3 className="text-4xl font-extrabold text-red-600 mt-2">{stats.flaggedStudents.length}</h3>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded-xl"><AlertTriangle className="text-red-600" size={24} /></div>
+                </div>
+                <p className="text-sm font-bold text-red-500 mt-4 flex items-center gap-1"><ArrowDownRight size={16}/> Require frequent overrides</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
+              
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
+                  <TrendingUp className="text-[#2563EB]" size={20} />
+                  <h3 className="font-extrabold text-gray-900 text-lg">Attendance Trajectory</h3>
+                </div>
+                
+                <div className="flex items-end gap-4 h-64 overflow-x-auto pb-4 pt-4">
+                  {stats.trendData.map((data: any, i: number) => (
+                    <div key={i} className="flex flex-col items-center flex-shrink-0 w-16 group">
+                      <span className="text-xs font-bold text-[#2563EB] mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 px-2 py-1 rounded-md">{data.count}</span>
+                      <div 
+                        className="w-full bg-[#2563EB] rounded-t-md hover:bg-blue-700 transition-all cursor-pointer shadow-sm"
+                        style={{ height: `${data.height}%`, minHeight: '20px' }}
+                      ></div>
+                      <span className="text-xs font-bold text-gray-500 mt-3">{data.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
+                  <AlertTriangle className="text-red-500" size={20} />
+                  <h3 className="font-extrabold text-gray-900 text-lg">Override Watchlist</h3>
+                </div>
+                
+                {stats.flaggedStudents.length === 0 ? (
+                  <p className="text-sm font-bold text-gray-400 text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">No flagged students yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {stats.flaggedStudents.map((student: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-red-50 rounded-xl border border-red-100 transition-all hover:bg-red-100">
+                        <span className="font-extrabold text-gray-900">{student.matric}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-red-200 text-red-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm">
+                            {student.count} flags
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/dashboard/layout.tsx">
+'use client';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { Radio, BarChart3, BookOpen, LogOut, ShieldCheck, Menu, X } from 'lucide-react';
+import Link from 'next/link';
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
+  const navItems = [
+    { name: 'Live Radar', href: '/dashboard', icon: Radio },
+    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+    { name: 'Course Roster', href: '/dashboard/courses', icon: BookOpen },
+  ];
+
+  return (
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+      
+      {/* Mobile Top Navigation */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
+          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
+        </div>
+        <button 
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200"
+        >
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      {/* Desktop Sidebar & Mobile Dropdown */}
+      <aside className={`
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 transition-transform duration-300 ease-in-out
+        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
+        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
+      `}>
+        {/* Desktop Branding (Hidden on Mobile) */}
+        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100">
+          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+            <ShieldCheck size={22} strokeWidth={2.5} />
+          </div>
+          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Secure Logout Button */}
+        <div className="p-4 border-t border-gray-100">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all"
+          >
+            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area - This automatically renders your existing page.tsx! */}
+      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
+        {children}
+      </main>
+
+      {/* Mobile Overlay (Click to close menu) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900/20 z-30 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="app/layout.tsx">
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// NEW: This locks the screen so it doesn't scatter or zoom on mobile
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#111827',
+};
+
+export const metadata: Metadata = {
+  title: "FUOYE Live Attendance",
+  description: "Geofenced campus verification system",
+  manifest: "/manifest.json", 
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+</file>
+
+<file path="CLAUDE.md">
+@AGENTS.md
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="middleware_backup.ts">
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  // If someone tries to access the dashboard...
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    // Check if they have the secret VIP stamp (cookie)
+    const isAdmin = request.cookies.get('attendance_admin_token');
+
+    // If they don't have it, instantly kick them to the login page
+    if (!isAdmin || isAdmin.value !== 'verified') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  // If they have the stamp, let them pass
+  return NextResponse.next();
+}
+
+// Tell the bouncer to only watch the dashboard routes to save server speed
+export const config = {
+  matcher: ['/dashboard/:path*'],
+};
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/manifest.json">
+{
+  "name": "FUOYE Attendance",
+  "short_name": "Attendance",
+  "description": "Geofenced student check-in system.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#111827",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+</file>
+
+<file path="utils/supabase.ts">
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.vercel
+</file>
+
+<file path="app/dashboard/courses/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../../utils/supabase';
+import { BookOpen, Upload, Users, Plus, Loader2, FileSpreadsheet, Layers } from 'lucide-react';
+
+interface Course {
+  id: string;
+  course_code: string;
+  roster: string[];
+}
+
+export default function CourseManagement() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newCourseCode, setNewCourseCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const fetchCourses = async () => {
+    setIsLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setCourses(data);
+    }
+    setIsLoading(false);
+  };
+
+  const createCourse = async () => {
+    if (!newCourseCode.trim()) return;
+    setIsCreating(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    // Instant creation without GPS dependency
+    const { error } = await supabase.from('courses').insert([{
+      lecturer_id: session.user.id,
+      course_code: newCourseCode.toUpperCase(),
+      roster: []
+    }]);
+
+    if (!error) {
+      setNewCourseCode('');
+      fetchCourses();
+    } else {
+      alert("Failed to create course.");
+    }
+    setIsCreating(false);
+  };
+
+  // --- UPDATED MULTI-CSV MERGE LOGIC ---
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(courseId);
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      const csvText = event.target?.result as string;
+      
+      // Extract new matrics
+      const rawMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase());
+      const cleanMatrics = rawMatrics.filter(m => m.length > 5 && !m.includes('MATRIC'));
+      
+      // THE MAGIC: Merge the old roster with the new CSV, and remove duplicates using a Set
+      const combinedRoster = [...(existingRoster || []), ...cleanMatrics];
+      const uniqueMatrics = Array.from(new Set(combinedRoster));
+
+      const { error } = await supabase
+        .from('courses')
+        .update({ roster: uniqueMatrics })
+        .eq('id', courseId);
+
+      if (!error) {
+        alert(`Success! Course roster now has ${uniqueMatrics.length} total students.`);
+        fetchCourses();
+      } else {
+        alert("Failed to upload roster.");
+      }
+      setUploadingId(null);
+      
+      // Reset the file input so the same file can be selected again if needed
+      e.target.value = '';
+    };
+
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+            <BookOpen className="text-[#2563EB]" size={28} /> Course Registry
+          </h1>
+          <p className="text-gray-500 mt-1 font-medium">Create your courses and merge official student rosters.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider">Add New Course</h3>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input 
+            type="text" 
+            placeholder="Course Code (e.g., MTH 101)" 
+            value={newCourseCode}
+            onChange={(e) => setNewCourseCode(e.target.value)}
+            className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-lg focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all uppercase"
+          />
+          <button 
+            onClick={createCourse}
+            disabled={isCreating || !newCourseCode.trim()}
+            className="whitespace-nowrap bg-gray-900 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+          >
+            {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+            {isCreating ? "Creating..." : "Create Course"}
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
+        </div>
+      ) : courses.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+          <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">No courses established yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {courses.map(course => (
+            <div key={course.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-200 transition-all flex flex-col justify-between">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">{course.course_code}</h2>
+                  <p className="text-xs font-bold text-green-600 mt-1 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md w-fit">
+                    Active Registry
+                  </p>
+                </div>
+                <div className="bg-blue-50 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-blue-100">
+                  <Users size={16} className="text-[#2563EB]" />
+                  <span className="font-bold text-[#2563EB]">{course.roster?.length || 0}</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 transition-all">
+                  {uploadingId === course.id ? (
+                    <Loader2 size={16} className="animate-spin text-[#2563EB]" />
+                  ) : (
+                    <FileSpreadsheet size={16} className="text-[#2563EB]" />
+                  )}
+                  {uploadingId === course.id ? "Syncing Roster..." : "Merge CSV Class List"}
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    className="hidden" 
+                    onChange={(e) => handleFileUpload(e, course.id, course.roster)}
+                    disabled={uploadingId === course.id}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="app/page.tsx">
+'use client';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { MapPin, ShieldCheck, CheckCircle, AlertTriangle, Loader2, Navigation } from 'lucide-react';
+
+function StudentCheckIn() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+
+  const [matricNumber, setMatricNumber] = useState('');
+  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'flagged' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [distance, setDistance] = useState<number | null>(null);
+
+  // Focus the input automatically on load if session exists
+  useEffect(() => {
+    if (!sessionId) {
+      setStatus('error');
+      setMessage("Invalid link. Please use the exact link provided by your lecturer.");
+    }
+  }, [sessionId]);
+
+  const gatherTelemetry = async () => {
+    const pings: any[] = [];
+    
+    for (let i = 0; i < 3; i++) {
+      try {
+        const pos: any = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000
+          });
+        });
+        
+        pings.push({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          acc: pos.coords.accuracy,
+          alt: pos.coords.altitude || 0
+        });
+
+        // Wait 800ms between pings to measure drift for the spoof catcher
+        if (i < 2) await new Promise(r => setTimeout(r, 800));
+      } catch (err) {
+        throw new Error("Failed to acquire high-accuracy GPS.");
+      }
+    }
+    return pings;
+  };
+
+  const handleCheckIn = async () => {
+    if (!matricNumber.trim()) {
+      setMessage("Please enter your matric number.");
+      return;
+    }
+    
+    try {
+      setStatus('locating');
+      setMessage("Acquiring satellite lock. Do not close this page...");
+      
+      const telemetry = await gatherTelemetry();
+
+      setStatus('verifying');
+      setMessage("Running zero-trust verification...");
+
+      const response = await fetch('/api/verify-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          matricNumber: matricNumber.toUpperCase().trim(),
+          telemetry
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        if (data.status === 'verified') {
+          setStatus('success');
+        } else {
+          setStatus('flagged');
+        }
+        setMessage(data.message);
+        if (data.distance) setDistance(data.distance);
+      } else {
+        setStatus('error');
+        setMessage(data.message || "Verification failed. Please try again.");
+      }
+
+    } catch (error: any) {
+      setStatus('error');
+      setMessage(error.message || "An unexpected error occurred.");
+    }
+  };
+
+  // --- UI STATES ---
+  if (!sessionId) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 text-center max-w-sm w-full">
+          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
+          <h1 className="text-xl font-bold text-gray-900">No Session Found</h1>
+          <p className="text-gray-500 mt-2 text-sm">Please scan the QR code or use the exact link provided by your lecturer.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'success') {
+    return (
+      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-lg border border-green-100 max-w-sm w-full transform transition-all scale-100">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="text-green-600" size={40} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Verified!</h1>
+          <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">
+            {matricNumber}
+          </p>
+          <p className="text-gray-500 mt-6 text-sm font-medium">You have been successfully checked in. You may close this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'flagged') {
+    return (
+      <div className="min-h-screen bg-red-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-lg border border-red-100 max-w-sm w-full">
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="text-red-600" size={40} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Verification Failed</h1>
+          <p className="text-red-600 font-bold mt-3 text-sm">{message}</p>
+          {distance && (
+            <div className="mt-6 bg-gray-50 rounded-xl p-4 border border-gray-100">
+              <p className="text-xs text-gray-500 font-bold uppercase">Recorded Distance</p>
+              <p className="text-2xl font-black text-gray-900">{distance}m</p>
+            </div>
+          )}
+          <button 
+            onClick={() => setStatus('idle')}
+            className="mt-8 w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-gray-800 transition-all"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-2 font-medium">Student Check-In Portal</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8">
+          
+          {status === 'error' && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl text-center">
+              {message}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                <Navigation size={18} />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Matric Number (e.g., CSC/2021/001)"
+                value={matricNumber}
+                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
+                disabled={status === 'locating' || status === 'verifying'}
+                className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
+              />
+            </div>
+
+            <button 
+              onClick={handleCheckIn}
+              disabled={status === 'locating' || status === 'verifying' || !matricNumber.trim()}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-80"
+            >
+              {status === 'locating' ? (
+                <><Loader2 className="animate-spin" size={20} /> Acquiring GPS...</>
+              ) : status === 'verifying' ? (
+                <><Loader2 className="animate-spin" size={20} /> Verifying...</>
+              ) : (
+                <><MapPin size={20} /> Verify Attendance</>
+              )}
+            </button>
+          </div>
+        </div>
+        
+        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
+          Make sure you are physically inside the lecture hall before checking in.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Next.js requirement for pages using useSearchParams
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}>
+      <StudentCheckIn />
+    </Suspense>
+  );
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "clean-attendance",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "lucide-react": "^1.16.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path="app/api/create-session/route.ts">
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    // THE FIX: Specifically target 'courseCode' so it grabs "GST401", NOT the UUID
+    const courseCodeToSave = body.courseCode || body.course_code;
+
+    if (!courseCodeToSave) {
+      return NextResponse.json({ error: "Missing course code. Check frontend payload." }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('lecture_sessions')
+      .insert([{
+        course_code: courseCodeToSave, 
+        anchor_latitude: body.latitude || body.lat, 
+        anchor_longitude: body.longitude || body.lng, 
+        is_active: true 
+      }])
+      .select('session_id') 
+      .single();
+
+    if (error) {
+      console.error("Supabase Insert Error:", error);
+      throw error;
+    }
+
+    return NextResponse.json({ sessionId: data.session_id });
+    
+  } catch (err: any) {
+    console.error("Critical API Error:", err.message);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
+
+    // 1. Get the session directly from the CORRECT table (lecture_sessions)
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code')
+      .eq('session_id', sessionId) // Matching the correct primary key
+      .single();
+    
+    if (sessionError) {
+      console.error("Dashboard API Error fetching session:", sessionError.message);
+    }
+
+    // 2. The course code (e.g. "GST401") is already in the row! No extra lookup needed.
+    const courseName = session?.course_code || "Unknown Course";
+
+    // 3. Get the ledger
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
+
+    return NextResponse.json({
+      course: courseName,
+      isActive: session?.is_active === true, // Map the boolean correctly
+      logs: (logs || []).map((l: any) => ({
+        id: l.id,
+        matricNumber: l.matric_number,
+        status: l.status,
+        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }))
+    });
+  } catch (e: any) {
+    console.error("Dashboard Data Fatal Error:", e.message);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/override-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
+
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // 1. Check if they are already flagged
+    const { data: existingLog, error: fetchError } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+       // PGRST116 just means "no rows found", which is normal for a new student. 
+       // Any other error is a real crash.
+       throw fetchError; 
+    }
+
+    if (existingLog) {
+      // 2. Try to update
+      const { error: updateError } = await supabase.from('attendance_logs').update({ 
+        status: 'verified', 
+        device_info: JSON.stringify({ method: "Manual Override - Updated" }) 
+      }).eq('id', existingLog.id);
+      
+      if (updateError) throw updateError; // CRITICAL: Catch the error!
+      
+    } else {
+      // 3. Try to insert
+      const { error: insertError } = await supabase.from('attendance_logs').insert([{
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        status: 'verified',
+        device_info: JSON.stringify({ method: "Manual Override - Inserted" })
+      }]);
+      
+      if (insertError) throw insertError; // CRITICAL: Catch the error!
+    }
+
+    return NextResponse.json({ message: "Success" });
+    
+  } catch (error: any) {
+    // 4. PRINT THE EXACT POSTGRES ERROR TO THE TERMINAL
+    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
+    console.error("Error Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("Details:", error.details);
+    console.error("============================================================\n");
+    
+    return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+import { useState } from 'react';
+import { Mail, Lock, User, Building, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { supabase } from '../../utils/supabase'; 
+
+export default function LecturerLogin() {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
+
+  const handleAuth = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      if (isSignUp) {
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (authError) throw authError;
+
+        if (authData.user) {
+          const { error: dbError } = await supabase
+            .from('lecturers')
+            .insert([
+              { 
+                id: authData.user.id, 
+                email: email, 
+                full_name: fullName, 
+                department: department 
+              }
+            ]);
+            
+          if (dbError) throw dbError;
+          
+          window.location.href = '/dashboard';
+        } else {
+          throw new Error("Signup failed. Please check your Supabase settings.");
+        }
+      } else {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) throw signInError;
+        
+        if (data.session) {
+          window.location.href = '/dashboard';
+        } else {
+          throw new Error("No active session returned. Make sure 'Confirm Email' is OFF in Supabase.");
+        }
+      }
+    } catch (err: any) {
+      console.error("Auth Error:", err);
+      setError(err.message || "An error occurred during authentication. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
+      <div className="w-full max-w-md">
+        
+        {/* Bulletproof Branding Header */}
+        <div className="text-center mb-8 flex flex-col items-center justify-center">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-2 font-medium">Faculty Authentication Portal</p>
+        </div>
+
+        {/* Auth Card */}
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8">
+          
+          {/* Toggle Tabs */}
+          <div className="flex p-1 bg-gray-50 rounded-xl mb-8 border border-gray-100">
+            <button 
+              type="button"
+              onClick={() => { setIsSignUp(false); setError(''); }}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${!isSignUp ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              Sign In
+            </button>
+            <button 
+              type="button"
+              onClick={() => { setIsSignUp(true); setError(''); }}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${isSignUp ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              Create Account
+            </button>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl text-center">
+              {error}
+            </div>
+          )}
+
+          {/* Wrapper replacing the form tag */}
+          <div className="space-y-4">
+            
+            {isSignUp && (
+              <>
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                    <User size={18} />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Full Name (e.g. Dr. Ojo Emmanuel)"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
+                  />
+                </div>
+                
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                    <Building size={18} />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Department (e.g. Computer Science)"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                <Mail size={18} />
+              </div>
+              <input 
+                type="email" 
+                placeholder="Official Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
+              />
+            </div>
+
+            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                <Lock size={18} />
+              </div>
+              <input 
+                type="password" 
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
+              />
+            </div>
+
+            <button 
+              type="button" 
+              onClick={handleAuth}
+              disabled={isLoading || !email || !password}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-sm py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 mt-2"
+            >
+              {isLoading ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  {isSignUp ? "Create Faculty Account" : "Secure Sign In"} <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          </div>
+
+        </div>
+        
+        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
+          Secured by CampusCheck Zero-Trust Architecture
+        </p>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/api/verify-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3; 
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { sessionId, matricNumber, telemetry, deviceHash } = body;
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
+      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+    }
+
+    // 1. GET THE LECTURER'S SESSION DATA (From the correct table)
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
+
+    // 2. SMART ROSTER ENFORCEMENT
+    let roster: string[] = [];
+    if (session.course_code) {
+      const { data: courseData } = await supabase.from('courses').select('roster').eq('course_code', session.course_code).single();
+      if (courseData && courseData.roster) roster = courseData.roster;
+    }
+    
+    if (roster.length > 0 && !roster.includes(cleanMatric)) {
+      return NextResponse.json({ message: 'Unregistered: Your matric number is not on the official class list.' }, { status: 403 });
+    }
+
+    // 3. PREVENT DUPLICATES
+    const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
+    if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+
+    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    if (deviceHash) {
+      const { data: sharedDevice } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .ilike('device_info', `%${deviceHash}%`) 
+        .limit(1)
+        .maybeSingle();
+
+      if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
+        return NextResponse.json({ message: `Device sharing blocked. Phone used by ${sharedDevice.matric_number}.` }, { status: 403 });
+      }
+    }
+
+    // 5. THE SPOOF CATCHER MATH
+    let isSpoofed = false;
+    let totalDrift = 0;
+    const initialLat = telemetry[0].lat;
+    const initialLng = telemetry[0].lng;
+
+    for (let i = 0; i < telemetry.length; i++) {
+      const ping = telemetry[i];
+      if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
+      if (ping.alt === 0) isSpoofed = true;
+      if (i > 0) {
+        const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
+        totalDrift += drift;
+      }
+    }
+
+    if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
+
+    // 6. THE GEOFENCE
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, initialLat, initialLng);
+    let finalStatus = 'absent';
+    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
+
+    if (distanceToLecturer <= 50) {
+      if (isSpoofed) {
+        finalStatus = 'flagged'; 
+        responseMessage = "Location anomaly detected. Please see lecturer.";
+      } else {
+        finalStatus = 'verified'; 
+        responseMessage = "Verified";
+      }
+    }
+
+    // 7. WRITE TO THE LEDGER
+    await supabase.from('attendance_logs').insert([{
+      session_id: sessionId,
+      matric_number: cleanMatric,
+      status: finalStatus,
+      device_info: JSON.stringify({ telemetry, deviceHash }) 
+    }]);
+
+    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
+
+  } catch (error) {
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="components/StudentCheckIn.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand } from 'lucide-react';
+
+interface Telemetry {
+  lat: number;
+  lng: number;
+  alt: number | null;
+  acc: number;
+  timestamp: number;
+}
+
+interface Props {
+  sessionId: string;
+}
+
+// --- HARDWARE FINGERPRINT (Silent Incognito Blocker) ---
+const generateDeviceFingerprint = () => {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
+    const gpu = debugInfo && gl ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown-gpu';
+    const cores = navigator.hardwareConcurrency || 'unknown-cores';
+    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
+    return btoa(`${gpu}-${cores}-${screenStr}`); 
+  } catch (e) {
+    return 'fallback-device-id-' + Math.random();
+  }
+};
+
+export default function StudentCheckIn({ sessionId }: Props) {
+  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
+  const [errorMessage, setErrorMessage] = useState('');
+  const [matricNumber, setMatricNumber] = useState('');
+  const [isAppealing, setIsAppealing] = useState(false);
+
+  // --- TRIGGER HAPTIC FEEDBACK ---
+  const triggerSuccessVibration = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]); // Double buzz
+    }
+  };
+
+  // --- YOUR ORIGINAL SYNC ENGINE ---
+  const syncOfflineQueue = async () => {
+    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    if (queue.length === 0) return;
+
+    setStatus('syncing');
+    const remainingQueue = [];
+    let successCount = 0;
+
+    for (const item of queue) {
+      try {
+        const res = await fetch('/api/verify-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceHash: item.deviceHash })
+        });
+        
+        if (res.ok || res.status === 409) {
+          successCount++;
+        } else {
+          remainingQueue.push(item);
+        }
+      } catch (e) {
+        remainingQueue.push(item); 
+      }
+    }
+
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
+
+    if (successCount > 0 && remainingQueue.length === 0) {
+      triggerSuccessVibration();
+      setStatus('success');
+    } else if (remainingQueue.length > 0) {
+      setStatus('offline-queued');
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineQueue);
+    syncOfflineQueue(); 
+    return () => window.removeEventListener('online', syncOfflineQueue);
+  }, []);
+
+  const queueOfflinePayload = (telemetry: Telemetry[]) => {
+    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    existing.push({ session: sessionId, matric: matricNumber, telemetry, deviceHash: generateDeviceFingerprint(), timestamp: Date.now() });
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+    setStatus('offline-queued');
+  };
+
+  // --- THE CHECK-IN ENGINE ---
+  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
+    setStatus('verifying');
+    try {
+      const response = await fetch('/api/verify-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceHash: generateDeviceFingerprint() })
+      });
+      
+      const result = await response.json();
+      
+      if ((response.ok && result.status === 'verified') || response.status === 409) {
+        triggerSuccessVibration();
+        setStatus('success');
+      } else if (result.status === 'flagged') {
+        setErrorMessage("Location anomaly detected. Please see the lecturer.");
+        setStatus('failed');
+      } else {
+        setErrorMessage(result.message || "Verification failed. See lecturer.");
+        setStatus('failed');
+      }
+    } catch (error: any) {
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        queueOfflinePayload(gpsTelemetry);
+      } else {
+        setErrorMessage("Server connection lost. Please try again.");
+        setStatus('failed');
+      }
+    }
+  };
+
+  const startCheckIn = () => {
+    if (matricNumber.length < 5) return;
+    setStatus('locating');
+
+    if (!navigator.geolocation) {
+      setErrorMessage("Your browser doesn't support location services.");
+      setStatus('failed');
+      return;
+    }
+
+    let pings: Telemetry[] = [];
+    let watchId: number;
+    
+    const timeoutId = setTimeout(() => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (pings.length > 0) {
+        sendPayloadToVercel(pings);
+      } else {
+        setErrorMessage("We couldn't get a strong GPS lock indoors.");
+        setStatus('failed');
+      }
+    }, 15000);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        pings.push({
+          lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+        });
+
+        if (pings.length >= 3) {
+          clearTimeout(timeoutId);
+          navigator.geolocation.clearWatch(watchId);
+          sendPayloadToVercel(pings);
+        }
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        if (error.code === 1) {
+          setStatus('denied');
+        } else {
+          setErrorMessage("Failed to grab GPS. Ensure your location is turned on.");
+          setStatus('failed');
+        }
+      },
+      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
+    );
+  };
+
+  // --- THE 1-CLICK DIGITAL APPEAL ---
+  const requestAppeal = async () => {
+    setIsAppealing(true);
+    try {
+      const response = await fetch('/api/request-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber })
+      });
+      if (response.ok) {
+        alert("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setStatus('idle');
+      } else {
+        alert("Failed to send appeal. Please check your network.");
+      }
+    } catch (e) {
+      alert("Network error.");
+    } finally {
+      setIsAppealing(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
+        
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
+        
+        <div className="flex justify-center items-center gap-2 mb-8 mt-2">
+          <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
+        </div>
+
+        {status === 'idle' && (
+          <div className="space-y-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <User size={18} className="text-gray-400" />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Matric Number (e.g. CSC/2021/001)"
+                value={matricNumber}
+                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
+              />
+            </div>
+            <button 
+              onClick={startCheckIn} 
+              disabled={matricNumber.length < 5}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
+            </button>
+          </div>
+        )}
+
+        {(status === 'locating' || status === 'verifying') && (
+          <div className="py-6 flex flex-col items-center">
+            <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+            <p className="text-gray-700 font-bold animate-pulse">
+              {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
+            </p>
+            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
+          </div>
+        )}
+
+        {status === 'syncing' && (
+          <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
+            <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+            <p className="text-blue-900 font-bold">Network Restored</p>
+            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
+          </div>
+        )}
+
+        {status === 'offline-queued' && (
+          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
+            <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
+              Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
+            </p>
+          </div>
+        )}
+
+        {status === 'success' && (
+          <div className="py-6 bg-green-50 rounded-2xl border border-green-100">
+            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-green-900">Verified</h3>
+            <p className="text-green-700 mt-1 text-sm font-medium">Your attendance has been recorded.</p>
+          </div>
+        )}
+
+        {status === 'denied' && (
+          <div className="py-6 bg-red-50 rounded-2xl border border-red-100 px-4">
+            <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Required</h3>
+            <p className="text-red-700 mt-2 text-sm font-medium">Please allow location access in your browser to check in.</p>
+          </div>
+        )}
+
+        {status === 'failed' && (
+          <div className="py-6 bg-orange-50 rounded-2xl border border-orange-100 px-4">
+            <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
+            <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
+            
+            <div className="mt-6 space-y-3">
+              <button 
+                onClick={() => setStatus('idle')} 
+                className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm"
+              >
+                Try Again
+              </button>
+              
+              <div className="border-t border-orange-200 pt-3 mt-3">
+                <button 
+                  onClick={requestAppeal}
+                  disabled={isAppealing}
+                  className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm"
+                >
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
+                  Raise Hand (Digital Appeal)
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+        
+        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
+          Secured by CampusCheck Zero-Trust Architecture
+        </p>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/dashboard/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand } from 'lucide-react';
+
+// Directly initialize Supabase to prevent Next.js pathing errors
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+interface Log {
+  id: string;
+  matricNumber: string;
+  status: string;
+  time: string;
+}
+
+interface DashboardData {
+  course: string;
+  isActive: boolean;
+  logs: Log[];
+}
+
+interface LecturerProfile {
+  full_name: string;
+  department: string;
+}
+
+interface Course {
+  id: string;
+  course_code: string;
+}
+
+export default function LecturerDashboard() {
+  const router = useRouter();
+
+  const [profile, setProfile] = useState<LecturerProfile | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [setupError, setSetupError] = useState('');
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  const [manualMatric, setManualMatric] = useState('');
+  const [isOverriding, setIsOverriding] = useState(false);
+
+  // --- NEW VAULT STATE ---
+  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
+  const [pastSessions, setPastSessions] = useState<any[]>([]);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null); // Tracks which archive is downloading
+
+  useEffect(() => {
+    const securePageAndFetchProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        window.location.href = '/login'; 
+        return;
+      }
+
+      // Fetch Profile
+      const { data: profileData } = await supabase
+        .from('lecturers')
+        .select('full_name, department')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profileData) {
+        setProfile({
+          full_name: profileData.full_name,
+          department: profileData.department
+        });
+      }
+
+      // Fetch Registered Courses for the Dropdown
+      const { data: courseData } = await supabase
+        .from('courses')
+        .select('id, course_code')
+        .eq('lecturer_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (courseData) {
+        setCourses(courseData);
+        if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
+      }
+    };
+    securePageAndFetchProfile();
+  }, []);
+
+  useEffect(() => {
+    const savedSession = localStorage.getItem('active_attendance_session');
+    if (savedSession) setActiveSessionId(savedSession);
+  }, []);
+
+  // --- FETCH PAST SESSIONS (THE VAULT) ---
+  const loadHistory = async () => {
+    const course = courses.find(c => c.id === selectedCourseId);
+    if (!course) return;
+    try {
+      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`);
+      if (response.ok) {
+        setPastSessions(await response.json());
+      }
+    } catch (e) {
+      console.error("Failed to load history");
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'history') {
+      loadHistory();
+    }
+  }, [viewMode, selectedCourseId]);
+
+  const startNewSession = () => {
+    if (!selectedCourseId) {
+      setSetupError("Please register a course first.");
+      return;
+    }
+    setIsStarting(true);
+    setSetupError("Acquiring dynamic podium coordinates...");
+    
+    if (!navigator.geolocation) {
+      setSetupError("Location services not supported by your browser.");
+      setIsStarting(false);
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        setSetupError("Creating database session...");
+        try {
+          const response = await fetch('/api/create-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseId: selectedCourseId,
+              courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            })
+          });
+          if (response.ok) {
+            const result = await response.json();
+            localStorage.setItem('active_attendance_session', result.sessionId);
+            setActiveSessionId(result.sessionId); 
+            setViewMode('live'); // Force back to live view if they start a new one
+          } else {
+            setSetupError("Failed to create session on server.");
+          }
+        } catch (error) {
+          setSetupError("Network error. Please try again.");
+        } finally {
+          setIsStarting(false);
+        }
+      },
+      (error) => {
+        setSetupError("Failed to grab GPS. Please allow location access.");
+        setIsStarting(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const endSession = () => {
+    if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
+      localStorage.removeItem('active_attendance_session');
+      setActiveSessionId(null);
+      setData(null);
+    }
+  };
+
+  const fetchDashboardData = async () => {
+    if (!activeSessionId) return;
+    try {
+      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`);
+      if (response.ok) {
+        const result = await response.json();
+        setData(result);
+        setLastRefreshed(new Date().toLocaleTimeString());
+      }
+    } catch (error) {
+      console.error("Failed to fetch dashboard data");
+    }
+  };
+
+  useEffect(() => {
+    if (activeSessionId && viewMode === 'live') {
+      fetchDashboardData();
+      const interval = setInterval(fetchDashboardData, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [activeSessionId, viewMode]);
+
+  const handleManualOverride = async (targetMatric: string) => {
+    try {
+      if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
+      
+      const safeMatric = String(targetMatric || "").trim();
+      if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
+
+      setIsOverriding(true);
+
+      const response = await fetch('/api/override-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric })
+      });
+
+      if (response.ok) {
+        setManualMatric(''); 
+        fetchDashboardData(); 
+      } else {
+        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`);
+      }
+    } catch (err: any) {
+      alert("💥 CRITICAL CRASH: " + err.message);
+    } finally {
+      setIsOverriding(false);
+    }
+  };
+
+  // --- DYNAMIC EXCEL EXPORT ENGINE ---
+  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
+    if (!logsToExport || logsToExport.length === 0) {
+      alert("No check-ins were recorded during this session.");
+      return;
+    }
+    
+    const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
+
+    // Professional Header
+    const header = [
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
+      ["Course Code", courseName],
+      ["Date Generated", dateStr],
+      ["Total Present", verifiedCount],
+      ["Total Records Logged", logsToExport.length],
+      [], // Empty row for spacing
+      ["Matric Number", "Status", "Timestamp", "Security Flag"]
+    ];
+
+    const rows = logsToExport
+      .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
+      .map(log => [
+        log.matricNumber, 
+        log.status.toUpperCase(), 
+        log.time, 
+        "Verified via Secure Platform"
+      ]);
+
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- DOWNLOAD LIVE SESSION ---
+  const exportLiveCSV = () => {
+    if (!data) return;
+    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
+  };
+
+  // --- DOWNLOAD PAST SESSION ---
+  const downloadPastSession = async (sessionId: string, dateString: string) => {
+    setDownloadingId(sessionId);
+    try {
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+      if (!response.ok) throw new Error("Failed to fetch");
+      const pastData = await response.json();
+      
+      generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
+    } catch (e) {
+      alert("Failed to download historical records. Check network.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const copyInviteLink = () => {
+    const baseUrl = window.location.origin;
+    const link = `${baseUrl}/?sessionId=${activeSessionId}`;
+    navigator.clipboard.writeText(link);
+    alert("Check-in link copied! Send this to the students.");
+  };
+
+  // --- VIEW 1: IDLE / CREATE SESSION / VAULT ---
+  if (!activeSessionId || viewMode === 'history') {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
+          
+          <div className="bg-[#2563EB] text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
+            <User size={40} strokeWidth={2.5} />
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            Welcome, {profile?.full_name || 'Lecturer'}
+          </h2>
+          <p className="text-[#2563EB] mt-1 text-xs font-bold uppercase tracking-widest mb-6 bg-blue-50 inline-block px-3 py-1 rounded-full">
+            {profile?.department || 'Faculty Member'}
+          </p>
+
+          {/* TAB TOGGLES */}
+          <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
+            <button 
+              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Start Class
+            </button>
+            <button 
+              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Past Records
+            </button>
+          </div>
+
+          {courses.length === 0 ? (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-4">
+              <AlertTriangle className="mx-auto text-yellow-600 mb-2" size={24} />
+              <p className="text-sm font-bold text-yellow-800">No courses registered.</p>
+              <p className="text-xs text-yellow-700 mt-1">Please go to the Course Registry to create one first.</p>
+            </div>
+          ) : (
+            <div className="relative mb-6">
+              <select 
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer"
+              >
+                {courses.map(course => (
+                  <option key={course.id} value={course.id}>{course.course_code}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-500">
+                <ChevronDown size={24} strokeWidth={2.5} />
+              </div>
+            </div>
+          )}
+
+          {/* DYNAMIC CONTENT BASED ON TAB */}
+          {viewMode === 'live' ? (
+            <div>
+              <p className="text-gray-500 text-sm font-medium mb-4">
+                Drop a dynamic geofence at your current location.
+              </p>
+              <button 
+                onClick={startNewSession}
+                disabled={isStarting || courses.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+              >
+                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
+                {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
+              </button>
+              {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
+            </div>
+          ) : (
+            <div className="text-left border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                 <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {pastSessions.length === 0 ? (
+                  <p className="p-6 text-center text-sm font-bold text-gray-400">No past records found for this course.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {pastSessions.map(session => (
+                      <div key={session.session_id} className="p-4 hover:bg-gray-50 transition-colors flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
+                        </div>
+                        
+                        {/* THIS IS THE NEW CLICKABLE DOWNLOAD BUTTON */}
+                        <button 
+                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
+                          disabled={downloadingId === session.session_id}
+                          className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        >
+                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                          {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
+                        </button>
+                        
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- VIEW 2: ACTIVE LECTURE SESSION ---
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
+      <div className="max-w-5xl mx-auto space-y-6">
+        
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={20} className="text-[#2563EB]" />
+                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">
+                  CampusCheck • {profile?.full_name || 'Faculty'}
+                </span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="text-gray-500 font-bold text-lg">{data?.course || 'Loading...'}</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
+              <div>
+                <p className="text-2xl font-extrabold text-gray-900">{data?.logs.length || 0}</p>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Check-ins</p>
+              </div>
+              <button 
+                onClick={exportLiveCSV} 
+                disabled={!data || data.logs.length === 0} 
+                className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
+              >
+                <Download size={16} /> Export
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+            <button 
+              onClick={copyInviteLink} 
+              className="flex justify-center items-center gap-2 text-sm font-bold bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all"
+            >
+              <Copy size={16} /> Copy Link
+            </button>
+            <button 
+              onClick={endSession} 
+              className="flex justify-center items-center gap-2 text-sm font-bold bg-red-50 text-red-600 px-4 py-2.5 rounded-xl border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all"
+            >
+              <XCircle size={16} /> End Lecture
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <UserPlus size={16} className="text-[#2563EB]"/> Manual Override
+          </h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input 
+              type="text" 
+              placeholder="Matric Number (e.g., CSC/2021/001)" 
+              value={manualMatric} 
+              onChange={(e) => setManualMatric(e.target.value.toUpperCase())} 
+              onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
+              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
+            />
+            <button 
+              onClick={() => handleManualOverride(manualMatric)} 
+              disabled={!manualMatric.trim() || isOverriding} 
+              className="w-full sm:w-auto whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+            >
+              {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+              {isOverriding ? "Forcing..." : "Force Check-In"}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex flex-row items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 className="font-bold text-gray-700 flex items-center gap-2">
+              <Users size={18} /> Verified Ledger
+            </h3>
+            <span className="text-xs text-gray-400 font-bold">
+              Updated: {lastRefreshed || 'Just now'}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse whitespace-nowrap">
+              <thead>
+                <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                  <th className="px-4 md:px-6 py-4 font-bold">Matric Number</th>
+                  <th className="px-4 md:px-6 py-4 font-bold">Time</th>
+                  <th className="px-4 md:px-6 py-4 font-bold">Status</th>
+                  <th className="px-4 md:px-6 py-4 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data?.logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 md:px-6 py-12 text-center text-gray-400 font-bold">
+                      Waiting for students to check in...
+                    </td>
+                  </tr>
+                ) : (
+                  data?.logs.map((log) => (
+                    <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-4 md:px-6 py-3 md:py-4 font-bold text-gray-900">{log.matricNumber}</td>
+                      <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm font-medium">
+                        <Clock size={14} /> {log.time}
+                      </td>
+                      <td className="px-4 md:px-6 py-3 md:py-4">
+                        {log.status === 'verified' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200">
+                            <CheckCircle size={12} strokeWidth={2.5} /> Verified
+                          </span>
+                        ) : log.status === 'pending_override' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 animate-pulse">
+                            <Hand size={12} strokeWidth={2.5} /> Raised Hand
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
+                            <AlertTriangle size={12} strokeWidth={2.5} /> Flagged
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 md:px-6 py-3 md:py-4 text-right">
+                        {log.status !== 'verified' && (
+                          <button 
+                            onClick={() => handleManualOverride(log.matricNumber)} 
+                            className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
+                          >
+                            <ShieldCheck size={14} /> Accept
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+</files>
