@@ -14,6 +14,25 @@ interface Props {
   sessionId: string;
 }
 
+// --- HARDWARE FINGERPRINT GENERATOR ---
+// Generates a unique ID based on the physical phone's GPU and screen (Bypasses Incognito Mode)
+const generateDeviceFingerprint = () => {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+    const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
+    const gpu = debugInfo && gl ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown-gpu';
+    
+    const cores = navigator.hardwareConcurrency || 'unknown-cores';
+    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
+    
+    const rawId = `${gpu}-${cores}-${screenStr}`;
+    return btoa(rawId); 
+  } catch (e) {
+    return 'fallback-device-id-' + Math.random();
+  }
+};
+
 export default function StudentCheckIn({ sessionId }: Props) {
   const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
@@ -33,7 +52,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+          body: JSON.stringify({ 
+            sessionId: item.session, 
+            matricNumber: item.matric, 
+            telemetry: item.telemetry,
+            deviceHash: item.deviceHash // Send hash on reconnect
+          })
         });
         
         if (res.ok || res.status === 409) {
@@ -63,7 +87,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const queueOfflinePayload = (telemetry: Telemetry[]) => {
     const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    existing.push({ session: sessionId, matric: matricNumber, telemetry, timestamp: Date.now() });
+    existing.push({ 
+      session: sessionId, 
+      matric: matricNumber, 
+      telemetry, 
+      deviceHash: generateDeviceFingerprint(), // Save hash offline
+      timestamp: Date.now() 
+    });
     localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
     setStatus('offline-queued');
   };
@@ -75,7 +105,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+        body: JSON.stringify({ 
+          sessionId, 
+          matricNumber, 
+          telemetry: gpsTelemetry,
+          deviceHash: generateDeviceFingerprint() // Send hash to block clones
+        })
       });
       
       const result = await response.json();
@@ -83,10 +118,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if ((response.ok && result.status === 'verified') || response.status === 409) {
         setStatus('success');
       } else if (result.status === 'flagged') {
-        setErrorMessage("Location verification failed. Please see the lecturer.");
+        setErrorMessage("Location anomaly detected. Please see the lecturer.");
         setStatus('failed');
       } else {
-        setErrorMessage(result.message || "You are too far from the lecture hall.");
+        setErrorMessage(result.message || "Verification failed. See lecturer.");
         setStatus('failed');
       }
     } catch (error: any) {

@@ -5,9 +5,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// The Haversine Formula: Calculates true distance between two GPS points in meters
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -23,14 +22,14 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry } = body;
+    const { sessionId, matricNumber, telemetry, deviceHash } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA FROM THE NEW TABLE
+    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -41,12 +40,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     }
     
-    // Validate against the new boolean column
     if (session.is_active !== true) {
       return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
     }
 
-    // 2. SMART ROSTER ENFORCEMENT (Safe decoupled query)
+    // 2. SMART ROSTER ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
       const { data: courseData } = await supabase
@@ -67,7 +65,7 @@ export async function POST(request: Request) {
       }, { status: 403 });
     }
 
-    // 3. PREVENT DUPLICATES
+    // 3. PREVENT DUPLICATES (Has this specific student already checked in?)
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -79,7 +77,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // 4. THE SPOOF CATCHER MATH
+    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    if (deviceHash) {
+      const { data: sharedDevice } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        // Safely search the device_info column for this exact hardware hash
+        .ilike('device_info', `%${deviceHash}%`) 
+        .limit(1)
+        .single();
+
+      if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
+        return NextResponse.json({ 
+          message: `Device sharing blocked. This physical phone was already used to check in ${sharedDevice.matric_number}.` 
+        }, { status: 403 });
+      }
+    }
+
+    // 5. THE SPOOF CATCHER MATH
     let isSpoofed = false;
     let totalDrift = 0;
     const initialLat = telemetry[0].lat;
@@ -87,7 +103,6 @@ export async function POST(request: Request) {
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
-      
       if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
       if (ping.alt === 0) isSpoofed = true;
       if (i > 0) {
@@ -100,7 +115,7 @@ export async function POST(request: Request) {
       isSpoofed = true;
     }
 
-    // 5. THE GEOFENCE (Pointing to new DB columns)
+    // 6. THE GEOFENCE
     const distanceToLecturer = getDistanceInMeters(
       session.anchor_latitude, session.anchor_longitude, 
       initialLat, initialLng
@@ -119,14 +134,15 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. WRITE TO THE LEDGER
+    // 7. WRITE TO THE LEDGER
     const { error: logError } = await supabase
       .from('attendance_logs')
       .insert([{
         session_id: sessionId,
         matric_number: cleanMatric,
         status: finalStatus,
-        device_info: JSON.stringify(telemetry)
+        // Save telemetry AND device hash to the database
+        device_info: JSON.stringify({ telemetry, deviceHash }) 
       }]);
 
     if (logError) {
@@ -134,7 +150,7 @@ export async function POST(request: Request) {
       throw logError;
     }
 
-    // 7. RETURN VERDICT TO THE UI
+    // 8. RETURN VERDICT
     return NextResponse.json({ 
       status: finalStatus, 
       distance: Math.round(distanceToLecturer),
