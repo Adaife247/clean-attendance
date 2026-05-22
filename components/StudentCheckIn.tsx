@@ -14,22 +14,47 @@ interface Props {
   sessionId: string;
 }
 
-// --- HARDWARE FINGERPRINT GENERATOR ---
-// Generates a unique ID based on the physical phone's GPU and screen (Bypasses Incognito Mode)
-const generateDeviceFingerprint = () => {
+// --- HARDWARE CANVAS FINGERPRINT ENGINE ---
+// Forces physical GPU pixel rasterization to bypass Incognito software spoofing
+const generateCanvasFingerprint = () => {
   try {
     const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl');
-    const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
-    const gpu = debugInfo && gl ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown-gpu';
+    canvas.width = 200;
+    canvas.height = 50;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 'canvas-not-supported';
+
+    // Set complex alpha blending, font hierarchies, and geometry paths
+    ctx.textBaseline = "top";
+    ctx.font = "14px 'Arial', 'Noto Color Emoji', sans-serif";
+    ctx.fillStyle = "#f60";
+    ctx.fillRect(125, 1, 62, 20);
+    ctx.fillStyle = "#069";
+    ctx.fillText("CampusCheck Security Matrix ❤️", 2, 10);
+    ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+    ctx.fillText("CampusCheck Security Matrix ❤️", 4, 12);
+
+    // Render overlapping geometry with vector shadow paths
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = "rgba(0, 0, 255, 0.5)";
+    ctx.beginPath();
+    ctx.arc(150, 25, 15, 0, Math.PI * 2, true);
+    ctx.closePath();
+    ctx.fill();
+
+    const dataUrl = canvas.toDataURL();
     
-    const cores = navigator.hardwareConcurrency || 'unknown-cores';
-    const screenStr = `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`;
-    
-    const rawId = `${gpu}-${cores}-${screenStr}`;
-    return btoa(rawId); 
+    // Generate an immutable geometric hash code from the raw data URL stream
+    let hash = 0;
+    if (dataUrl.length === 0) return 'empty-raster';
+    for (let i = 0; i < dataUrl.length; i++) {
+      const char = dataUrl.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0; 
+    }
+    return 'HW-' + Math.abs(hash).toString(16).toUpperCase();
   } catch (e) {
-    return 'fallback-device-id-' + Math.random();
+    return 'fallback-id-' + Math.random().toString(36).substring(2, 9);
   }
 };
 
@@ -38,7 +63,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
 
-  // --- THE SYNC ENGINE ---
+  // --- THE OFFLINE SYNC ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -56,7 +81,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             sessionId: item.session, 
             matricNumber: item.matric, 
             telemetry: item.telemetry,
-            deviceHash: item.deviceHash // Send hash on reconnect
+            deviceHash: item.deviceHash 
           })
         });
         
@@ -91,14 +116,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
       session: sessionId, 
       matric: matricNumber, 
       telemetry, 
-      deviceHash: generateDeviceFingerprint(), // Save hash offline
+      deviceHash: generateCanvasFingerprint(), 
       timestamp: Date.now() 
     });
     localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
     setStatus('offline-queued');
   };
 
-  // --- THE CHECK-IN ENGINE ---
+  // --- THE TRANSMISSION MATRIX ---
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
@@ -109,7 +134,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           sessionId, 
           matricNumber, 
           telemetry: gpsTelemetry,
-          deviceHash: generateDeviceFingerprint() // Send hash to block clones
+          deviceHash: generateCanvasFingerprint() 
         })
       });
       
@@ -118,17 +143,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if ((response.ok && result.status === 'verified') || response.status === 409) {
         setStatus('success');
       } else if (result.status === 'flagged') {
-        setErrorMessage("Location anomaly detected. Please see the lecturer.");
+        setErrorMessage("Location configuration anomaly detected. Please see the lecturer.");
         setStatus('failed');
       } else {
-        setErrorMessage(result.message || "Verification failed. See lecturer.");
+        setErrorMessage(result.message || "Verification parameters rejected. See lecturer.");
         setStatus('failed');
       }
     } catch (error: any) {
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
         queueOfflinePayload(gpsTelemetry);
       } else {
-        setErrorMessage("Server connection lost. Please try again.");
+        setErrorMessage("Server telemetry connection lost. Please try again.");
         setStatus('failed');
       }
     }
@@ -139,7 +164,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('locating');
 
     if (!navigator.geolocation) {
-      setErrorMessage("Your browser doesn't support location services.");
+      setErrorMessage("Your native browser interface doesn't support geolocation telemetry.");
       setStatus('failed');
       return;
     }
@@ -152,7 +177,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (pings.length > 0) {
         sendPayloadToVercel(pings);
       } else {
-        setErrorMessage("We couldn't get a strong GPS lock indoors.");
+        setErrorMessage("Satellite coordinate lock could not be secured within the structural limits.");
         setStatus('failed');
       }
     }, 15000);
@@ -178,7 +203,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (error.code === 1) {
           setStatus('denied');
         } else {
-          setErrorMessage("Failed to grab GPS. Ensure your location is turned on.");
+          setErrorMessage("Failed to grab physical coordinates. Ensure your device geolocation toggle is active.");
           setStatus('failed');
         }
       },
@@ -189,9 +214,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
-        
         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
-        
         <div className="flex justify-center items-center gap-2 mb-8 mt-2">
           <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
@@ -201,7 +224,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="space-y-4">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence inside the lecture hall.</p>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -229,26 +252,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold animate-pulse">
-              {status === 'locating' ? "Acquiring satellite lock..." : "Verifying coordinates..."}
+              {status === 'locating' ? "Acquiring structural satellite lock..." : "Verifying biometric coordinates..."}
             </p>
-            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
+            <p className="text-xs text-gray-400 mt-2 font-medium">Keep your browser instance active</p>
           </div>
         )}
 
         {status === 'syncing' && (
           <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
             <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-blue-900 font-bold">Network Restored</p>
-            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
+            <p className="text-blue-900 font-bold">Network Architecture Restored</p>
+            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing telemetry data to cloud server...</p>
           </div>
         )}
 
         {status === 'offline-queued' && (
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
+            <h3 className="text-xl font-bold text-blue-900">Telemetry Saved Offline</h3>
             <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
-              Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.
+              Network interfaces dropped, but physical coordinate telemetry and hardware tags were secured. Keep this window open. The platform will force submission upon reconnect.
             </p>
           </div>
         )}
@@ -256,23 +279,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
         {status === 'success' && (
           <div className="py-6 bg-green-50 rounded-2xl border border-green-100">
             <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-green-900">Verified</h3>
-            <p className="text-green-700 mt-1 text-sm font-medium">Your attendance has been recorded.</p>
+            <h3 className="text-xl font-bold text-green-900">Attendance Verified</h3>
+            <p className="text-green-700 mt-1 text-sm font-medium">Your localized footprint has been logged into the ledger.</p>
           </div>
         )}
 
         {status === 'denied' && (
           <div className="py-6 bg-red-50 rounded-2xl border border-red-100 px-4">
             <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Required</h3>
-            <p className="text-red-700 mt-2 text-sm font-medium">Please allow location access in your browser to check in.</p>
+            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Privileges Required</h3>
+            <p className="text-red-700 mt-2 text-sm font-medium">Geofence validation requires operational coordinate access in your browser.</p>
           </div>
         )}
 
         {status === 'failed' && (
           <div className="py-6 bg-orange-50 rounded-2xl border border-orange-100 px-4">
             <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
+            <h3 className="text-xl font-bold text-orange-900">Verification Rejected</h3>
             <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
             <button 
               onClick={() => setStatus('idle')} 

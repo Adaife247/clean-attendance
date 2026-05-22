@@ -26,10 +26,10 @@ export async function POST(request: Request) {
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
-      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+      return NextResponse.json({ message: "Invalid system payload structural layout" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA
+    // 1. EVALUATE THE ENFORCED LECTURE SESSION WINDOW
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -37,14 +37,14 @@ export async function POST(request: Request) {
       .single();
 
     if (sessionError || !session) {
-      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+      return NextResponse.json({ message: "The verification window for this token layout has expired or does not exist." }, { status: 404 });
     }
     
     if (session.is_active !== true) {
-      return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
+      return NextResponse.json({ message: "Operational registration limits closed for this block window." }, { status: 403 });
     }
 
-    // 2. SMART ROSTER ENFORCEMENT
+  // 2. COURSE ROSTER SUB-QUERY ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
       const { data: courseData } = await supabase
@@ -61,11 +61,11 @@ export async function POST(request: Request) {
     const isRosterEnforced = roster.length > 0;
     if (isRosterEnforced && !roster.includes(cleanMatric)) {
       return NextResponse.json({ 
-        message: 'Unregistered: Your matric number is not on the official class list.' 
+        message: 'Identity Validation Failed: Your matric identifier is not included in the verified roster block.' 
       }, { status: 403 });
     }
 
-    // 3. PREVENT DUPLICATES (Has this specific student already checked in?)
+    // 3. RETRIEVE RECORD ENTRIES FOR DUPLICATE MATRIC ID CHECKS
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -74,28 +74,27 @@ export async function POST(request: Request) {
       .single();
 
     if (existingLog) {
-      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+      return NextResponse.json({ message: "This structural identification profile has already been logged into the current window." }, { status: 409 });
     }
 
-    // 4. HARDWARE CLONE CHECK (Zero-Trust Anti-Cheating)
+    // 4. THE ZERO-TRUST HARDWARE INTEGRITY ANALYSIS (Blocks Incognito Proxies)
     if (deviceHash) {
       const { data: sharedDevice } = await supabase
         .from('attendance_logs')
         .select('matric_number')
         .eq('session_id', sessionId)
-        // Safely search the device_info column for this exact hardware hash
         .ilike('device_info', `%${deviceHash}%`) 
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (sharedDevice && sharedDevice.matric_number !== cleanMatric) {
         return NextResponse.json({ 
-          message: `Device sharing blocked. This physical phone was already used to check in ${sharedDevice.matric_number}.` 
+          message: `Device configuration sharing restriction encountered. This physical smartphone hardware profile was already bound to an active identity ledger entry (${sharedDevice.matric_number}) during this lecture block.` 
         }, { status: 403 });
       }
     }
 
-    // 5. THE SPOOF CATCHER MATH
+    // 5. GEO-SPOOF FRAUD FILTER ANALYSIS
     let isSpoofed = false;
     let totalDrift = 0;
     const initialLat = telemetry[0].lat;
@@ -115,42 +114,40 @@ export async function POST(request: Request) {
       isSpoofed = true;
     }
 
-    // 6. THE GEOFENCE
+    // 6. GEOFENCE RADIAL CALCULATIONS
     const distanceToLecturer = getDistanceInMeters(
       session.anchor_latitude, session.anchor_longitude, 
       initialLat, initialLng
     );
 
     let finalStatus = 'absent';
-    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
+    let responseMessage = `Geofence validation failed. Computed radial offset indicates you are ${Math.round(distanceToLecturer)} meters outside operational bounds.`;
 
     if (distanceToLecturer <= 50) {
       if (isSpoofed) {
         finalStatus = 'flagged'; 
-        responseMessage = "Location anomaly detected. Please see lecturer.";
+        responseMessage = "Telemetry modification markers present. Hardware configuration logged for auditing.";
       } else {
         finalStatus = 'verified'; 
         responseMessage = "Verified";
       }
     }
 
-    // 7. WRITE TO THE LEDGER
+    // 7. WRITE THE COMPREHENSIVE STRUCTURAL LOG INTO THE ATTENDANCE STORAGE
     const { error: logError } = await supabase
       .from('attendance_logs')
       .insert([{
         session_id: sessionId,
         matric_number: cleanMatric,
         status: finalStatus,
-        // Save telemetry AND device hash to the database
         device_info: JSON.stringify({ telemetry, deviceHash }) 
       }]);
 
     if (logError) {
-      console.error("Database Insert Error:", logError);
+      console.error("Database Core Operational Failure:", logError);
       throw logError;
     }
 
-    // 8. RETURN VERDICT
     return NextResponse.json({ 
       status: finalStatus, 
       distance: Math.round(distanceToLecturer),
@@ -158,7 +155,7 @@ export async function POST(request: Request) {
     }, { status: 200 });
 
   } catch (error) {
-    console.error("API Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("Core System Execution Interruption:", error);
+    return NextResponse.json({ message: "An unhandled exception broke execution processing workflows." }, { status: 500 });
   }
 }
