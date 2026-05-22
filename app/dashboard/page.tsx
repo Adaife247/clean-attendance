@@ -340,7 +340,7 @@ export default function LecturerDashboard() {
 
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <UserPlus size={16} className="text-[#2563EB]"/> Manual Override TEST
+            <UserPlus size={16} className="text-[#2563EB]"/> Manual Override
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input 
