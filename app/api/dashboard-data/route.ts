@@ -11,22 +11,30 @@ export async function GET(request: Request) {
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-    // 1. Get the session
-    const { data: session } = await supabase.from('sessions').select('status, course_id').eq('id', sessionId).single();
+    // 1. Get the session directly from the CORRECT table (lecture_sessions)
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code')
+      .eq('session_id', sessionId) // Matching the correct primary key
+      .single();
     
-    // 2. Direct, foolproof course lookup
-    let courseName = "Unknown Course";
-    if (session?.course_id) {
-      const { data: course } = await supabase.from('courses').select('course_code').eq('id', session.course_id).single();
-      if (course) courseName = course.course_code;
+    if (sessionError) {
+      console.error("Dashboard API Error fetching session:", sessionError.message);
     }
 
+    // 2. The course code (e.g. "GST401") is already in the row! No extra lookup needed.
+    const courseName = session?.course_code || "Unknown Course";
+
     // 3. Get the ledger
-    const { data: logs } = await supabase.from('attendance_logs').select('*').eq('session_id', sessionId).order('check_in_time', { ascending: false });
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
 
     return NextResponse.json({
       course: courseName,
-      isActive: session?.status === 'active',
+      isActive: session?.is_active === true, // Map the boolean correctly
       logs: (logs || []).map((l: any) => ({
         id: l.id,
         matricNumber: l.matric_number,
@@ -34,7 +42,8 @@ export async function GET(request: Request) {
         time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }))
     });
-  } catch (e) {
+  } catch (e: any) {
+    console.error("Dashboard Data Fatal Error:", e.message);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

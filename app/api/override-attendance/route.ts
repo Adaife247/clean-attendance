@@ -7,7 +7,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Aggressive catching: Look for every possible way your frontend might name these variables
     const sessionId = body.sessionId || body.session_id || body.session;
     const rawMatric = body.matricNumber || body.matric_number || body.matric;
 
@@ -17,33 +16,51 @@ export async function POST(request: Request) {
 
     const cleanMatric = String(rawMatric).toUpperCase().trim();
 
-    // Check if they are already flagged
-    const { data: existingLog } = await supabase
+    // 1. Check if they are already flagged
+    const { data: existingLog, error: fetchError } = await supabase
       .from('attendance_logs')
       .select('id')
       .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
 
+    if (fetchError && fetchError.code !== 'PGRST116') {
+       // PGRST116 just means "no rows found", which is normal for a new student. 
+       // Any other error is a real crash.
+       throw fetchError; 
+    }
+
     if (existingLog) {
-      // Update existing flagged student
-      await supabase.from('attendance_logs').update({ 
+      // 2. Try to update
+      const { error: updateError } = await supabase.from('attendance_logs').update({ 
         status: 'verified', 
         device_info: JSON.stringify({ method: "Manual Override - Updated" }) 
       }).eq('id', existingLog.id);
+      
+      if (updateError) throw updateError; // CRITICAL: Catch the error!
+      
     } else {
-      // Insert new student
-      await supabase.from('attendance_logs').insert([{
+      // 3. Try to insert
+      const { error: insertError } = await supabase.from('attendance_logs').insert([{
         session_id: sessionId,
         matric_number: cleanMatric,
         status: 'verified',
         device_info: JSON.stringify({ method: "Manual Override - Inserted" })
       }]);
+      
+      if (insertError) throw insertError; // CRITICAL: Catch the error!
     }
 
     return NextResponse.json({ message: "Success" });
-  } catch (error) {
-    console.error("Override Error:", error);
-    return NextResponse.json({ message: "Error" }, { status: 500 });
+    
+  } catch (error: any) {
+    // 4. PRINT THE EXACT POSTGRES ERROR TO THE TERMINAL
+    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
+    console.error("Error Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("Details:", error.details);
+    console.error("============================================================\n");
+    
+    return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }
