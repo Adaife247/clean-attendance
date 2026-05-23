@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
 
 export default function StudentCheckIn({ sessionId }: Props) {
-  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing' | 'onboarding'>('idle'); 
+  // State Flow: idle -> checking -> needs_setup -> ready -> locating/verifying -> success
+  const [status, setStatus] = useState<'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
@@ -16,6 +17,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
+  // --- OFFLINE QUEUE ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -45,34 +47,38 @@ export default function StudentCheckIn({ sessionId }: Props) {
   }, []);
 
   const queueOfflinePayload = (telemetry: Telemetry[]) => {
+    if (!sessionId) return;
     const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     existing.push({ session: sessionId, matric: matricNumber, telemetry, timestamp: Date.now() });
     localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
     setStatus('offline-queued');
   };
 
-  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
-    setStatus('verifying');
+  // --- STEP 1: SILENTLY CHECK IF STUDENT IS NEW ---
+  const checkStudentStatus = async () => {
+    if (matricNumber.length < 5) return;
+    setStatus('checking');
+    
     try {
-      const response = await fetch('/api/verify-attendance', {
+      const res = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+        body: JSON.stringify({ matricNumber })
       });
-      const result = await response.json();
-      if ((response.ok && result.status === 'verified') || response.status === 409) { triggerSuccessVibration(); setStatus('success'); } 
-      else if (result.status === 'flagged') { setErrorMessage("Location anomaly detected. Please see the lecturer."); setStatus('failed'); } 
-      else { setErrorMessage(result.message || "Verification failed. See lecturer."); setStatus('failed'); }
-    } catch (error: any) {
-      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) queueOfflinePayload(gpsTelemetry);
-      else { setErrorMessage("Server connection lost. Please try again."); setStatus('failed'); }
+      
+      if (res.status === 404) setStatus('needs_setup'); 
+      else if (res.ok) setStatus('ready'); 
+      else throw new Error("Failed to verify ledger.");
+    } catch (error) {
+      setErrorMessage("Network error. Could not connect to database.");
+      setStatus('failed');
     }
   };
 
+  // --- STEP 2: REGISTER NEW DEVICE ---
   const registerDevice = async () => {
     try {
       setStatus('locating');
-      setErrorMessage("Preparing secure hardware bind...");
-
+      
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
@@ -88,35 +94,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       const verifyResult = await verifyRes.json();
       
-      if (verifyResult.verified) {
-        alert("Hardware successfully bound! You can now check in.");
-        setStatus('idle');
-      } else {
-        throw new Error("Hardware binding failed.");
-      }
+      if (verifyResult.verified) setStatus('ready');
+      else throw new Error("Hardware binding failed.");
     } catch (error: any) {
       setErrorMessage(error.message || "Failed to register your biometric device.");
       setStatus('failed');
     }
   };
 
-  const startCheckIn = async () => {
-    if (matricNumber.length < 5) return;
+  // --- STEP 3: FINAL CHECK-IN (BIOMETRICS + GPS) ---
+  const executeFinalCheckIn = async () => {
     setStatus('locating');
     
-    // --- PHASE 1: HARDWARE BIOMETRIC BINDING ---
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      
-      if (genRes.status === 404) {
-        // Intercept new users and send them to the friendly setup screen
-        setStatus('onboarding');
-        return;
-      }
-
       const options = await genRes.json();
       if (options.error) throw new Error(options.error);
 
@@ -126,18 +120,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: asseResp })
       });
-      
       const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) throw new Error("Biometric signature mismatch.");
+      if (!verifyResult.verified) throw new Error("Biometric mismatch.");
 
     } catch (error: any) {
-      setErrorMessage("Hardware Validation Failed. You cannot mark attendance for this matric number from this device.");
+      setErrorMessage("Hardware Validation Failed. Device mismatch.");
       setStatus('failed');
       return; 
     }
 
-    // --- PHASE 2: GPS TELEMETRY (Executes ONLY if biometrics pass) ---
-    if (!navigator.geolocation) { setErrorMessage("Your browser doesn't support location services."); setStatus('failed'); return; }
+    if (!navigator.geolocation) { setErrorMessage("Browser doesn't support location."); setStatus('failed'); return; }
 
     let pings: Telemetry[] = [];
     let watchId: number;
@@ -145,7 +137,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("We couldn't get a strong GPS lock indoors."); setStatus('failed'); }
+      else { setErrorMessage("Couldn't get a strong GPS lock indoors."); setStatus('failed'); }
     }, 20000);
 
     watchId = navigator.geolocation.watchPosition(
@@ -156,17 +148,28 @@ export default function StudentCheckIn({ sessionId }: Props) {
       (error) => {
         clearTimeout(timeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        
-        if (error.code === 1) {
-          setStatus('denied');
-        } else { 
-          setErrorMessage(`GPS Blocked (Code ${error.code}): ${error.message || 'Unknown device error'}`); 
-          setStatus('failed'); 
-        }
+        if (error.code === 1) setStatus('denied');
+        else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
       },
-      // Maximum Cache Bypass for stubborn indoor phones
       { enableHighAccuracy: false, maximumAge: 300000, timeout: 20000 }
     );
+  };
+
+  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
+    setStatus('verifying');
+    try {
+      const response = await fetch('/api/verify-attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+      });
+      const result = await response.json();
+      if ((response.ok && result.status === 'verified') || response.status === 409) { triggerSuccessVibration(); setStatus('success'); } 
+      else if (result.status === 'flagged') { setErrorMessage("Location anomaly detected. Please see the lecturer."); setStatus('failed'); } 
+      else { setErrorMessage(result.message || "Verification failed."); setStatus('failed'); }
+    } catch (error: any) {
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) queueOfflinePayload(gpsTelemetry);
+      else { setErrorMessage("Server connection lost."); setStatus('failed'); }
+    }
   };
 
   const requestAppeal = async () => {
@@ -177,128 +180,137 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ sessionId, matricNumber })
       });
       if (response.ok) { alert("Appeal sent! Please look at the lecturer for visual confirmation."); setStatus('idle'); } 
-      else alert("Failed to send appeal. Please check your network.");
+      else alert("Failed to send appeal. Check network.");
     } catch (e) { alert("Network error."); } 
     finally { setIsAppealing(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-8 text-center transition-all duration-300 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1.5 bg-[#2563EB]"></div>
-        <div className="flex justify-center items-center gap-2 mb-8 mt-2">
-          <ShieldCheck size={28} className="text-[#2563EB]" strokeWidth={2.5} />
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
-        </div>
-
+    <div className="w-full">
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
+        
+        {/* STEP 1: INITIAL INPUT */}
         {status === 'idle' && (
-          <div className="space-y-4">
-            <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Check-In</h2>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Please confirm your physical presence.</p>
+          <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                <User size={18} />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Matric Number (e.g., CSC/2021/001)"
+                value={matricNumber}
+                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()}
+                className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
+              />
             </div>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-              <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
-            </div>
-            <button onClick={startCheckIn} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              <Navigation size={20} className="text-gray-300" /> Confirm Attendance
+
+            <button 
+              onClick={checkStudentStatus}
+              disabled={matricNumber.length < 5}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              Continue <ArrowRight size={20} className="text-gray-300" />
             </button>
           </div>
         )}
 
-        {status === 'onboarding' && (
-          <div className="py-6 flex flex-col items-center text-center px-2">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 border border-blue-100">
-              <User size={32} className="text-[#2563EB]" />
+        {/* STEP 2: NEW STUDENT SETUP */}
+        {status === 'needs_setup' && (
+          <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+              <ShieldCheck size={32} className="text-[#2563EB]" />
             </div>
-            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome!</h3>
+            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Hardware Setup</h3>
             <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">
-              It looks like this is your first time checking in with <span className="font-bold text-gray-900">{matricNumber}</span>. 
-              To prevent proxy attendance, we need to securely link this phone to your student profile.
+              We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.
             </p>
             
-            <div className="w-full mt-6 space-y-3">
-              <button onClick={registerDevice} className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
-                <ShieldCheck size={20} /> Secure My Device
-              </button>
-              
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-500 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm">
-                Cancel
-              </button>
+            <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+              Scan Biometrics
+            </button>
+            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
+          </div>
+        )}
+
+        {/* STEP 3: READY TO CHECK IN */}
+        {status === 'ready' && (
+          <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
+              <CheckCircle size={32} className="text-green-600" />
             </div>
+            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Identity Confirmed</h3>
+            <p className="text-gray-900 font-black text-xl mt-1">{matricNumber}</p>
+            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">
+              Your device is securely linked. Ensure you are inside the lecture hall.
+            </p>
             
-            <div className="mt-6 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2 text-left">
-              <AlertTriangle size={16} className="text-blue-600 mt-0.5 shrink-0" />
-              <p className="text-xs text-blue-800 font-medium leading-tight">
-                <strong>Note:</strong> Once linked, you cannot use another phone to mark attendance for 48 hours.
-              </p>
-            </div>
+            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+              <Navigation size={20} /> Submit Attendance
+            </button>
+            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
           </div>
         )}
 
-        {(status === 'locating' || status === 'verifying') && (
-          <div className="py-6 flex flex-col items-center">
+        {/* LOADING STATES */}
+        {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
+          <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-gray-700 font-bold animate-pulse">{status === 'locating' ? "Securing connection..." : "Verifying coordinates..."}</p>
-            <p className="text-xs text-gray-400 mt-2 font-medium">Do not close your browser</p>
+            <p className="text-gray-700 font-bold animate-pulse text-center">
+              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Acquiring hardware lock..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
+            </p>
           </div>
         )}
 
-        {status === 'syncing' && (
-          <div className="py-6 flex flex-col items-center bg-blue-50 rounded-2xl border border-blue-100">
-            <RefreshCcw className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-blue-900 font-bold">Network Restored</p>
-            <p className="text-blue-700 mt-1 text-sm font-medium">Syncing data to server...</p>
+        {/* SUCCESS STATE */}
+        {status === 'success' && (
+          <div className="py-6 text-center">
+            <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
+            <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
+            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
+            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. You may close this page.</p>
           </div>
         )}
 
+        {/* OFFLINE QUEUE STATE */}
         {status === 'offline-queued' && (
-          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4">
+          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Your network connection dropped, but your GPS location was secured. Leave this tab open. It will automatically submit when your internet returns.</p>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.</p>
           </div>
         )}
 
-        {status === 'success' && (
-          <div className="py-6 bg-green-50 rounded-2xl border border-green-100">
-            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-green-900">Verified</h3>
-            <p className="text-green-700 mt-1 text-sm font-medium">Your attendance has been recorded.</p>
-          </div>
-        )}
-
-        {status === 'denied' && (
-          <div className="py-6 bg-red-50 rounded-2xl border border-red-100 px-4">
-            <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-red-900 leading-tight">Location Required</h3>
-            <p className="text-red-700 mt-2 text-sm font-medium">Please allow location access in your browser to check in.</p>
-          </div>
-        )}
-
+        {/* FAILED STATE */}
         {status === 'failed' && (
-          <div className="py-6 bg-orange-50 rounded-2xl border border-orange-100 px-4">
-            <AlertTriangle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-orange-900">Verification Failed</h3>
-            <p className="text-orange-700 mt-2 text-sm font-medium">{errorMessage}</p>
+          <div className="py-4 text-center">
+            <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
+            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">{errorMessage}</p>
+            
             <div className="mt-6 space-y-3">
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Try Again</button>
-              
-              <div className="border-t border-orange-200 pt-3 mt-3">
-                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm">
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)
-                </button>
-              </div>
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Start Over</button>
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)
+              </button>
             </div>
           </div>
         )}
         
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <a href="/portal" className="text-sm font-bold text-[#2563EB] hover:text-blue-800 transition-colors">View My Exam Eligibility Status &rarr;</a>
-          <p className="text-center text-xs font-semibold text-gray-400 mt-4">Secured by CampusCheck Zero-Trust Architecture</p>
-        </div>
+        {status === 'denied' && (
+          <div className="py-4 text-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
+            <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
+            <button onClick={() => setStatus('idle')} className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
+          </div>
+        )}
       </div>
+      
+      <p className="text-center text-xs font-semibold text-gray-400 mt-8">
+        Make sure you are physically inside the lecture hall before checking in.
+      </p>
     </div>
   );
 }
