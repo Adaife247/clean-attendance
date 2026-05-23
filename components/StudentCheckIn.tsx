@@ -7,7 +7,6 @@ interface Telemetry { lat: number; lng: number; alt: number | null; acc: number;
 interface Props { sessionId: string; }
 
 export default function StudentCheckIn({ sessionId }: Props) {
-  // State Flow: idle -> checking -> needs_setup -> ready -> locating/verifying -> success
   const [status, setStatus] = useState<'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
@@ -17,7 +16,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // --- OFFLINE QUEUE ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -54,7 +52,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('offline-queued');
   };
 
-  // --- STEP 1: SILENTLY CHECK IF STUDENT IS NEW ---
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
     setStatus('checking');
@@ -74,11 +71,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // --- STEP 2: REGISTER NEW DEVICE ---
   const registerDevice = async () => {
     try {
       setStatus('locating');
-      
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
@@ -102,7 +97,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // --- STEP 3: FINAL CHECK-IN (BIOMETRICS + GPS) ---
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     
@@ -189,7 +183,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
         
-        {/* STEP 1: INITIAL INPUT */}
         {status === 'idle' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
@@ -205,7 +198,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
               />
             </div>
-
             <button 
               onClick={checkStudentStatus}
               disabled={matricNumber.length < 5}
@@ -216,7 +208,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* STEP 2: NEW STUDENT SETUP */}
         {status === 'needs_setup' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
@@ -226,7 +217,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">
               We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.
             </p>
-            
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
               Scan Biometrics
             </button>
@@ -234,7 +224,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* STEP 3: READY TO CHECK IN */}
         {status === 'ready' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
@@ -245,7 +234,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">
               Your device is securely linked. Ensure you are inside the lecture hall.
             </p>
-            
             <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
               <Navigation size={20} /> Submit Attendance
             </button>
@@ -253,7 +241,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* LOADING STATES */}
         {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
@@ -263,7 +250,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* SUCCESS STATE */}
         {status === 'success' && (
           <div className="py-6 text-center">
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
@@ -273,7 +259,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* OFFLINE QUEUE STATE */}
         {status === 'offline-queued' && (
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
@@ -282,13 +267,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {/* FAILED STATE */}
         {status === 'failed' && (
           <div className="py-4 text-center">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
             <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">{errorMessage}</p>
-            
             <div className="mt-6 space-y-3">
               <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Start Over</button>
               <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
