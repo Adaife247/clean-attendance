@@ -45,10 +45,10 @@ export default function LecturerDashboard() {
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
 
-  // --- NEW VAULT STATE ---
+  // --- VAULT STATE ---
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null); // Tracks which archive is downloading
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
@@ -59,7 +59,6 @@ export default function LecturerDashboard() {
         return;
       }
 
-      // Fetch Profile
       const { data: profileData } = await supabase
         .from('lecturers')
         .select('full_name, department')
@@ -73,7 +72,6 @@ export default function LecturerDashboard() {
         });
       }
 
-      // Fetch Registered Courses for the Dropdown
       const { data: courseData } = await supabase
         .from('courses')
         .select('id, course_code')
@@ -93,7 +91,6 @@ export default function LecturerDashboard() {
     if (savedSession) setActiveSessionId(savedSession);
   }, []);
 
-  // --- FETCH PAST SESSIONS (THE VAULT) ---
   const loadHistory = async () => {
     const course = courses.find(c => c.id === selectedCourseId);
     if (!course) return;
@@ -113,13 +110,14 @@ export default function LecturerDashboard() {
     }
   }, [viewMode, selectedCourseId]);
 
+  // --- BULLETPROOF GPS WAKEUP LOGIC ---
   const startNewSession = () => {
     if (!selectedCourseId) {
       setSetupError("Please register a course first.");
       return;
     }
     setIsStarting(true);
-    setSetupError("Acquiring dynamic podium coordinates...");
+    setSetupError("Waking up GPS hardware...");
     
     if (!navigator.geolocation) {
       setSetupError("Location services not supported by your browser.");
@@ -127,9 +125,20 @@ export default function LecturerDashboard() {
       return;
     }
     
-    navigator.geolocation.getCurrentPosition(
+    let watchId: number;
+    
+    const timeoutId = setTimeout(() => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
+      setIsStarting(false);
+    }, 20000); // Generous 20-second timeout
+
+    watchId = navigator.geolocation.watchPosition(
       async (position) => {
-        setSetupError("Creating database session...");
+        clearTimeout(timeoutId);
+        navigator.geolocation.clearWatch(watchId); 
+        
+        setSetupError("Coordinates secured. Creating session...");
         try {
           const response = await fetch('/api/create-session', {
             method: 'POST',
@@ -145,7 +154,7 @@ export default function LecturerDashboard() {
             const result = await response.json();
             localStorage.setItem('active_attendance_session', result.sessionId);
             setActiveSessionId(result.sessionId); 
-            setViewMode('live'); // Force back to live view if they start a new one
+            setViewMode('live'); 
           } else {
             setSetupError("Failed to create session on server.");
           }
@@ -156,10 +165,17 @@ export default function LecturerDashboard() {
         }
       },
       (error) => {
-        setSetupError("Failed to grab GPS. Please allow location access.");
+        clearTimeout(timeoutId);
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        
+        if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
+        else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
+        else if (error.code === 3) setSetupError("Timeout: GPS took too long indoors.");
+        else setSetupError("Failed to grab GPS.");
+        
         setIsStarting(false);
       },
-      { enableHighAccuracy: false, timeout: 20000, maximumAge: 10000 }
+      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
     );
   };
 
@@ -221,7 +237,6 @@ export default function LecturerDashboard() {
     }
   };
 
-  // --- DYNAMIC EXCEL EXPORT ENGINE ---
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
     if (!logsToExport || logsToExport.length === 0) {
       alert("No check-ins were recorded during this session.");
@@ -230,14 +245,13 @@ export default function LecturerDashboard() {
     
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
 
-    // Professional Header
     const header = [
       [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
       ["Course Code", courseName],
       ["Date Generated", dateStr],
       ["Total Present", verifiedCount],
       ["Total Records Logged", logsToExport.length],
-      [], // Empty row for spacing
+      [], 
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
 
@@ -260,13 +274,11 @@ export default function LecturerDashboard() {
     document.body.removeChild(link);
   };
 
-  // --- DOWNLOAD LIVE SESSION ---
   const exportLiveCSV = () => {
     if (!data) return;
     generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
   };
 
-  // --- DOWNLOAD PAST SESSION ---
   const downloadPastSession = async (sessionId: string, dateString: string) => {
     setDownloadingId(sessionId);
     try {
@@ -289,7 +301,6 @@ export default function LecturerDashboard() {
     alert("Check-in link copied! Send this to the students.");
   };
 
-  // --- VIEW 1: IDLE / CREATE SESSION / VAULT ---
   if (!activeSessionId || viewMode === 'history') {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
@@ -305,7 +316,6 @@ export default function LecturerDashboard() {
             {profile?.department || 'Faculty Member'}
           </p>
 
-          {/* TAB TOGGLES */}
           <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
             <button 
               onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
@@ -344,7 +354,6 @@ export default function LecturerDashboard() {
             </div>
           )}
 
-          {/* DYNAMIC CONTENT BASED ON TAB */}
           {viewMode === 'live' ? (
             <div>
               <p className="text-gray-500 text-sm font-medium mb-4">
@@ -377,7 +386,6 @@ export default function LecturerDashboard() {
                           <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
                         </div>
                         
-                        {/* THIS IS THE NEW CLICKABLE DOWNLOAD BUTTON */}
                         <button 
                           onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
                           disabled={downloadingId === session.session_id}
@@ -399,7 +407,6 @@ export default function LecturerDashboard() {
     );
   }
 
-  // --- VIEW 2: ACTIVE LECTURE SESSION ---
   return (
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
