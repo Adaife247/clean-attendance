@@ -159,7 +159,7 @@ export default function LecturerDashboard() {
         setSetupError("Failed to grab GPS. Please allow location access.");
         setIsStarting(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   };
 
