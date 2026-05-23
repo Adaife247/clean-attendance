@@ -7,7 +7,7 @@ interface Telemetry { lat: number; lng: number; alt: number | null; acc: number;
 interface Props { sessionId: string; }
 
 export default function StudentCheckIn({ sessionId }: Props) {
-  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
+  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing' | 'onboarding'>('idle'); 
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
@@ -112,8 +112,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       
       if (genRes.status === 404) {
-        setErrorMessage("DEVICE NOT RECOGNIZED. You must bind this phone to your Matric Number first. Note: Doing this will trigger a 48-hour cooldown.");
-        setStatus('failed');
+        // Intercept new users and send them to the friendly setup screen
+        setStatus('onboarding');
         return;
       }
 
@@ -136,7 +136,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       return; 
     }
 
-    // --- PHASE 2: GPS TELEMETRY ---
+    // --- PHASE 2: GPS TELEMETRY (Executes ONLY if biometrics pass) ---
     if (!navigator.geolocation) { setErrorMessage("Your browser doesn't support location services."); setStatus('failed'); return; }
 
     let pings: Telemetry[] = [];
@@ -146,7 +146,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
       else { setErrorMessage("We couldn't get a strong GPS lock indoors."); setStatus('failed'); }
-    }, 15000);
+    }, 20000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -155,10 +155,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
       },
       (error) => {
         clearTimeout(timeoutId);
-        if (error.code === 1) setStatus('denied');
-        else { setErrorMessage("Failed to grab GPS. Ensure your location is turned on."); setStatus('failed'); }
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        
+        if (error.code === 1) {
+          setStatus('denied');
+        } else { 
+          setErrorMessage(`GPS Blocked (Code ${error.code}): ${error.message || 'Unknown device error'}`); 
+          setStatus('failed'); 
+        }
       },
-      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
+      // Maximum Cache Bypass for stubborn indoor phones
+      { enableHighAccuracy: false, maximumAge: 300000, timeout: 20000 }
     );
   };
 
@@ -197,6 +204,36 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <button onClick={startCheckIn} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               <Navigation size={20} className="text-gray-300" /> Confirm Attendance
             </button>
+          </div>
+        )}
+
+        {status === 'onboarding' && (
+          <div className="py-6 flex flex-col items-center text-center px-2">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 border border-blue-100">
+              <User size={32} className="text-[#2563EB]" />
+            </div>
+            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome!</h3>
+            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">
+              It looks like this is your first time checking in with <span className="font-bold text-gray-900">{matricNumber}</span>. 
+              To prevent proxy attendance, we need to securely link this phone to your student profile.
+            </p>
+            
+            <div className="w-full mt-6 space-y-3">
+              <button onClick={registerDevice} className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+                <ShieldCheck size={20} /> Secure My Device
+              </button>
+              
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-500 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm">
+                Cancel
+              </button>
+            </div>
+            
+            <div className="mt-6 p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2 text-left">
+              <AlertTriangle size={16} className="text-blue-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-blue-800 font-medium leading-tight">
+                <strong>Note:</strong> Once linked, you cannot use another phone to mark attendance for 48 hours.
+              </p>
+            </div>
           </div>
         )}
 
@@ -248,10 +285,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <div className="mt-6 space-y-3">
               <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Try Again</button>
               
-              <button onClick={registerDevice} className="w-full bg-blue-100 text-blue-900 border border-blue-200 font-bold py-3 rounded-xl hover:bg-blue-200 active:scale-[0.98] transition-all shadow-sm">
-                Bind This Phone (Setup)
-              </button>
-
               <div className="border-t border-orange-200 pt-3 mt-3">
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-100 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-200 disabled:opacity-50 transition-all shadow-sm">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)

@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER (Device hash removed, WebAuthn replaces it)
+    // 7. WRITE TO THE LEDGER (WebAuthn replaces device hash)
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
