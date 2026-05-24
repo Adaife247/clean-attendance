@@ -21,14 +21,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Device not registered" }, { status: 404 });
     }
 
+    let safeTransports = device.transports;
+    if (typeof safeTransports === 'string') {
+      try { safeTransports = JSON.parse(safeTransports); } catch(e) { safeTransports = []; }
+    }
+
     const options = await generateAuthenticationOptions({
       rpID,
-      // THE FIX: Pass the exact credential ID from the database
       allowCredentials: [{
-        id: device.credential_id,
+        id: String(device.credential_id),
         type: 'public-key',
-        transports: device.transports,
-      }] as any[], 
+        transports: safeTransports || [],
+      }] as any[], // THE FIX: This forces Vercel's strict TypeScript compiler to accept the payload
       userVerification: 'preferred',
     });
 

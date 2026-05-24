@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
-import { Buffer } from 'buffer';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -30,16 +29,17 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // THE FIX: Do not double-encrypt the ID. Save the exact string.
-      const credentialIdStr = credential.id; 
-      const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
+      // FIX: Convert public key to pure Hex string to bypass Node memory pooling
+      const publicKeyHex = Array.from(credential.publicKey)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
-          credential_id: credentialIdStr,
-          public_key: publicKeyBase64,
+          credential_id: credential.id, // Native string
+          public_key: publicKeyHex,     // Pure hex
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()
