@@ -30,14 +30,15 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      const credentialIdBase64 = Buffer.from(credential.id).toString('base64');
+      // THE FIX: Do not double-encrypt the ID. Save the exact string.
+      const credentialIdStr = credential.id; 
       const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
-          credential_id: credentialIdBase64,
+          credential_id: credentialIdStr,
           public_key: publicKeyBase64,
           counter: credential.counter,
           transports: credential.transports || [],

@@ -23,8 +23,9 @@ export async function POST(request: Request) {
 
     const options = await generateAuthenticationOptions({
       rpID,
+      // THE FIX: Pass the exact credential ID from the database
       allowCredentials: [{
-        id: String(device.credential_id).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+        id: device.credential_id,
         type: 'public-key',
         transports: device.transports,
       }] as any[], 

@@ -32,7 +32,8 @@ export async function POST(request: Request) {
       expectedOrigin: origin,
       expectedRPID: rpID,
       credential: {
-        id: String(device.credential_id).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+        // THE FIX: Pass the exact credential ID from the database
+        id: device.credential_id,
         publicKey: new Uint8Array(Buffer.from(device.public_key, 'base64')),
         counter: Number(device.counter),
       },
