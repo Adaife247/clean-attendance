@@ -5,14 +5,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Haversine formula to calculate distance in meters
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
   const Δλ = (lon2 - lon1) * Math.PI / 180;
-
   const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
@@ -20,7 +18,7 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -52,26 +50,25 @@ export async function POST(request: Request) {
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. ZERO-TRUST: 48-HOUR HARDWARE COOLDOWN ENFORCEMENT
-    const { data: device, error: deviceError } = await supabase
-      .from('user_devices')
-      .select('created_at')
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (deviceError || !device) {
-      return NextResponse.json({ message: "Security Block: No biometric device registered to this matric number." }, { status: 403 });
-    }
-
-    const deviceRegistrationTime = new Date(device.created_at).getTime();
-    const currentTime = new Date().getTime();
-    const hoursSinceRegistration = (currentTime - deviceRegistrationTime) / (1000 * 60 * 60);
-
-    if (hoursSinceRegistration < 48) {
-      const hoursLeft = Math.ceil(48 - hoursSinceRegistration);
-      return NextResponse.json({ 
-        message: `Cooldown Active: Your device was recently reset. It will be locked for ${hoursLeft} more hours to prevent hardware sharing. Please use the Digital Hand Raise.` 
-      }, { status: 403 });
+    // 4. HARDWARE GHOST CATCHER (Browser Wipe Bypass Prevention)
+    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
+      const { data: ghostLogs } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .eq('device_hash', hardwareFingerprint);
+        
+      if (ghostLogs && ghostLogs.length > 0) {
+        // They wiped their browser to check someone else in. Flag them instantly.
+        await supabase.from('attendance_logs').insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'flagged',
+          device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
+          device_hash: hardwareFingerprint 
+        }]);
+        return NextResponse.json({ status: 'flagged', distance: 0, message: "Security Block: Multiple check-ins detected from identical hardware specs." }, { status: 200 });
+      }
     }
 
     // 5. THE SPOOF CATCHER MATH
@@ -107,13 +104,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER (WebAuthn replaces device hash)
+    // 7. WRITE TO THE LEDGER
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
       device_info: JSON.stringify({ telemetry }),
-      device_hash: 'webauthn-secured' 
+      device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });

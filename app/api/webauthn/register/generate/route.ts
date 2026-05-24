@@ -14,8 +14,9 @@ export async function POST(request: Request) {
       userID: new TextEncoder().encode(cleanMatric),
       userName: cleanMatric,
       authenticatorSelection: {
+        authenticatorAttachment: 'platform', // BLOCKS CLOUD PASSKEYS - FORCES DEVICE HARDWARE
         residentKey: 'required',
-        userVerification: 'preferred',
+        userVerification: 'required', 
       },
     });
 

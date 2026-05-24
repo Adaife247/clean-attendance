@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -16,6 +16,30 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
+  // --- HARDWARE FINGERPRINT GENERATOR ---
+  // Survives browser history deletion by hashing the physical phone specs
+  const generateHardwareFingerprint = async () => {
+    try {
+      const nav = window.navigator as any;
+      const components = [
+        nav.userAgent,
+        nav.language,
+        window.screen.colorDepth,
+        window.screen.width + 'x' + window.screen.height,
+        nav.hardwareConcurrency || 'unknown',
+        nav.deviceMemory || 'unknown',
+        new Date().getTimezoneOffset()
+      ];
+      const rawHash = components.join('|||');
+      const msgBuffer = new TextEncoder().encode(rawHash);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      return 'unknown-hardware';
+    }
+  };
+
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -27,7 +51,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, hardwareFingerprint: item.hardwareFingerprint })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -43,14 +67,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     syncOfflineQueue(); 
     return () => window.removeEventListener('online', syncOfflineQueue);
   }, []);
-
-  const queueOfflinePayload = (telemetry: Telemetry[]) => {
-    if (!sessionId) return;
-    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    existing.push({ session: sessionId, matric: matricNumber, telemetry, timestamp: Date.now() });
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
-    setStatus('offline-queued');
-  };
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
@@ -73,6 +89,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
+      // LAYER 1: The Browser Anchor
+      const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
+      if (existingAnchor && existingAnchor !== matricNumber) {
+        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
+        setStatus('failed');
+        return;
+      }
+
       setStatus('locating');
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -89,7 +113,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       const verifyResult = await verifyRes.json();
       
-      if (verifyResult.verified) setStatus('ready');
+      if (verifyResult.verified) {
+        localStorage.setItem('campuscheck_device_anchor', matricNumber);
+        setStatus('ready');
+      }
       else throw new Error("Hardware binding failed.");
     } catch (error: any) {
       setErrorMessage(error.message || "Failed to register your biometric device.");
@@ -152,16 +179,34 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
+      const hardwareFingerprint = await generateHardwareFingerprint();
+
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, hardwareFingerprint })
       });
       const result = await response.json();
-      if ((response.ok && result.status === 'verified') || response.status === 409) { triggerSuccessVibration(); setStatus('success'); } 
-      else if (result.status === 'flagged') { setErrorMessage("Location anomaly detected. Please see the lecturer."); setStatus('failed'); } 
-      else { setErrorMessage(result.message || "Verification failed."); setStatus('failed'); }
+      
+      if ((response.ok && result.status === 'verified') || response.status === 409) { 
+        triggerSuccessVibration(); 
+        setStatus('success'); 
+      } 
+      else if (result.status === 'flagged') { 
+        setErrorMessage(result.message || "Anomaly detected. Please see the lecturer."); 
+        setStatus('failed'); 
+      } 
+      else { 
+        setErrorMessage(result.message || "Verification failed."); 
+        setStatus('failed'); 
+      }
     } catch (error: any) {
-      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) queueOfflinePayload(gpsTelemetry);
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        const hf = await generateHardwareFingerprint();
+        const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hf, timestamp: Date.now() });
+        localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+        setStatus('offline-queued');
+      }
       else { setErrorMessage("Server connection lost."); setStatus('failed'); }
     }
   };

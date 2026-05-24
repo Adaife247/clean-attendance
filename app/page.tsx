@@ -26,7 +26,6 @@ function CheckInWrapper() {
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
       <div className="w-full max-w-md">
         
-        {/* Branding Header */}
         <div className="text-center mb-8 flex flex-col items-center justify-center">
           <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
             <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
@@ -36,7 +35,6 @@ function CheckInWrapper() {
           <p className="text-gray-500 mt-2 font-medium">Student Check-In Portal</p>
         </div>
 
-        {/* Inject the real biometric component here */}
         <StudentCheckInComponent sessionId={sessionId} />
 
       </div>
@@ -44,7 +42,6 @@ function CheckInWrapper() {
   );
 }
 
-// 3. Next.js Requirement for URL Reading
 export default function Page() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}>
