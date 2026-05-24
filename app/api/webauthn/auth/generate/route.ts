@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         id: String(device.credential_id),
         type: 'public-key',
         transports: safeTransports || [],
-      }] as any[], // THE FIX: This forces Vercel's strict TypeScript compiler to accept the payload
+      }] as any[], // Bypass TS compiler error
       userVerification: 'preferred',
     });
 

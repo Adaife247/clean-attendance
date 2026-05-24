@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
-import { Buffer } from 'buffer';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -18,13 +17,20 @@ export async function POST(request: Request) {
 
     if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
-    const { data: device } = await supabase
+    const { data: device, error } = await supabase
       .from('user_devices')
       .select('credential_id, public_key, counter')
       .eq('matric_number', cleanMatric)
       .single();
 
-    if (!device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
+    if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
+
+    // SAFE HEX-TO-BYTE RECONSTRUCTION
+    const hex = device.public_key;
+    const pkBytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      pkBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+    }
 
     const verification = await verifyAuthenticationResponse({
       response: authResponse,
@@ -32,9 +38,8 @@ export async function POST(request: Request) {
       expectedOrigin: origin,
       expectedRPID: rpID,
       credential: {
-        // THE FIX: Pass the exact credential ID from the database
         id: device.credential_id,
-        publicKey: new Uint8Array(Buffer.from(device.public_key, 'base64')),
+        publicKey: pkBytes,
         counter: Number(device.counter),
       },
     });

@@ -204,210 +204,6 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/api/webauthn/auth/generate/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateAuthenticationOptions } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const { matricNumber } = await request.json();
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    const { data: device, error } = await supabase
-      .from('user_devices')
-      .select('credential_id, transports')
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (error || !device) {
-      return NextResponse.json({ error: "Device not registered" }, { status: 404 });
-    }
-
-    const options = await generateAuthenticationOptions({
-      rpID,
-      allowCredentials: [{
-        id: String(device.credential_id).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-        type: 'public-key',
-        transports: device.transports,
-      }] as any[], 
-      userVerification: 'preferred',
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 300,
-      path: '/',
-    });
-
-    return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/webauthn/auth/verify/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-import { Buffer } from 'buffer';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { matricNumber, authResponse } = body;
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    const cookieStore = await cookies();
-    const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
-
-    if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
-
-    const { data: device } = await supabase
-      .from('user_devices')
-      .select('credential_id, public_key, counter')
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (!device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
-
-    const verification = await verifyAuthenticationResponse({
-      response: authResponse,
-      expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-      credential: {
-        id: String(device.credential_id).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-        publicKey: new Uint8Array(Buffer.from(device.public_key, 'base64')),
-        counter: Number(device.counter),
-      },
-    });
-
-    if (verification.verified) {
-      await supabase
-        .from('user_devices')
-        .update({ counter: verification.authenticationInfo.newCounter })
-        .eq('matric_number', cleanMatric);
-
-      cookieStore.delete('webauthn_challenge');
-      return NextResponse.json({ verified: true });
-    }
-
-    return NextResponse.json({ verified: false }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/webauthn/register/generate/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { rpName, rpID } from '../../../../../utils/webauthn';
-
-export async function POST(request: Request) {
-  try {
-    const { matricNumber } = await request.json();
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: new TextEncoder().encode(cleanMatric),
-      userName: cleanMatric,
-      authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'preferred',
-      },
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 300,
-      path: '/',
-    });
-
-    return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/webauthn/register/verify/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { verifyRegistrationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-import { Buffer } from 'buffer';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { matricNumber, authResponse } = body;
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    const cookieStore = await cookies();
-    const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
-
-    if (!expectedChallenge) {
-      return NextResponse.json({ error: "Session expired. Try again." }, { status: 400 });
-    }
-
-    const verification = await verifyRegistrationResponse({
-      response: authResponse,
-      expectedChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-    });
-
-    if (verification.verified && verification.registrationInfo) {
-      const { credential } = verification.registrationInfo;
-
-      const credentialIdBase64 = Buffer.from(credential.id).toString('base64');
-      const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
-
-      const { error: dbError } = await supabase
-        .from('user_devices')
-        .upsert({
-          matric_number: cleanMatric,
-          credential_id: credentialIdBase64,
-          public_key: publicKeyBase64,
-          counter: credential.counter,
-          transports: credential.transports || [],
-          created_at: new Date().toISOString()
-        }, { onConflict: 'matric_number' });
-
-      if (dbError) throw dbError;
-
-      cookieStore.delete('webauthn_challenge');
-      return NextResponse.json({ verified: true });
-    }
-
-    return NextResponse.json({ verified: false }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/dashboard/analytics/page.tsx">
 'use client';
 import { useState, useEffect } from 'react';
@@ -1105,6 +901,103 @@ next-env.d.ts
 .vercel
 </file>
 
+<file path="app/api/webauthn/auth/verify/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { verifyAuthenticationResponse } from '@simplewebauthn/server';
+import { createClient } from '@supabase/supabase-js';
+import { rpID, origin } from '../../../../../utils/webauthn';
+import { Buffer } from 'buffer';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { matricNumber, authResponse } = body;
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    const cookieStore = await cookies();
+    const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
+
+    if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
+
+    const { data: device } = await supabase
+      .from('user_devices')
+      .select('credential_id, public_key, counter')
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (!device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
+
+    const verification = await verifyAuthenticationResponse({
+      response: authResponse,
+      expectedChallenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      credential: {
+        // THE FIX: Pass the exact credential ID from the database
+        id: device.credential_id,
+        publicKey: new Uint8Array(Buffer.from(device.public_key, 'base64')),
+        counter: Number(device.counter),
+      },
+    });
+
+    if (verification.verified) {
+      await supabase
+        .from('user_devices')
+        .update({ counter: verification.authenticationInfo.newCounter })
+        .eq('matric_number', cleanMatric);
+
+      cookieStore.delete('webauthn_challenge');
+      return NextResponse.json({ verified: true });
+    }
+
+    return NextResponse.json({ verified: false }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/webauthn/register/generate/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { generateRegistrationOptions } from '@simplewebauthn/server';
+import { rpName, rpID } from '../../../../../utils/webauthn';
+
+export async function POST(request: Request) {
+  try {
+    const { matricNumber } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: new TextEncoder().encode(cleanMatric),
+      userName: cleanMatric,
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform', // BLOCKS CLOUD PASSKEYS - FORCES DEVICE HARDWARE
+        residentKey: 'required',
+        userVerification: 'required', 
+      },
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('webauthn_challenge', options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 300,
+      path: '/',
+    });
+
+    return NextResponse.json(options);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/dashboard/courses/page.tsx">
 'use client';
 import { useState, useEffect } from 'react';
@@ -1288,230 +1181,6 @@ export default function CourseManagement() {
         </div>
       )}
     </div>
-  );
-}
-</file>
-
-<file path="app/page.tsx">
-'use client';
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { MapPin, ShieldCheck, CheckCircle, AlertTriangle, Loader2, Navigation } from 'lucide-react';
-
-function StudentCheckIn() {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sessionId');
-
-  const [matricNumber, setMatricNumber] = useState('');
-  const [status, setStatus] = useState<'idle' | 'locating' | 'verifying' | 'success' | 'flagged' | 'error'>('idle');
-  const [message, setMessage] = useState('');
-  const [distance, setDistance] = useState<number | null>(null);
-
-  // Focus the input automatically on load if session exists
-  useEffect(() => {
-    if (!sessionId) {
-      setStatus('error');
-      setMessage("Invalid link. Please use the exact link provided by your lecturer.");
-    }
-  }, [sessionId]);
-
-  const gatherTelemetry = async () => {
-    const pings: any[] = [];
-    
-    for (let i = 0; i < 3; i++) {
-      try {
-        const pos: any = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 10000
-          });
-        });
-        
-        pings.push({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          acc: pos.coords.accuracy,
-          alt: pos.coords.altitude || 0
-        });
-
-        // Wait 800ms between pings to measure drift for the spoof catcher
-        if (i < 2) await new Promise(r => setTimeout(r, 800));
-      } catch (err) {
-        throw new Error("Failed to acquire high-accuracy GPS.");
-      }
-    }
-    return pings;
-  };
-
-  const handleCheckIn = async () => {
-    if (!matricNumber.trim()) {
-      setMessage("Please enter your matric number.");
-      return;
-    }
-    
-    try {
-      setStatus('locating');
-      setMessage("Acquiring satellite lock. Do not close this page...");
-      
-      const telemetry = await gatherTelemetry();
-
-      setStatus('verifying');
-      setMessage("Running zero-trust verification...");
-
-      const response = await fetch('/api/verify-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          matricNumber: matricNumber.toUpperCase().trim(),
-          telemetry
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        if (data.status === 'verified') {
-          setStatus('success');
-        } else {
-          setStatus('flagged');
-        }
-        setMessage(data.message);
-        if (data.distance) setDistance(data.distance);
-      } else {
-        setStatus('error');
-        setMessage(data.message || "Verification failed. Please try again.");
-      }
-
-    } catch (error: any) {
-      setStatus('error');
-      setMessage(error.message || "An unexpected error occurred.");
-    }
-  };
-
-  // --- UI STATES ---
-  if (!sessionId) {
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 text-center max-w-sm w-full">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h1 className="text-xl font-bold text-gray-900">No Session Found</h1>
-          <p className="text-gray-500 mt-2 text-sm">Please scan the QR code or use the exact link provided by your lecturer.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'success') {
-    return (
-      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="bg-white p-8 rounded-3xl shadow-lg border border-green-100 max-w-sm w-full transform transition-all scale-100">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="text-green-600" size={40} strokeWidth={2.5} />
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Verified!</h1>
-          <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">
-            {matricNumber}
-          </p>
-          <p className="text-gray-500 mt-6 text-sm font-medium">You have been successfully checked in. You may close this page.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'flagged') {
-    return (
-      <div className="min-h-screen bg-red-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="bg-white p-8 rounded-3xl shadow-lg border border-red-100 max-w-sm w-full">
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertTriangle className="text-red-600" size={40} strokeWidth={2.5} />
-          </div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Verification Failed</h1>
-          <p className="text-red-600 font-bold mt-3 text-sm">{message}</p>
-          {distance && (
-            <div className="mt-6 bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <p className="text-xs text-gray-500 font-bold uppercase">Recorded Distance</p>
-              <p className="text-2xl font-black text-gray-900">{distance}m</p>
-            </div>
-          )}
-          <button 
-            onClick={() => setStatus('idle')}
-            className="mt-8 w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-gray-800 transition-all"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md">
-        
-        <div className="text-center mb-8 flex flex-col items-center justify-center">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-2 font-medium">Student Check-In Portal</p>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          
-          {status === 'error' && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl text-center">
-              {message}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                <Navigation size={18} />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Matric Number (e.g., CSC/2021/001)"
-                value={matricNumber}
-                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                disabled={status === 'locating' || status === 'verifying'}
-                className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
-              />
-            </div>
-
-            <button 
-              onClick={handleCheckIn}
-              disabled={status === 'locating' || status === 'verifying' || !matricNumber.trim()}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-80"
-            >
-              {status === 'locating' ? (
-                <><Loader2 className="animate-spin" size={20} /> Acquiring GPS...</>
-              ) : status === 'verifying' ? (
-                <><Loader2 className="animate-spin" size={20} /> Verifying...</>
-              ) : (
-                <><MapPin size={20} /> Verify Attendance</>
-              )}
-            </button>
-          </div>
-        </div>
-        
-        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
-          Make sure you are physically inside the lecture hall before checking in.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// Next.js requirement for pages using useSearchParams
-export default function Page() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}>
-      <StudentCheckIn />
-    </Suspense>
   );
 }
 </file>
@@ -1713,6 +1382,121 @@ export async function GET(request: Request) {
   } catch (e: any) {
     console.error("Dashboard Data Fatal Error:", e.message);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/webauthn/auth/generate/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { generateAuthenticationOptions } from '@simplewebauthn/server';
+import { createClient } from '@supabase/supabase-js';
+import { rpID } from '../../../../../utils/webauthn';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const { matricNumber } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    const { data: device, error } = await supabase
+      .from('user_devices')
+      .select('credential_id, transports')
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (error || !device) {
+      return NextResponse.json({ error: "Device not registered" }, { status: 404 });
+    }
+
+    let safeTransports = device.transports;
+    if (typeof safeTransports === 'string') {
+      try { safeTransports = JSON.parse(safeTransports); } catch(e) { safeTransports = []; }
+    }
+
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials: [{
+        id: String(device.credential_id),
+        type: 'public-key',
+        transports: safeTransports || [],
+      }] as any[], // THE FIX: This forces Vercel's strict TypeScript compiler to accept the payload
+      userVerification: 'preferred',
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('webauthn_challenge', options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 300,
+      path: '/',
+    });
+
+    return NextResponse.json(options);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/webauthn/register/verify/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { verifyRegistrationResponse } from '@simplewebauthn/server';
+import { createClient } from '@supabase/supabase-js';
+import { rpID, origin } from '../../../../../utils/webauthn';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { matricNumber, authResponse } = body;
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    const cookieStore = await cookies();
+    const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
+
+    if (!expectedChallenge) {
+      return NextResponse.json({ error: "Session expired. Try again." }, { status: 400 });
+    }
+
+    const verification = await verifyRegistrationResponse({
+      response: authResponse,
+      expectedChallenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+    });
+
+    if (verification.verified && verification.registrationInfo) {
+      const { credential } = verification.registrationInfo;
+
+      // FIX: Convert public key to pure Hex string to bypass Node memory pooling
+      const publicKeyHex = Array.from(credential.publicKey)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const { error: dbError } = await supabase
+        .from('user_devices')
+        .upsert({
+          matric_number: cleanMatric,
+          credential_id: credential.id, // Native string
+          public_key: publicKeyHex,     // Pure hex
+          counter: credential.counter,
+          transports: credential.transports || [],
+          created_at: new Date().toISOString()
+        }, { onConflict: 'matric_number' });
+
+      if (dbError) throw dbError;
+
+      cookieStore.delete('webauthn_challenge');
+      return NextResponse.json({ verified: true });
+    }
+
+    return NextResponse.json({ verified: false }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 </file>
@@ -2020,6 +1804,60 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/page.tsx">
+'use client';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import StudentCheckInComponent from '../components/StudentCheckIn'; 
+
+function CheckInWrapper() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+
+  // 1. Block access if there is no session link
+  if (!sessionId) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 text-center max-w-sm w-full">
+          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
+          <h1 className="text-xl font-bold text-gray-900">No Session Found</h1>
+          <p className="text-gray-500 mt-2 text-sm">Please scan the QR code or use the exact link provided by your lecturer.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Load the Premium Branding + The Real WebAuthn Component
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-2 font-medium">Student Check-In Portal</p>
+        </div>
+
+        <StudentCheckInComponent sessionId={sessionId} />
+
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}>
+      <CheckInWrapper />
+    </Suspense>
+  );
+}
+</file>
+
 <file path="app/api/verify-attendance/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -2028,14 +1866,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Haversine formula to calculate distance in meters
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
   const Δλ = (lon2 - lon1) * Math.PI / 180;
-
   const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
@@ -2043,7 +1879,7 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -2075,26 +1911,25 @@ export async function POST(request: Request) {
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. ZERO-TRUST: 48-HOUR HARDWARE COOLDOWN ENFORCEMENT
-    const { data: device, error: deviceError } = await supabase
-      .from('user_devices')
-      .select('created_at')
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (deviceError || !device) {
-      return NextResponse.json({ message: "Security Block: No biometric device registered to this matric number." }, { status: 403 });
-    }
-
-    const deviceRegistrationTime = new Date(device.created_at).getTime();
-    const currentTime = new Date().getTime();
-    const hoursSinceRegistration = (currentTime - deviceRegistrationTime) / (1000 * 60 * 60);
-
-    if (hoursSinceRegistration < 48) {
-      const hoursLeft = Math.ceil(48 - hoursSinceRegistration);
-      return NextResponse.json({ 
-        message: `Cooldown Active: Your device was recently reset. It will be locked for ${hoursLeft} more hours to prevent hardware sharing. Please use the Digital Hand Raise.` 
-      }, { status: 403 });
+    // 4. HARDWARE GHOST CATCHER (Browser Wipe Bypass Prevention)
+    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
+      const { data: ghostLogs } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .eq('device_hash', hardwareFingerprint);
+        
+      if (ghostLogs && ghostLogs.length > 0) {
+        // They wiped their browser to check someone else in. Flag them instantly.
+        await supabase.from('attendance_logs').insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'flagged',
+          device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
+          device_hash: hardwareFingerprint 
+        }]);
+        return NextResponse.json({ status: 'flagged', distance: 0, message: "Security Block: Multiple check-ins detected from identical hardware specs." }, { status: 200 });
+      }
     }
 
     // 5. THE SPOOF CATCHER MATH
@@ -2130,13 +1965,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER (WebAuthn replaces device hash)
+    // 7. WRITE TO THE LEDGER
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
       device_info: JSON.stringify({ telemetry }),
-      device_hash: 'webauthn-secured' 
+      device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
@@ -2705,10 +2540,9 @@ export default function LecturerDashboard() {
 </file>
 
 <file path="components/StudentCheckIn.tsx">
-export const dynamic = 'force-dynamic';
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, RefreshCcw, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -2724,6 +2558,29 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
+  // --- HARDWARE FINGERPRINT GENERATOR ---
+  const generateHardwareFingerprint = async () => {
+    try {
+      const nav = window.navigator as any;
+      const components = [
+        nav.userAgent,
+        nav.language,
+        window.screen.colorDepth,
+        window.screen.width + 'x' + window.screen.height,
+        nav.hardwareConcurrency || 'unknown',
+        nav.deviceMemory || 'unknown',
+        new Date().getTimezoneOffset()
+      ];
+      const rawHash = components.join('|||');
+      const msgBuffer = new TextEncoder().encode(rawHash);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      return 'unknown-hardware';
+    }
+  };
+
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -2735,7 +2592,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, hardwareFingerprint: item.hardwareFingerprint })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -2751,14 +2608,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     syncOfflineQueue(); 
     return () => window.removeEventListener('online', syncOfflineQueue);
   }, []);
-
-  const queueOfflinePayload = (telemetry: Telemetry[]) => {
-    if (!sessionId) return;
-    const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    existing.push({ session: sessionId, matric: matricNumber, telemetry, timestamp: Date.now() });
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
-    setStatus('offline-queued');
-  };
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
@@ -2781,6 +2630,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
+      // LAYER 1: The Browser Anchor
+      const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
+      if (existingAnchor && existingAnchor !== matricNumber) {
+        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
+        setStatus('failed');
+        return;
+      }
+
       setStatus('locating');
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2797,7 +2654,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       const verifyResult = await verifyRes.json();
       
-      if (verifyResult.verified) setStatus('ready');
+      if (verifyResult.verified) {
+        localStorage.setItem('campuscheck_device_anchor', matricNumber);
+        setStatus('ready');
+      }
       else throw new Error("Hardware binding failed.");
     } catch (error: any) {
       setErrorMessage(error.message || "Failed to register your biometric device.");
@@ -2805,6 +2665,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
+  // --- THIS IS THE UNMASKED AUTHENTICATION BLOCK ---
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     
@@ -2814,7 +2675,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
+      
+      // UNMASKING ERROR 1: Was the device record missing?
+      if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
       const asseResp = await startAuthentication(options);
       
@@ -2823,10 +2686,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber, authResponse: asseResp })
       });
       const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) throw new Error("Biometric mismatch.");
+      
+      // UNMASKING ERROR 2: What did the verification server say?
+      if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
+      if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
 
     } catch (error: any) {
-      setErrorMessage("Hardware Validation Failed. Device mismatch.");
+      // STOP HIDING THE ERROR: Show the exact message on the orange screen
+      setErrorMessage(error.message || "Unknown Auth Error occurred.");
       setStatus('failed');
       return; 
     }
@@ -2860,16 +2727,34 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
+      const hardwareFingerprint = await generateHardwareFingerprint();
+
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, hardwareFingerprint })
       });
       const result = await response.json();
-      if ((response.ok && result.status === 'verified') || response.status === 409) { triggerSuccessVibration(); setStatus('success'); } 
-      else if (result.status === 'flagged') { setErrorMessage("Location anomaly detected. Please see the lecturer."); setStatus('failed'); } 
-      else { setErrorMessage(result.message || "Verification failed."); setStatus('failed'); }
+      
+      if ((response.ok && result.status === 'verified') || response.status === 409) { 
+        triggerSuccessVibration(); 
+        setStatus('success'); 
+      } 
+      else if (result.status === 'flagged') { 
+        setErrorMessage(result.message || "Anomaly detected. Please see the lecturer."); 
+        setStatus('failed'); 
+      } 
+      else { 
+        setErrorMessage(result.message || "Verification failed."); 
+        setStatus('failed'); 
+      }
     } catch (error: any) {
-      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) queueOfflinePayload(gpsTelemetry);
+      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        const hf = await generateHardwareFingerprint();
+        const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hf, timestamp: Date.now() });
+        localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+        setStatus('offline-queued');
+      }
       else { setErrorMessage("Server connection lost."); setStatus('failed'); }
     }
   };

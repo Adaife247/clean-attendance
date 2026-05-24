@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
 
     if (!expectedChallenge) {
-      return NextResponse.json({ error: "Session expired. Try again." }, { status: 400 });
+      return NextResponse.json({ error: "Session expired." }, { status: 400 });
     }
 
     const verification = await verifyRegistrationResponse({
@@ -29,8 +29,8 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // FIX: Convert public key to pure Hex string to bypass Node memory pooling
-      const publicKeyHex = Array.from(credential.publicKey)
+      // STRICT HEX CONVERSION
+      const publicKeyHex = Array.from(new Uint8Array(credential.publicKey))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
 
@@ -38,8 +38,8 @@ export async function POST(request: Request) {
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
-          credential_id: credential.id, // Native string
-          public_key: publicKeyHex,     // Pure hex
+          credential_id: credential.id,
+          public_key: publicKeyHex, 
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()
