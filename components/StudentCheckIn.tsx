@@ -17,7 +17,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   };
 
   // --- HARDWARE FINGERPRINT GENERATOR ---
-  // Survives browser history deletion by hashing the physical phone specs
   const generateHardwareFingerprint = async () => {
     try {
       const nav = window.navigator as any;
@@ -124,6 +123,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
+  // --- THIS IS THE UNMASKED AUTHENTICATION BLOCK ---
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     
@@ -133,7 +133,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
+      
+      // UNMASKING ERROR 1: Was the device record missing?
+      if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
       const asseResp = await startAuthentication(options);
       
@@ -142,10 +144,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber, authResponse: asseResp })
       });
       const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) throw new Error("Biometric mismatch.");
+      
+      // UNMASKING ERROR 2: What did the verification server say?
+      if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
+      if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
 
     } catch (error: any) {
-      setErrorMessage("Hardware Validation Failed. Device mismatch.");
+      // STOP HIDING THE ERROR: Show the exact message on the orange screen
+      setErrorMessage(error.message || "Unknown Auth Error occurred.");
       setStatus('failed');
       return; 
     }
