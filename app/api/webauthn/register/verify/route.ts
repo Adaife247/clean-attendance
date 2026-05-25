@@ -1,8 +1,7 @@
-export const dynamic = 'force-dynamic'; // NUKES VERCEL CACHE
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
-import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
 
@@ -28,17 +27,17 @@ export async function POST(request: Request) {
 
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
-      const publicKeyString = isoBase64URL.fromBuffer(credential.publicKey);
 
-      // TRIPWIRE: Log exactly what is being saved
-      console.log(`[REGISTER] Saving key for ${cleanMatric}. String Length: ${publicKeyString.length}`);
+      // IMMUNE POSTGRES FORMAT: Prefixing with \x prevents all database corruption
+      const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
+      const immuneKey = `\\x${hex}`;
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
           credential_id: credential.id,
-          public_key: publicKeyString,
+          public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()
@@ -51,7 +50,6 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ verified: false }, { status: 400 });
   } catch (error: any) {
-    console.error("[REGISTER CRASH]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

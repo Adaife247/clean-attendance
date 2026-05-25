@@ -1,8 +1,7 @@
-export const dynamic = 'force-dynamic'; // NUKES VERCEL CACHE
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
 
@@ -27,17 +26,13 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // TRIPWIRE: Expose exactly what Supabase handed back
-    console.log(`[VERIFY] Key Type in DB: ${typeof device.public_key}`);
-    console.log(`[VERIFY] Key String Length: ${String(device.public_key).length}`);
-
-    let pkBytes: Uint8Array;
-    try {
-      pkBytes = isoBase64URL.toBuffer(String(device.public_key));
-      console.log(`[VERIFY] Decoded to Uint8Array. Byte length: ${pkBytes.length}`);
-    } catch (parseError: any) {
-      console.error("[VERIFY DECODE CRASH]", parseError);
-      return NextResponse.json({ error: `Decode failed: ${parseError.message}` }, { status: 500 });
+    // IMMUNE DECODER: Safely strip the \x and convert back to pure bytes
+    let dbKey = String(device.public_key);
+    if (dbKey.startsWith('\\x')) dbKey = dbKey.slice(2);
+    
+    const pkBytes = new Uint8Array(dbKey.length / 2);
+    for (let i = 0; i < dbKey.length; i += 2) {
+      pkBytes[i / 2] = parseInt(dbKey.substring(i, i + 2), 16);
     }
 
     try {
@@ -63,13 +58,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ verified: true });
       }
     } catch (cryptoError: any) {
-      console.error("[VERIFY CRYPTO CRASH]", cryptoError);
-      return NextResponse.json({ error: `Crypto Crash: ${cryptoError.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Crypto Crash! Key length: ${pkBytes.length}. Error: ${cryptoError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ verified: false }, { status: 400 });
   } catch (error: any) {
-    console.error("[VERIFY FATAL ERROR]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

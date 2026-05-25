@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
         id: String(device.credential_id),
         type: 'public-key',
         transports: safeTransports || [],
-      }] as any[], // Bypass TS compiler error
+      }] as any[],
       userVerification: 'preferred',
     });
 
