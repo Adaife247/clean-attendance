@@ -87,6 +87,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
+      // LAYER 1: The Browser Anchor (Catches normal users instantly)
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
       if (existingAnchor && existingAnchor !== matricNumber) {
         setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
@@ -95,18 +96,27 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
 
       setStatus('locating');
+      
+      // LAYER 2: Generate the DB Hardware Fingerprint (Catches Incognito users)
+      const hf = await generateHardwareFingerprint();
+
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber })
+        body: JSON.stringify({ matricNumber, hardwareFingerprint: hf })
       });
+      
       const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
+      
+      // If the server caught them on another account, throw the error
+      if (!genRes.ok || options.error) {
+         throw new Error(options.error || "Server rejected registration.");
+      }
 
       const attResp = await startRegistration(options);
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp })
+        body: JSON.stringify({ matricNumber, authResponse: attResp, hardwareFingerprint: hf })
       });
       const verifyResult = await verifyRes.json();
       

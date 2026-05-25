@@ -10,7 +10,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse } = body;
+    const { matricNumber, authResponse, hardwareFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     const cookieStore = await cookies();
@@ -28,7 +28,6 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // IMMUNE POSTGRES FORMAT: Prefixing with \x prevents all database corruption
       const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
       const immuneKey = `\\x${hex}`;
 
@@ -40,6 +39,7 @@ export async function POST(request: Request) {
           public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
+          device_hash: hardwareFingerprint || 'unknown-hardware', // --- THE FIX: LOCK IT TO DB ---
           created_at: new Date().toISOString()
         }, { onConflict: 'matric_number' });
 
