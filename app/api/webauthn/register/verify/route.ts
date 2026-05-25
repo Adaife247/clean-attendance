@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
-import { Buffer } from 'buffer';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -30,15 +29,17 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // SAFE BASE64 ENCODING
-      const publicKeyBase64 = Buffer.from(credential.publicKey).toString('base64');
+      // THE FOOLPROOF FIX: Convert raw bytes to a simple array of numbers.
+      // This prevents ANY encoding corruption by Node.js or Postgres.
+      const publicKeyArray = Array.from(credential.publicKey);
+      const publicKeyJson = JSON.stringify(publicKeyArray);
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
           credential_id: credential.id,
-          public_key: publicKeyBase64, 
+          public_key: publicKeyJson, 
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()
