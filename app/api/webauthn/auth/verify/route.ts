@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';
 import { rpID, origin } from '../../../../../utils/webauthn';
+import { Buffer } from 'buffer';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -25,11 +26,10 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // ULTIMATE FIX: Exact Byte Copying into an Isolated Memory Buffer
-    // This solves BOTH "length not supported" and "e.get is not a function"
-    const buffer = Buffer.from(device.public_key, 'base64url');
-    const pkBytes = new Uint8Array(buffer.byteLength);
-    pkBytes.set(buffer); // Perfect copy into a fresh, unpooled ArrayBuffer
+    // STRICT MEMORY ISOLATOR (Fixes the length error)
+    const buffer = Buffer.from(device.public_key, 'base64');
+    const pkBytes = new Uint8Array(buffer.length);
+    pkBytes.set(buffer); // Perfect, uncorrupted byte copy
 
     const verification = await verifyAuthenticationResponse({
       response: authResponse,
