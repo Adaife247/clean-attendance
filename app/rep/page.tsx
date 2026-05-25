@@ -1,11 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Hand, CheckCircle, Loader2, KeyRound, AlertTriangle, Users } from 'lucide-react';
+import { ShieldCheck, Hand, CheckCircle, Loader2, KeyRound } from 'lucide-react';
 
 interface Log { id: string; matricNumber: string; status: string; time: string; }
 
-export default function ClassRepPortal() {
+function RepPortalContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('sessionId');
 
@@ -41,7 +41,6 @@ export default function ClassRepPortal() {
       if (response.ok) {
         const data = await response.json();
         setCourseName(data.course);
-        // Only show students who have raised their hands
         setPendingLogs(data.logs.filter((l: Log) => l.status === 'pending_override'));
       }
     } catch (error) { console.error("Failed to fetch data"); }
@@ -149,5 +148,14 @@ export default function ClassRepPortal() {
         </div>
       </div>
     </div>
+  );
+}
+
+// THE SUSPENSE WRAPPER FIX
+export default function ClassRepPortal() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
+      <RepPortalContent />
+    </Suspense>
   );
 }

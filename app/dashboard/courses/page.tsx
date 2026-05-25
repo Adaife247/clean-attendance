@@ -1,8 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../utils/supabase';
-import { BookOpen, Upload, Users, Plus, Loader2, FileSpreadsheet, Layers, Download } from 'lucide-react';
-
+import { BookOpen, Users, Plus, Loader2, FileSpreadsheet, Layers, Download } from 'lucide-react';
 interface Course {
   id: string;
   course_code: string;
