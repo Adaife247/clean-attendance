@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, RefreshCw } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -87,7 +87,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
-      // LAYER 1: The Browser Anchor (Catches normal users instantly)
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
       if (existingAnchor && existingAnchor !== matricNumber) {
         setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
@@ -96,8 +95,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
 
       setStatus('locating');
-      
-      // LAYER 2: Generate the DB Hardware Fingerprint (Catches Incognito users)
       const hf = await generateHardwareFingerprint();
 
       const genRes = await fetch('/api/webauthn/register/generate', {
@@ -106,8 +103,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       
       const options = await genRes.json();
-      
-      // If the server caught them on another account, throw the error
       if (!genRes.ok || options.error) {
          throw new Error(options.error || "Server rejected registration.");
       }
@@ -169,7 +164,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("Couldn't get any location data. Ensure GPS is fully enabled."); setStatus('failed'); }
+      else { setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS."); setStatus('failed'); }
     }, 8000); 
 
     watchId = navigator.geolocation.watchPosition(
@@ -189,7 +184,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         clearTimeout(timeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
+        else { setErrorMessage(`GPS Blocked (Code ${error.code}). Pull down your menu and turn on Location.`); setStatus('failed'); }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
     );
@@ -210,8 +205,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration(); 
         setStatus('success'); 
       } 
-      else if (result.status === 'flagged') { 
-        setErrorMessage(result.message || "Anomaly detected. Please see the lecturer."); 
+      else if (result.status === 'flagged' || response.status === 403) { 
+        setErrorMessage(result.message || "Verification failed."); 
         setStatus('failed'); 
       } 
       else { 
@@ -332,15 +327,37 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
 
         {status === 'failed' && (
-          <div className="py-4 text-center">
+          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">{errorMessage}</p>
+            
+            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
+              {errorMessage.includes("out of bounds") 
+                ? "You are too far away. You must be inside the lecture hall to check in." 
+                : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down")
+                ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again."
+                : errorMessage}
+            </p>
+
             <div className="mt-6 space-y-3">
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Start Over</button>
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
-                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)
+              {/* Only show "Try Again" if it was a GPS glitch, not if they are sitting in their hostel */}
+              {!errorMessage.includes("out of bounds") && (
+                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md">
+                  <RefreshCw size={18} /> Try Again (Reset GPS)
+                </button>
+              )}
+              
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+                Start Over Completely
               </button>
+
+              {/* The strict appeal button - totally hidden if out of bounds */}
+              {!errorMessage.includes("out of bounds") && (
+                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} 
+                  Raise Hand (I am in the hall)
+                </button>
+              )}
             </div>
           </div>
         )}

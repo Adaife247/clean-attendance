@@ -40,10 +40,6 @@ export async function POST(request: Request) {
       if (courseData && courseData.roster) roster = courseData.roster;
     }
     
-    if (roster.length > 0 && !roster.includes(cleanMatric)) {
-      return NextResponse.json({ message: 'Unregistered: Your matric number is not on the official class list.' }, { status: 403 });
-    }
-
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
@@ -66,10 +62,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- THE FIX: FIND THE BEST PING ---
     let isSpoofed = false;
     let totalDrift = 0;
-    let bestPing = telemetry[0]; // Start by assuming the first is the best
+    let bestPing = telemetry[0]; 
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
@@ -80,8 +75,6 @@ export async function POST(request: Request) {
         const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
         totalDrift += drift;
       }
-
-      // If this ping is more accurate than our current best, swap it!
       if (ping.acc < bestPing.acc) {
         bestPing = ping;
       }
@@ -89,8 +82,18 @@ export async function POST(request: Request) {
 
     if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    // --- THE FIX: JUDGE DISTANCE BASED ON THE BEST PING ---
     const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
+    
+    // --- THE STRICT DISTANCE FIREWALL ---
+    // Anyone further than 500 meters gets blocked entirely. No database entry, no dashboard flag.
+    if (distanceToLecturer > 500) {
+      return NextResponse.json({ 
+        status: 'rejected', 
+        distance: Math.round(distanceToLecturer), 
+        message: "out of bounds" // Simple flag for the frontend to read
+      }, { status: 403 });
+    }
+
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
 
@@ -108,7 +111,7 @@ export async function POST(request: Request) {
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }), // Log what accuracy we actually used
+      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }),
       device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 

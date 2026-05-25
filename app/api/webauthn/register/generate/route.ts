@@ -12,8 +12,7 @@ export async function POST(request: Request) {
     const { matricNumber, hardwareFingerprint } = await request.json();
     const cleanMatric = matricNumber.toUpperCase().trim();
 
-    // --- THE INCOGNITO KILLER ---
-    // Check if this exact physical hardware is already bound to ANOTHER student
+    // --- THE INCOGNITO / PROXY KILLER ---
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: existingDevice } = await supabase
         .from('user_devices')
@@ -21,7 +20,6 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint)
         .single();
 
-      // If the hardware exists and belongs to someone else, BLOCK THEM.
       if (existingDevice && existingDevice.matric_number !== cleanMatric) {
         return NextResponse.json(
           { error: `Hardware Block: This physical device is permanently bound to ${existingDevice.matric_number}. Proxy registration denied.` },
@@ -36,7 +34,8 @@ export async function POST(request: Request) {
       userID: new TextEncoder().encode(cleanMatric),
       userName: cleanMatric,
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', 
+        // REMOVED: authenticatorAttachment: 'platform' 
+        // This is the fix for iPhones without iCloud Keychain active.
         residentKey: 'required',
         userVerification: 'required', 
       },

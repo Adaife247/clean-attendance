@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand } from 'lucide-react';
+import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand, Trash2 } from 'lucide-react';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -41,8 +41,11 @@ export default function LecturerDashboard() {
   const [setupError, setSetupError] = useState('');
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  
+  // --- MANUAL ACTIONS STATE ---
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
@@ -221,7 +224,6 @@ export default function LecturerDashboard() {
   const handleManualOverride = async (targetMatric: string) => {
     try {
       if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
-      
       const safeMatric = String(targetMatric || "").trim();
       if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
 
@@ -243,6 +245,35 @@ export default function LecturerDashboard() {
       alert("💥 CRITICAL CRASH: " + err.message);
     } finally {
       setIsOverriding(false);
+    }
+  };
+
+  // --- THE NEW HARDWARE RESET LOGIC ---
+  const handleDeviceReset = async (targetMatric: string) => {
+    const safeMatric = String(targetMatric || "").trim();
+    if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
+
+    if (!window.confirm(`Are you sure you want to wipe the biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
+
+    setIsResetting(true);
+    try {
+      const response = await fetch('/api/reset-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: safeMatric })
+      });
+
+      if (response.ok) {
+        alert(`✅ Hardware binding completely wiped for ${safeMatric}. They can now register a new device.`);
+        setManualMatric(''); 
+      } else {
+        const errorData = await response.json();
+        alert(`⚠️ Failed: ${errorData.message}`);
+      }
+    } catch (err: any) {
+      alert("💥 Network Error.");
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -467,9 +498,10 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* UPDATED MANUAL MANAGEMENT WIDGET */}
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <UserPlus size={16} className="text-[#2563EB]"/> Manual Override
+            <UserPlus size={16} className="text-[#2563EB]"/> Student Management
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input 
@@ -477,17 +509,28 @@ export default function LecturerDashboard() {
               placeholder="Matric Number (e.g., CSC/2021/001)" 
               value={manualMatric} 
               onChange={(e) => setManualMatric(e.target.value.toUpperCase())} 
-              onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
               className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
             />
-            <button 
-              onClick={() => handleManualOverride(manualMatric)} 
-              disabled={!manualMatric.trim() || isOverriding} 
-              className="w-full sm:w-auto whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
-            >
-              {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-              {isOverriding ? "Forcing..." : "Force Check-In"}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => handleManualOverride(manualMatric)} 
+                disabled={!manualMatric.trim() || isOverriding} 
+                className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+              >
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                {isOverriding ? "Forcing..." : "Force Check-In"}
+              </button>
+              
+              <button 
+                onClick={() => handleDeviceReset(manualMatric)} 
+                disabled={!manualMatric.trim() || isResetting} 
+                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2"
+                title="Wipe hardware lock if student bought a new phone"
+              >
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                Wipe Biometrics
+              </button>
+            </div>
           </div>
         </div>
 
