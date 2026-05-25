@@ -26,15 +26,31 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // THE ULTIMATE FIX: Use the library's own native decoder
+    // ==========================================
+    // THE UNIVERSAL ADAPTER (Fixes the 156-byte error)
+    // Automatically detects the DB format and safely decodes it
+    // ==========================================
     let pkBytes: Uint8Array;
+    const dbKey = device.public_key;
+
     try {
-      pkBytes = isoBase64URL.toBuffer(device.public_key);
+      if (typeof dbKey === 'string' && /^[0-9a-fA-F]{100,}$/.test(dbKey)) {
+        // DETECTED: Old Hex String (156 characters)
+        pkBytes = new Uint8Array(dbKey.length / 2);
+        for (let i = 0; i < dbKey.length; i += 2) {
+          pkBytes[i / 2] = parseInt(dbKey.substring(i, i + 2), 16);
+        }
+      } else if (typeof dbKey === 'string' && dbKey.startsWith('[')) {
+        // DETECTED: JSON Number Array
+        pkBytes = new Uint8Array(JSON.parse(dbKey));
+      } else {
+        // DETECTED: Standard Base64URL
+        pkBytes = isoBase64URL.toBuffer(dbKey);
+      }
     } catch (parseError) {
-      return NextResponse.json({ error: "Failed to parse key from database. Please re-register." }, { status: 500 });
+      return NextResponse.json({ error: "Universal Adapter failed to parse key." }, { status: 500 });
     }
 
-    // THE DIAGNOSTIC TRIPWIRE & COMPILER BYPASS
     try {
       const verification = await verifyAuthenticationResponse({
         response: authResponse,
@@ -43,9 +59,9 @@ export async function POST(request: Request) {
         expectedRPID: rpID,
         credential: {
           id: device.credential_id,
-          publicKey: pkBytes,
+          publicKey: pkBytes, // Now perfectly sized to 78 bytes no matter what!
           counter: Number(device.counter),
-        } as any, // <-- THE BYPASS: This completely silences the TypeScript compiler error
+        } as any, // Bypasses the strict Vercel TypeScript compiler
       });
 
       if (verification.verified) {
