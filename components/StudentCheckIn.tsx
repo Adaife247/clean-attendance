@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, KeyRound, RefreshCw } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, RefreshCw, KeyRound } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -340,7 +340,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             </p>
 
             <div className="mt-6 space-y-3">
-              {/* Only show "Try Again" if it was a GPS glitch, not if they are sitting in their hostel */}
               {!errorMessage.includes("out of bounds") && (
                 <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md">
                   <RefreshCw size={18} /> Try Again (Reset GPS)
@@ -351,7 +350,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 Start Over Completely
               </button>
 
-              {/* The strict appeal button - totally hidden if out of bounds */}
               {!errorMessage.includes("out of bounds") && (
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} 
@@ -385,7 +383,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <KeyRound size={12} /> Class Rep Login
         </a>
       </div>
-
     </div>
   );
 }

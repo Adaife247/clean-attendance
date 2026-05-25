@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../utils/supabase';
-import { BookOpen, Upload, Users, Plus, Loader2, FileSpreadsheet, Layers } from 'lucide-react';
+import { BookOpen, Upload, Users, Plus, Loader2, FileSpreadsheet, Layers, Download } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -15,6 +15,7 @@ export default function CourseManagement() {
   const [newCourseCode, setNewCourseCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCourses();
@@ -44,7 +45,6 @@ export default function CourseManagement() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Instant creation without GPS dependency
     const { error } = await supabase.from('courses').insert([{
       lecturer_id: session.user.id,
       course_code: newCourseCode.toUpperCase(),
@@ -60,7 +60,6 @@ export default function CourseManagement() {
     setIsCreating(false);
   };
 
-  // --- UPDATED MULTI-CSV MERGE LOGIC ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -70,12 +69,9 @@ export default function CourseManagement() {
     
     reader.onload = async (event) => {
       const csvText = event.target?.result as string;
-      
-      // Extract new matrics
       const rawMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase());
       const cleanMatrics = rawMatrics.filter(m => m.length > 5 && !m.includes('MATRIC'));
       
-      // THE MAGIC: Merge the old roster with the new CSV, and remove duplicates using a Set
       const combinedRoster = [...(existingRoster || []), ...cleanMatrics];
       const uniqueMatrics = Array.from(new Set(combinedRoster));
 
@@ -91,12 +87,67 @@ export default function CourseManagement() {
         alert("Failed to upload roster.");
       }
       setUploadingId(null);
-      
-      // Reset the file input so the same file can be selected again if needed
       e.target.value = '';
     };
 
     reader.readAsText(file);
+  };
+
+  // --- THE NEW MASTER EXPORT LOGIC ---
+  const downloadMasterReport = async (courseCode: string, courseId: string) => {
+    setDownloadingId(courseId);
+    try {
+      const response = await fetch(`/api/master-export?courseCode=${courseCode}`);
+      
+      if (response.status === 404) {
+        alert("No classes have been held for this course yet.");
+        setDownloadingId(null);
+        return;
+      }
+
+      if (!response.ok) throw new Error("Failed to fetch report");
+      
+      const data = await response.json();
+      const report = data.report;
+
+      if (!report || report.length === 0) {
+        alert("No attendance data found for this course.");
+        setDownloadingId(null);
+        return;
+      }
+
+      // Build the CSV Header
+      const header = [
+        [`MASTER SEMESTER REPORT: ${courseCode}`],
+        [`Generated on: ${new Date().toLocaleDateString()}`],
+        [`Total Classes Held: ${data.totalClasses}`],
+        [], 
+        ["Matric Number", "Classes Attended", `Total Classes`, "Percentage (%)", "Exam Eligible (>=70%)"]
+      ];
+
+      // Map the Data
+      const rows = report.map((student: any) => [
+        student.matricNumber, 
+        student.attended, 
+        student.totalClasses, 
+        student.percentage, 
+        student.eligible
+      ]);
+
+      const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `${courseCode.replace(/\s+/g, '_')}_Master_Attendance.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (e) {
+      alert("Failed to generate master report. Check your network.");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
@@ -107,7 +158,7 @@ export default function CourseManagement() {
           <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
             <BookOpen className="text-[#2563EB]" size={28} /> Course Registry
           </h1>
-          <p className="text-gray-500 mt-1 font-medium">Create your courses and merge official student rosters.</p>
+          <p className="text-gray-500 mt-1 font-medium">Create your courses, merge rosters, and download semester reports.</p>
         </div>
       </div>
 
@@ -158,7 +209,9 @@ export default function CourseManagement() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-100">
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                
+                {/* Roster Upload Button */}
                 <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 transition-all">
                   {uploadingId === course.id ? (
                     <Loader2 size={16} className="animate-spin text-[#2563EB]" />
@@ -174,6 +227,21 @@ export default function CourseManagement() {
                     disabled={uploadingId === course.id}
                   />
                 </label>
+
+                {/* Master Export Button */}
+                <button 
+                  onClick={() => downloadMasterReport(course.course_code, course.id)}
+                  disabled={downloadingId === course.id}
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl font-bold text-sm hover:bg-green-100 transition-all disabled:opacity-50"
+                >
+                  {downloadingId === course.id ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  {downloadingId === course.id ? "Compiling Semester..." : "Download Final Gradebook"}
+                </button>
+                
               </div>
             </div>
           ))}
