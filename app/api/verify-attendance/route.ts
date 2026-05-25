@@ -25,7 +25,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -35,7 +34,6 @@ export async function POST(request: Request) {
     if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
 
-    // 2. SMART ROSTER ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
       const { data: courseData } = await supabase.from('courses').select('roster').eq('course_code', session.course_code).single();
@@ -46,11 +44,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Unregistered: Your matric number is not on the official class list.' }, { status: 403 });
     }
 
-    // 3. PREVENT DUPLICATES
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. HARDWARE GHOST CATCHER (Browser Wipe Bypass Prevention)
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -59,7 +55,6 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint);
         
       if (ghostLogs && ghostLogs.length > 0) {
-        // They wiped their browser to check someone else in. Flag them instantly.
         await supabase.from('attendance_logs').insert([{
           session_id: sessionId,
           matric_number: cleanMatric,
@@ -71,26 +66,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. THE SPOOF CATCHER MATH
+    // --- THE FIX: FIND THE BEST PING ---
     let isSpoofed = false;
     let totalDrift = 0;
-    const initialLat = telemetry[0].lat;
-    const initialLng = telemetry[0].lng;
+    let bestPing = telemetry[0]; // Start by assuming the first is the best
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
       if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
       if (ping.alt === 0) isSpoofed = true;
+      
       if (i > 0) {
         const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
         totalDrift += drift;
+      }
+
+      // If this ping is more accurate than our current best, swap it!
+      if (ping.acc < bestPing.acc) {
+        bestPing = ping;
       }
     }
 
     if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    // 6. THE GEOFENCE (Expanded to 150 meters for large halls and window overflow)
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, initialLat, initialLng);
+    // --- THE FIX: JUDGE DISTANCE BASED ON THE BEST PING ---
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
 
@@ -104,12 +104,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry }),
+      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }), // Log what accuracy we actually used
       device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 

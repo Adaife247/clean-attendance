@@ -16,7 +16,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // --- HARDWARE FINGERPRINT GENERATOR ---
   const generateHardwareFingerprint = async () => {
     try {
       const nav = window.navigator as any;
@@ -88,7 +87,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
-      // LAYER 1: The Browser Anchor
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
       if (existingAnchor && existingAnchor !== matricNumber) {
         setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
@@ -156,26 +154,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     let pings: Telemetry[] = [];
     let watchId: number;
-    let bestAccuracy = 9999;
+    let bestAcc = 9999;
     
-    // Increased to 25 seconds
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("Couldn't get a strong GPS lock indoors. Try moving slightly."); setStatus('failed'); }
-    }, 25000);
+      else { setErrorMessage("Couldn't get any location data. Ensure GPS is fully enabled."); setStatus('failed'); }
+    }, 8000); 
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        if (position.coords.accuracy < bestAccuracy) bestAccuracy = position.coords.accuracy;
-
-        // --- THE FIX: Ignore Cell Towers ---
-        if (position.coords.accuracy > 60) {
-            return; // Ignore garbage pings
-        }
+        const currentAcc = position.coords.accuracy;
+        if (currentAcc < bestAcc) bestAcc = currentAcc;
 
         pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
-        if (pings.length >= 3) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); sendPayloadToVercel(pings); }
+        
+        if (pings.length >= 3 && bestAcc <= 100) { 
+            clearTimeout(timeoutId); 
+            navigator.geolocation.clearWatch(watchId); 
+            sendPayloadToVercel(pings); 
+        }
       },
       (error) => {
         clearTimeout(timeoutId);
@@ -183,11 +181,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (error.code === 1) setStatus('denied');
         else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
       },
-      { 
-        enableHighAccuracy: true, 
-        maximumAge: 0,            
-        timeout: 25000 // Increased to 25 seconds
-      }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
     );
   };
 

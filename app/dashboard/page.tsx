@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand } from 'lucide-react';
 
-// Directly initialize Supabase to prevent Next.js pathing errors
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 interface Log {
@@ -45,7 +44,6 @@ export default function LecturerDashboard() {
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
 
-  // --- VAULT STATE ---
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -110,14 +108,13 @@ export default function LecturerDashboard() {
     }
   }, [viewMode, selectedCourseId]);
 
-  // --- BULLETPROOF GPS WAKEUP LOGIC ---
   const startNewSession = () => {
     if (!selectedCourseId) {
       setSetupError("Please register a course first.");
       return;
     }
     setIsStarting(true);
-    setSetupError("Waking up GPS hardware... Waiting for satellite lock.");
+    setSetupError("Waking up GPS hardware...");
     
     if (!navigator.geolocation) {
       setSetupError("Location services not supported by your browser.");
@@ -126,66 +123,68 @@ export default function LecturerDashboard() {
     }
     
     let watchId: number;
+    let bestLat = 0;
+    let bestLng = 0;
+    let bestAcc = 9999;
+
+    const executeSessionCreation = async (lat: number, lng: number) => {
+      setSetupError("Coordinates secured. Creating session...");
+      try {
+        const response = await fetch('/api/create-session', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourseId,
+            courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
+            latitude: lat,
+            longitude: lng
+          })
+        });
+        if (response.ok) {
+          const result = await response.json();
+          localStorage.setItem('active_attendance_session', result.sessionId);
+          setActiveSessionId(result.sessionId); 
+          setViewMode('live'); 
+        } else { setSetupError("Failed to create session on server."); }
+      } catch (error) { setSetupError("Network error. Please try again."); } 
+      finally { setIsStarting(false); }
+    };
     
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
-      setIsStarting(false);
-    }, 25000); // Generous 25-second timeout
+      if (bestAcc !== 9999) {
+        executeSessionCreation(bestLat, bestLng);
+      } else {
+        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
+        setIsStarting(false);
+      }
+    }, 8000); 
 
     watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        // --- THE FIX: Ignore Cell Towers ---
-        if (position.coords.accuracy > 60) {
-            setSetupError(`Calibrating... Current accuracy: ${Math.round(position.coords.accuracy)}m. Please wait.`);
-            return; // Ignore this ping and wait for the next one
+      (position) => {
+        const currentAcc = position.coords.accuracy;
+        if (currentAcc < bestAcc) {
+            bestAcc = currentAcc;
+            bestLat = position.coords.latitude;
+            bestLng = position.coords.longitude;
+            setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
         }
 
-        clearTimeout(timeoutId);
-        navigator.geolocation.clearWatch(watchId); 
-        
-        setSetupError("Coordinates secured. Creating session...");
-        try {
-          const response = await fetch('/api/create-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              courseId: selectedCourseId,
-              courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude
-            })
-          });
-          if (response.ok) {
-            const result = await response.json();
-            localStorage.setItem('active_attendance_session', result.sessionId);
-            setActiveSessionId(result.sessionId); 
-            setViewMode('live'); 
-          } else {
-            setSetupError("Failed to create session on server.");
-          }
-        } catch (error) {
-          setSetupError("Network error. Please try again.");
-        } finally {
-          setIsStarting(false);
+        if (bestAcc <= 60) {
+            clearTimeout(timeoutId);
+            navigator.geolocation.clearWatch(watchId); 
+            executeSessionCreation(bestLat, bestLng);
         }
       },
       (error) => {
         clearTimeout(timeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        
         if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
         else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
         else if (error.code === 3) setSetupError("Timeout: GPS took too long indoors.");
         else setSetupError("Failed to grab GPS.");
-        
         setIsStarting(false);
       },
-      { 
-        enableHighAccuracy: true, // Forces physical GPS chip
-        maximumAge: 0,            // Rejects cached locations
-        timeout: 25000 
-      }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
     );
   };
 
