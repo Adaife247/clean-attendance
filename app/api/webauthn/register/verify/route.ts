@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'; // NUKES VERCEL CACHE
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
@@ -16,9 +17,7 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
 
-    if (!expectedChallenge) {
-      return NextResponse.json({ error: "Session expired." }, { status: 400 });
-    }
+    if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
     const verification = await verifyRegistrationResponse({
       response: authResponse,
@@ -29,16 +28,17 @@ export async function POST(request: Request) {
 
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
-
-      // THE ULTIMATE FIX: Use the library's own native encoder
       const publicKeyString = isoBase64URL.fromBuffer(credential.publicKey);
+
+      // TRIPWIRE: Log exactly what is being saved
+      console.log(`[REGISTER] Saving key for ${cleanMatric}. String Length: ${publicKeyString.length}`);
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
           credential_id: credential.id,
-          public_key: publicKeyString, 
+          public_key: publicKeyString,
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()
@@ -49,9 +49,9 @@ export async function POST(request: Request) {
       cookieStore.delete('webauthn_challenge');
       return NextResponse.json({ verified: true });
     }
-
     return NextResponse.json({ verified: false }, { status: 400 });
   } catch (error: any) {
+    console.error("[REGISTER CRASH]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'; // NUKES VERCEL CACHE
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
@@ -26,29 +27,17 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // ==========================================
-    // THE UNIVERSAL ADAPTER (Fixes the 156-byte error)
-    // Automatically detects the DB format and safely decodes it
-    // ==========================================
-    let pkBytes: Uint8Array;
-    const dbKey = device.public_key;
+    // TRIPWIRE: Expose exactly what Supabase handed back
+    console.log(`[VERIFY] Key Type in DB: ${typeof device.public_key}`);
+    console.log(`[VERIFY] Key String Length: ${String(device.public_key).length}`);
 
+    let pkBytes: Uint8Array;
     try {
-      if (typeof dbKey === 'string' && /^[0-9a-fA-F]{100,}$/.test(dbKey)) {
-        // DETECTED: Old Hex String (156 characters)
-        pkBytes = new Uint8Array(dbKey.length / 2);
-        for (let i = 0; i < dbKey.length; i += 2) {
-          pkBytes[i / 2] = parseInt(dbKey.substring(i, i + 2), 16);
-        }
-      } else if (typeof dbKey === 'string' && dbKey.startsWith('[')) {
-        // DETECTED: JSON Number Array
-        pkBytes = new Uint8Array(JSON.parse(dbKey));
-      } else {
-        // DETECTED: Standard Base64URL
-        pkBytes = isoBase64URL.toBuffer(dbKey);
-      }
-    } catch (parseError) {
-      return NextResponse.json({ error: "Universal Adapter failed to parse key." }, { status: 500 });
+      pkBytes = isoBase64URL.toBuffer(String(device.public_key));
+      console.log(`[VERIFY] Decoded to Uint8Array. Byte length: ${pkBytes.length}`);
+    } catch (parseError: any) {
+      console.error("[VERIFY DECODE CRASH]", parseError);
+      return NextResponse.json({ error: `Decode failed: ${parseError.message}` }, { status: 500 });
     }
 
     try {
@@ -59,9 +48,9 @@ export async function POST(request: Request) {
         expectedRPID: rpID,
         credential: {
           id: device.credential_id,
-          publicKey: pkBytes, // Now perfectly sized to 78 bytes no matter what!
+          publicKey: pkBytes,
           counter: Number(device.counter),
-        } as any, // Bypasses the strict Vercel TypeScript compiler
+        } as any,
       });
 
       if (verification.verified) {
@@ -74,13 +63,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ verified: true });
       }
     } catch (cryptoError: any) {
-      const errorMsg = `Crypto Crash! Key loaded was exactly ${pkBytes.length} bytes long. Internal Error: ${cryptoError.message}`;
-      console.error(errorMsg);
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
+      console.error("[VERIFY CRYPTO CRASH]", cryptoError);
+      return NextResponse.json({ error: `Crypto Crash: ${cryptoError.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ verified: false }, { status: 400 });
   } catch (error: any) {
+    console.error("[VERIFY FATAL ERROR]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
