@@ -175,7 +175,11 @@ export default function LecturerDashboard() {
         
         setIsStarting(false);
       },
-      { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
+      { 
+        enableHighAccuracy: true, // Forces physical GPS chip
+        maximumAge: 0,            // Rejects cached locations
+        timeout: 20000 
+      }
     );
   };
 

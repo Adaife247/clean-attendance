@@ -89,12 +89,12 @@ export async function POST(request: Request) {
 
     if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    // 6. THE GEOFENCE
+    // 6. THE GEOFENCE (Expanded to 150 meters for large halls and window overflow)
     const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, initialLat, initialLng);
     let finalStatus = 'absent';
-    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away.`;
+    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
 
-    if (distanceToLecturer <= 50) {
+    if (distanceToLecturer <= 150) {
       if (isSpoofed) {
         finalStatus = 'flagged'; 
         responseMessage = "Location anomaly detected. Please see lecturer.";

@@ -123,7 +123,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // --- THIS IS THE UNMASKED AUTHENTICATION BLOCK ---
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     
@@ -178,7 +177,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (error.code === 1) setStatus('denied');
         else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
       },
-      { enableHighAccuracy: false, maximumAge: 300000, timeout: 20000 }
+      { 
+        enableHighAccuracy: true, // Forces physical GPS chip
+        maximumAge: 0,            // Rejects cached locations
+        timeout: 20000 
+      }
     );
   };
 
