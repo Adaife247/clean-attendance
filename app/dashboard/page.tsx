@@ -2,32 +2,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand, Trash2 } from 'lucide-react';
+import { 
+  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
+  RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
+  User, ChevronDown, Archive, Hand, Trash2, KeyRound 
+} from 'lucide-react';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-interface Log {
-  id: string;
-  matricNumber: string;
-  status: string;
-  time: string;
-}
-
-interface DashboardData {
-  course: string;
-  isActive: boolean;
-  logs: Log[];
-}
-
-interface LecturerProfile {
-  full_name: string;
-  department: string;
-}
-
-interface Course {
-  id: string;
-  course_code: string;
-}
+interface Log { id: string; matricNumber: string; status: string; time: string; }
+interface DashboardData { course: string; isActive: boolean; repPasscode: string; logs: Log[]; }
+interface LecturerProfile { full_name: string; department: string; }
+interface Course { id: string; course_code: string; }
 
 export default function LecturerDashboard() {
   const router = useRouter();
@@ -42,7 +28,6 @@ export default function LecturerDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   
-  // --- MANUAL ACTIONS STATE ---
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -54,10 +39,9 @@ export default function LecturerDashboard() {
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      if (!session) { 
         window.location.href = '/login'; 
-        return;
+        return; 
       }
 
       const { data: profileData } = await supabase
@@ -67,10 +51,7 @@ export default function LecturerDashboard() {
         .single();
 
       if (profileData) {
-        setProfile({
-          full_name: profileData.full_name,
-          department: profileData.department
-        });
+        setProfile({ full_name: profileData.full_name, department: profileData.department });
       }
 
       const { data: courseData } = await supabase
@@ -105,24 +86,22 @@ export default function LecturerDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (viewMode === 'history') {
-      loadHistory();
-    }
+  useEffect(() => { 
+    if (viewMode === 'history') loadHistory(); 
   }, [viewMode, selectedCourseId]);
 
   const startNewSession = () => {
-    if (!selectedCourseId) {
-      setSetupError("Please register a course first.");
-      return;
+    if (!selectedCourseId) { 
+      setSetupError("Please register a course first."); 
+      return; 
     }
     setIsStarting(true);
     setSetupError("Waking up GPS hardware...");
     
-    if (!navigator.geolocation) {
-      setSetupError("Location services not supported by your browser.");
-      setIsStarting(false);
-      return;
+    if (!navigator.geolocation) { 
+      setSetupError("Location services not supported by your browser."); 
+      setIsStarting(false); 
+      return; 
     }
     
     let watchId: number;
@@ -134,11 +113,12 @@ export default function LecturerDashboard() {
       setSetupError("Coordinates secured. Creating session...");
       try {
         const response = await fetch('/api/create-session', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            courseId: selectedCourseId,
+            courseId: selectedCourseId, 
             courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
-            latitude: lat,
+            latitude: lat, 
             longitude: lng
           })
         });
@@ -147,18 +127,23 @@ export default function LecturerDashboard() {
           localStorage.setItem('active_attendance_session', result.sessionId);
           setActiveSessionId(result.sessionId); 
           setViewMode('live'); 
-        } else { setSetupError("Failed to create session on server."); }
-      } catch (error) { setSetupError("Network error. Please try again."); } 
-      finally { setIsStarting(false); }
+        } else { 
+          setSetupError("Failed to create session on server."); 
+        }
+      } catch (error) { 
+        setSetupError("Network error. Please try again."); 
+      } finally { 
+        setIsStarting(false); 
+      }
     };
     
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (bestAcc !== 9999) {
         executeSessionCreation(bestLat, bestLng);
-      } else {
-        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
-        setIsStarting(false);
+      } else { 
+        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON."); 
+        setIsStarting(false); 
       }
     }, 8000); 
 
@@ -171,7 +156,6 @@ export default function LecturerDashboard() {
             bestLng = position.coords.longitude;
             setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
         }
-
         if (bestAcc <= 60) {
             clearTimeout(timeoutId);
             navigator.geolocation.clearWatch(watchId); 
@@ -208,8 +192,8 @@ export default function LecturerDashboard() {
         setData(result);
         setLastRefreshed(new Date().toLocaleTimeString());
       }
-    } catch (error) {
-      console.error("Failed to fetch dashboard data");
+    } catch (error) { 
+      console.error("Failed to fetch data"); 
     }
   };
 
@@ -228,95 +212,82 @@ export default function LecturerDashboard() {
       if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
 
       setIsOverriding(true);
-
       const response = await fetch('/api/override-attendance', {
-        method: 'POST',
+        method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric })
       });
-
-      if (response.ok) {
+      if (response.ok) { 
         setManualMatric(''); 
         fetchDashboardData(); 
-      } else {
-        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`);
+      } else { 
+        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`); 
       }
-    } catch (err: any) {
-      alert("💥 CRITICAL CRASH: " + err.message);
-    } finally {
-      setIsOverriding(false);
+    } catch (err: any) { 
+      alert("💥 CRITICAL CRASH: " + err.message); 
+    } finally { 
+      setIsOverriding(false); 
     }
   };
 
-  // --- THE NEW HARDWARE RESET LOGIC ---
   const handleDeviceReset = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || "").trim();
     if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
-
-    if (!window.confirm(`Are you sure you want to wipe the biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
+    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
 
     setIsResetting(true);
     try {
       const response = await fetch('/api/reset-device', {
-        method: 'POST',
+        method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: safeMatric })
       });
-
-      if (response.ok) {
-        alert(`✅ Hardware binding completely wiped for ${safeMatric}. They can now register a new device.`);
+      if (response.ok) { 
+        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); 
         setManualMatric(''); 
-      } else {
-        const errorData = await response.json();
-        alert(`⚠️ Failed: ${errorData.message}`);
+      } else { 
+        const errorData = await response.json(); 
+        alert(`⚠️ Failed: ${errorData.message}`); 
       }
-    } catch (err: any) {
-      alert("💥 Network Error.");
-    } finally {
-      setIsResetting(false);
+    } catch (err: any) { 
+      alert("💥 Network Error."); 
+    } finally { 
+      setIsResetting(false); 
     }
   };
 
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
-    if (!logsToExport || logsToExport.length === 0) {
-      alert("No check-ins were recorded during this session.");
-      return;
+    if (!logsToExport || logsToExport.length === 0) { 
+      alert("No check-ins recorded."); 
+      return; 
     }
-    
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
-
     const header = [
-      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
-      ["Course Code", courseName],
-      ["Date Generated", dateStr],
-      ["Total Present", verifiedCount],
-      ["Total Records Logged", logsToExport.length],
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`], 
+      ["Course Code", courseName], 
+      ["Date Generated", dateStr], 
+      ["Total Present", verifiedCount], 
+      ["Total Records Logged", logsToExport.length], 
       [], 
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
-
     const rows = logsToExport
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [
-        log.matricNumber, 
-        log.status.toUpperCase(), 
-        log.time, 
-        "Verified via Secure Platform"
-      ]);
-
+      .map(log => [log.matricNumber, log.status.toUpperCase(), log.time, "Verified via Secure Platform"]);
+    
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    const link = document.createElement("a"); 
+    link.href = URL.createObjectURL(blob); 
     link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
-    document.body.appendChild(link);
-    link.click();
+    document.body.appendChild(link); 
+    link.click(); 
     document.body.removeChild(link);
   };
 
-  const exportLiveCSV = () => {
-    if (!data) return;
-    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
+  const exportLiveCSV = () => { 
+    if (!data) return; 
+    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false); 
   };
 
   const downloadPastSession = async (sessionId: string, dateString: string) => {
@@ -325,46 +296,47 @@ export default function LecturerDashboard() {
       const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
-      
       generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
-    } catch (e) {
-      alert("Failed to download historical records. Check network.");
-    } finally {
-      setDownloadingId(null);
+    } catch (e) { 
+      alert("Failed to download. Check network."); 
+    } finally { 
+      setDownloadingId(null); 
     }
   };
 
-  const copyInviteLink = () => {
+  // --- UNIFIED COPY FUNCTION ---
+  const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    navigator.clipboard.writeText(link);
-    alert("Check-in link copied! Send this to the students.");
+    const passcode = data?.repPasscode || 'N/A';
+    
+    const clipboardText = `📌 Attendance Link:\n${link}\n\n🔑 Class Rep PIN: ${passcode}\n(If you are the Class Rep, open the link and click 'Class Rep Login' at the bottom)`;
+    
+    navigator.clipboard.writeText(clipboardText);
+    alert("Session info copied! Send this to the Class Rep.");
   };
 
   if (!activeSessionId || viewMode === 'history') {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
-          
           <div className="bg-[#2563EB] text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
             <User size={40} strokeWidth={2.5} />
           </div>
-          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            Welcome, {profile?.full_name || 'Lecturer'}
-          </h2>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome, {profile?.full_name || 'Lecturer'}</h2>
           <p className="text-[#2563EB] mt-1 text-xs font-bold uppercase tracking-widest mb-6 bg-blue-50 inline-block px-3 py-1 rounded-full">
             {profile?.department || 'Faculty Member'}
           </p>
 
           <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
             <button 
-              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
+              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }} 
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Start Class
             </button>
             <button 
-              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }}
+              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} 
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Past Records
@@ -380,8 +352,8 @@ export default function LecturerDashboard() {
           ) : (
             <div className="relative mb-6">
               <select 
-                value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
+                value={selectedCourseId} 
+                onChange={(e) => setSelectedCourseId(e.target.value)} 
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer"
               >
                 {courses.map(course => (
@@ -396,15 +368,12 @@ export default function LecturerDashboard() {
 
           {viewMode === 'live' ? (
             <div>
-              <p className="text-gray-500 text-sm font-medium mb-4">
-                Drop a dynamic geofence at your current location.
-              </p>
               <button 
-                onClick={startNewSession}
-                disabled={isStarting || courses.length === 0}
+                onClick={startNewSession} 
+                disabled={isStarting || courses.length === 0} 
                 className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
               >
-                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
+                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} 
                 {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
               </button>
               {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
@@ -412,7 +381,7 @@ export default function LecturerDashboard() {
           ) : (
             <div className="text-left border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
               <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                 <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
               </div>
               <div className="max-h-60 overflow-y-auto">
                 {pastSessions.length === 0 ? (
@@ -425,16 +394,14 @@ export default function LecturerDashboard() {
                           <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
                           <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
                         </div>
-                        
                         <button 
-                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
-                          disabled={downloadingId === session.session_id}
+                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())} 
+                          disabled={downloadingId === session.session_id} 
                           className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
                         >
-                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} 
                           {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
                         </button>
-                        
                       </div>
                     ))}
                   </div>
@@ -456,9 +423,7 @@ export default function LecturerDashboard() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <ShieldCheck size={20} className="text-[#2563EB]" />
-                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">
-                  CampusCheck • {profile?.full_name || 'Faculty'}
-                </span>
+                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
               <div className="flex items-center gap-2 mt-2">
@@ -484,10 +449,10 @@ export default function LecturerDashboard() {
 
           <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
             <button 
-              onClick={copyInviteLink} 
+              onClick={copySessionInfo} 
               className="flex justify-center items-center gap-2 text-sm font-bold bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all"
             >
-              <Copy size={16} /> Copy Link
+              <Copy size={16} /> Share Session Info
             </button>
             <button 
               onClick={endSession} 
@@ -498,7 +463,6 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
-        {/* UPDATED MANUAL MANAGEMENT WIDGET */}
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
             <UserPlus size={16} className="text-[#2563EB]"/> Student Management
@@ -509,6 +473,7 @@ export default function LecturerDashboard() {
               placeholder="Matric Number (e.g., CSC/2021/001)" 
               value={manualMatric} 
               onChange={(e) => setManualMatric(e.target.value.toUpperCase())} 
+              onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
               className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
             />
             <div className="flex gap-2">
@@ -517,17 +482,16 @@ export default function LecturerDashboard() {
                 disabled={!manualMatric.trim() || isOverriding} 
                 className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
               >
-                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} 
                 {isOverriding ? "Forcing..." : "Force Check-In"}
               </button>
-              
               <button 
                 onClick={() => handleDeviceReset(manualMatric)} 
                 disabled={!manualMatric.trim() || isResetting} 
-                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2"
+                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2" 
                 title="Wipe hardware lock if student bought a new phone"
               >
-                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} 
                 Wipe Biometrics
               </button>
             </div>

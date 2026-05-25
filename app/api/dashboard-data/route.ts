@@ -11,21 +11,16 @@ export async function GET(request: Request) {
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-    // 1. Get the session directly from the CORRECT table (lecture_sessions)
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('is_active, course_code')
-      .eq('session_id', sessionId) // Matching the correct primary key
+      .select('is_active, course_code, rep_passcode')
+      .eq('session_id', sessionId)
       .single();
     
-    if (sessionError) {
-      console.error("Dashboard API Error fetching session:", sessionError.message);
-    }
+    if (sessionError) console.error("Session Error:", sessionError.message);
 
-    // 2. The course code (e.g. "GST401") is already in the row! No extra lookup needed.
     const courseName = session?.course_code || "Unknown Course";
 
-    // 3. Get the ledger
     const { data: logs } = await supabase
       .from('attendance_logs')
       .select('*')
@@ -34,7 +29,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       course: courseName,
-      isActive: session?.is_active === true, // Map the boolean correctly
+      isActive: session?.is_active === true,
+      repPasscode: session?.rep_passcode || 'N/A', // Send passcode to frontend
       logs: (logs || []).map((l: any) => ({
         id: l.id,
         matricNumber: l.matric_number,
@@ -43,7 +39,6 @@ export async function GET(request: Request) {
       }))
     });
   } catch (e: any) {
-    console.error("Dashboard Data Fatal Error:", e.message);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

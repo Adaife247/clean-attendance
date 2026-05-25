@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, RefreshCw } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, KeyRound, RefreshCw } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -372,9 +372,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
       </div>
       
-      <p className="text-center text-xs font-semibold text-gray-400 mt-8">
-        Make sure you are physically inside the lecture hall before checking in.
-      </p>
+      <div className="mt-8 text-center space-y-4">
+        <p className="text-xs font-semibold text-gray-400">
+          Make sure you are physically inside the lecture hall before checking in.
+        </p>
+        
+        {/* THE CLASS REP BACKDOOR LINK */}
+        <a 
+          href={`/rep?sessionId=${sessionId}`} 
+          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"
+        >
+          <KeyRound size={12} /> Class Rep Login
+        </a>
+      </div>
+
     </div>
   );
 }
