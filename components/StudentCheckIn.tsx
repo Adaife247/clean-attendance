@@ -133,7 +133,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       const options = await genRes.json();
       
-      // UNMASKING ERROR 1: Was the device record missing?
       if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
       const asseResp = await startAuthentication(options);
@@ -144,12 +143,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       });
       const verifyResult = await verifyRes.json();
       
-      // UNMASKING ERROR 2: What did the verification server say?
       if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
       if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
 
     } catch (error: any) {
-      // STOP HIDING THE ERROR: Show the exact message on the orange screen
       setErrorMessage(error.message || "Unknown Auth Error occurred.");
       setStatus('failed');
       return; 
@@ -159,15 +156,24 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     let pings: Telemetry[] = [];
     let watchId: number;
+    let bestAccuracy = 9999;
     
+    // Increased to 25 seconds
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("Couldn't get a strong GPS lock indoors."); setStatus('failed'); }
-    }, 20000);
+      else { setErrorMessage("Couldn't get a strong GPS lock indoors. Try moving slightly."); setStatus('failed'); }
+    }, 25000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
+        if (position.coords.accuracy < bestAccuracy) bestAccuracy = position.coords.accuracy;
+
+        // --- THE FIX: Ignore Cell Towers ---
+        if (position.coords.accuracy > 60) {
+            return; // Ignore garbage pings
+        }
+
         pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
         if (pings.length >= 3) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); sendPayloadToVercel(pings); }
       },
@@ -178,9 +184,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
       },
       { 
-        enableHighAccuracy: true, // Forces physical GPS chip
-        maximumAge: 0,            // Rejects cached locations
-        timeout: 20000 
+        enableHighAccuracy: true, 
+        maximumAge: 0,            
+        timeout: 25000 // Increased to 25 seconds
       }
     );
   };

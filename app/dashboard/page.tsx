@@ -117,7 +117,7 @@ export default function LecturerDashboard() {
       return;
     }
     setIsStarting(true);
-    setSetupError("Waking up GPS hardware...");
+    setSetupError("Waking up GPS hardware... Waiting for satellite lock.");
     
     if (!navigator.geolocation) {
       setSetupError("Location services not supported by your browser.");
@@ -131,10 +131,16 @@ export default function LecturerDashboard() {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
       setIsStarting(false);
-    }, 20000); // Generous 20-second timeout
+    }, 25000); // Generous 25-second timeout
 
     watchId = navigator.geolocation.watchPosition(
       async (position) => {
+        // --- THE FIX: Ignore Cell Towers ---
+        if (position.coords.accuracy > 60) {
+            setSetupError(`Calibrating... Current accuracy: ${Math.round(position.coords.accuracy)}m. Please wait.`);
+            return; // Ignore this ping and wait for the next one
+        }
+
         clearTimeout(timeoutId);
         navigator.geolocation.clearWatch(watchId); 
         
@@ -178,7 +184,7 @@ export default function LecturerDashboard() {
       { 
         enableHighAccuracy: true, // Forces physical GPS chip
         maximumAge: 0,            // Rejects cached locations
-        timeout: 20000 
+        timeout: 25000 
       }
     );
   };
