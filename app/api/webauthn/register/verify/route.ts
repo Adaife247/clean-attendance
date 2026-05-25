@@ -29,17 +29,15 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // STRICT HEX CONVERSION
-      const publicKeyHex = Array.from(new Uint8Array(credential.publicKey))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+      // ULTIMATE FIX: Base64URL encoding (WebAuthn Native Format)
+      const publicKeyStr = Buffer.from(credential.publicKey).toString('base64url');
 
       const { error: dbError } = await supabase
         .from('user_devices')
         .upsert({
           matric_number: cleanMatric,
           credential_id: credential.id,
-          public_key: publicKeyHex, 
+          public_key: publicKeyStr, 
           counter: credential.counter,
           transports: credential.transports || [],
           created_at: new Date().toISOString()

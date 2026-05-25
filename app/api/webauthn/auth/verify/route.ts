@@ -25,12 +25,11 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // SAFE HEX-TO-BYTE RECONSTRUCTION
-    const hex = device.public_key;
-    const pkBytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-      pkBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
+    // ULTIMATE FIX: Exact Byte Copying into an Isolated Memory Buffer
+    // This solves BOTH "length not supported" and "e.get is not a function"
+    const buffer = Buffer.from(device.public_key, 'base64url');
+    const pkBytes = new Uint8Array(buffer.byteLength);
+    pkBytes.set(buffer); // Perfect copy into a fresh, unpooled ArrayBuffer
 
     const verification = await verifyAuthenticationResponse({
       response: authResponse,
