@@ -1,38 +1,22 @@
-const CACHE_NAME = 'campuscheck-v1';
+const CACHE_NAME = 'campuscheck-v2';
 
-// 1. Install the Service Worker
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // We just cache the root page so it works offline
-      return cache.addAll(['/']);
-    })
-  );
-  self.skipWaiting();
+  self.skipWaiting(); // Instantly activate the new service worker
 });
 
-// 2. Activate and clean up old caches
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+  self.clients.claim(); // Take control of all pages immediately
 });
 
-// 3. Intercept Network Requests (Required for PWA Install Prompt)
 self.addEventListener('fetch', (event) => {
+  // Minimal fetch handler required to trigger the "Install PWA" prompt.
+  // We use "network-first" to ensure Next.js App Router works perfectly.
   event.respondWith(
     fetch(event.request).catch(() => {
-      // If the network completely fails, serve from cache
-      return caches.match(event.request);
+      return new Response(
+        "Network connection lost. Please check your internet.", 
+        { status: 503, statusText: "Service Unavailable" }
+      );
     })
   );
 });

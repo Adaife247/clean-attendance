@@ -13,22 +13,21 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Lock the screen so it doesn't scatter or zoom on mobile
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#2563EB', // The blue branding color for the status bar
+  themeColor: '#2563EB',
 };
 
-// THE PWA META TAGS
+// Required Apple PWA configuration
 export const metadata: Metadata = {
   title: "CampusCheck",
   description: "Geofenced campus verification system",
-  manifest: "/manifest.json", 
+  manifest: "/manifest.json",
   appleWebApp: {
-    capable: true, // Tells iOS "Treat this as a real app, hide Safari UI"
+    capable: true,
     title: "CampusCheck",
     statusBarStyle: "default",
   },
@@ -45,7 +44,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* Boot the PWA Engine in the background */}
         <PWARegister />
         {children}
       </body>

@@ -1,11 +1,11 @@
 {
-  "name": "FUOYE Attendance",
-  "short_name": "Attendance",
-  "description": "Geofenced student check-in system.",
+  "name": "CampusCheck",
+  "short_name": "CampusCheck",
+  "description": "Geofenced campus verification system.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F9FAFB",
-  "theme_color": "#111827",
+  "theme_color": "#2563EB",
   "orientation": "portrait-primary",
   "icons": [
     {

@@ -3,8 +3,7 @@ import { useEffect } from 'react';
 
 export default function PWARegister() {
   useEffect(() => {
-    // Check if the browser supports Service Workers
-    if ('serviceWorker' in navigator && window.isSecureContext) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then(() => console.log('✅ PWA Engine Activated'))
@@ -12,5 +11,5 @@ export default function PWARegister() {
     }
   }, []);
 
-  return null; // This component is invisible
+  return null; 
 }
