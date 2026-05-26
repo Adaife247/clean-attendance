@@ -21,11 +21,15 @@ export const viewport: Viewport = {
   themeColor: '#2563EB',
 };
 
-// Required Apple PWA configuration
+// Required Apple PWA configuration and Cache-Busted Icons
 export const metadata: Metadata = {
   title: "CampusCheck",
   description: "Geofenced campus verification system",
   manifest: "/manifest.json",
+  icons: {
+    icon: '/icon-192x192.png?v=2', 
+    apple: '/icon-192x192.png?v=2',
+  },
   appleWebApp: {
     capable: true,
     title: "CampusCheck",
