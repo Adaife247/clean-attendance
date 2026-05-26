@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
-  User, ChevronDown, Archive, Hand, KeyRound 
+  User, ChevronDown, Hand, KeyRound 
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -28,16 +28,14 @@ export default function LecturerDashboard() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [setupError, setSetupError] = useState('');
+  
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
-  const [pastSessions, setPastSessions] = useState<any[]>([]);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
+  // 1. Secure Page & Fetch Profile
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -70,28 +68,13 @@ export default function LecturerDashboard() {
     securePageAndFetchProfile();
   }, []);
 
+  // 2. Check for active session on load
   useEffect(() => {
     const savedSession = localStorage.getItem('active_attendance_session');
     if (savedSession) setActiveSessionId(savedSession);
   }, []);
 
-  const loadHistory = async () => {
-    const course = courses.find(c => c.id === selectedCourseId);
-    if (!course) return;
-    try {
-      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`);
-      if (response.ok) {
-        setPastSessions(await response.json());
-      }
-    } catch (e) {
-      console.error("Failed to load history");
-    }
-  };
-
-  useEffect(() => { 
-    if (viewMode === 'history') loadHistory(); 
-  }, [viewMode, selectedCourseId]);
-
+  // 3. Start a New Live Session
   const startNewSession = () => {
     if (!selectedCourseId) { 
       setSetupError("Please register a course first."); 
@@ -124,11 +107,11 @@ export default function LecturerDashboard() {
             longitude: lng
           })
         });
+        
         if (response.ok) {
           const result = await response.json();
           localStorage.setItem('active_attendance_session', result.sessionId);
           setActiveSessionId(result.sessionId); 
-          setViewMode('live'); 
         } else { 
           setSetupError("Failed to create session on server."); 
         }
@@ -142,7 +125,6 @@ export default function LecturerDashboard() {
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       
-      // We give the lecturer 15 seconds to grab a coordinate (instead of 8)
       if (bestAcc !== 9999) {
         executeSessionCreation(bestLat, bestLng);
       } else { 
@@ -161,7 +143,6 @@ export default function LecturerDashboard() {
             setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
         }
         
-        // Loosen the lecturer's strict requirement to 150m.
         if (bestAcc <= 150) {
             clearTimeout(timeoutId);
             navigator.geolocation.clearWatch(watchId); 
@@ -181,6 +162,7 @@ export default function LecturerDashboard() {
     );
   };
 
+  // 4. End Live Session
   const endSession = () => {
     if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
       localStorage.removeItem('active_attendance_session');
@@ -189,6 +171,7 @@ export default function LecturerDashboard() {
     }
   };
 
+  // 5. Fetch Live Data Loop
   const fetchDashboardData = async () => {
     if (!activeSessionId) return;
     try {
@@ -204,13 +187,14 @@ export default function LecturerDashboard() {
   };
 
   useEffect(() => {
-    if (activeSessionId && viewMode === 'live') {
+    if (activeSessionId) {
       fetchDashboardData();
       const interval = setInterval(fetchDashboardData, 3000);
       return () => clearInterval(interval);
     }
-  }, [activeSessionId, viewMode]);
+  }, [activeSessionId]);
 
+  // 6. Manual Override Logic
   const handleManualOverride = async (targetMatric: string) => {
     try {
       if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
@@ -223,6 +207,7 @@ export default function LecturerDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric })
       });
+      
       if (response.ok) { 
         setManualMatric(''); 
         fetchDashboardData(); 
@@ -236,22 +221,27 @@ export default function LecturerDashboard() {
     }
   };
 
-  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
-    if (!logsToExport || logsToExport.length === 0) { 
+  // 7. Live CSV Export (Saves just this active class)
+  const exportLiveCSV = () => { 
+    if (!data || data.logs.length === 0) { 
       alert("No check-ins recorded."); 
       return; 
     }
-    const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
+    
+    const verifiedCount = data.logs.filter(l => l.status === 'verified').length;
+    const dateStr = new Date().toLocaleDateString();
+    
     const header = [
-      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`], 
-      ["Course Code", courseName], 
+      [`LIVE ATTENDANCE REPORT`], 
+      ["Course Code", data.course], 
       ["Date Generated", dateStr], 
       ["Total Present", verifiedCount], 
-      ["Total Records Logged", logsToExport.length], 
+      ["Total Records Logged", data.logs.length], 
       [], 
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
-    const rows = logsToExport
+    
+    const rows = data.logs
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
       .map(log => [
         log.matricNumber, 
@@ -264,31 +254,13 @@ export default function LecturerDashboard() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a"); 
     link.href = URL.createObjectURL(blob); 
-    link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
+    link.setAttribute("download", `${data.course.replace(/\s+/g, '_')}_Live_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
     document.body.appendChild(link); 
     link.click(); 
     document.body.removeChild(link);
   };
 
-  const exportLiveCSV = () => { 
-    if (!data) return; 
-    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false); 
-  };
-
-  const downloadPastSession = async (sessionId: string, dateString: string) => {
-    setDownloadingId(sessionId);
-    try {
-      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
-      if (!response.ok) throw new Error("Failed to fetch");
-      const pastData = await response.json();
-      generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
-    } catch (e) { 
-      alert("Failed to download. Check network."); 
-    } finally { 
-      setDownloadingId(null); 
-    }
-  };
-
+  // 8. Copy Invite Info
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
@@ -300,7 +272,10 @@ export default function LecturerDashboard() {
     alert("Session info copied! Send this to the Class Rep.");
   };
 
-  if (!activeSessionId || viewMode === 'history') {
+  // ==========================================
+  // UI STATE 1: NO ACTIVE SESSION (Setup Mode)
+  // ==========================================
+  if (!activeSessionId) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
@@ -308,30 +283,15 @@ export default function LecturerDashboard() {
             <User size={40} strokeWidth={2.5} />
           </div>
           <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome, {profile?.full_name || 'Lecturer'}</h2>
-          <p className="text-[#2563EB] mt-1 text-xs font-bold uppercase tracking-widest mb-6 bg-blue-50 inline-block px-3 py-1 rounded-full">
+          <p className="text-[#2563EB] mt-1 text-xs font-bold uppercase tracking-widest mb-8 bg-blue-50 inline-block px-3 py-1 rounded-full">
             {profile?.department || 'Faculty Member'}
           </p>
-
-          <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
-            <button 
-              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }} 
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Start Class
-            </button>
-            <button 
-              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} 
-              className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Past Records
-            </button>
-          </div>
 
           {courses.length === 0 ? (
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-4">
               <AlertTriangle className="mx-auto text-yellow-600 mb-2" size={24} />
               <p className="text-sm font-bold text-yellow-800">No courses registered.</p>
-              <p className="text-xs text-yellow-700 mt-1">Please go to the Course Registry to create one first.</p>
+              <p className="text-xs text-yellow-700 mt-1">Please go to the Student Management tab to create one first.</p>
             </div>
           ) : (
             <div className="relative mb-6">
@@ -350,58 +310,30 @@ export default function LecturerDashboard() {
             </div>
           )}
 
-          {viewMode === 'live' ? (
-            <div>
-              <button 
-                onClick={startNewSession} 
-                disabled={isStarting || courses.length === 0} 
-                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
-              >
-                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} 
-                {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
-              </button>
-              {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
-            </div>
-          ) : (
-            <div className="text-left border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
-              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
-              </div>
-              <div className="max-h-60 overflow-y-auto">
-                {pastSessions.length === 0 ? (
-                  <p className="p-6 text-center text-sm font-bold text-gray-400">No past records found for this course.</p>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {pastSessions.map(session => (
-                      <div key={session.session_id} className="p-4 hover:bg-gray-50 transition-colors flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
-                          <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
-                        </div>
-                        <button 
-                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())} 
-                          disabled={downloadingId === session.session_id} 
-                          className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        >
-                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} 
-                          {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <div>
+            <button 
+              onClick={startNewSession} 
+              disabled={isStarting || courses.length === 0} 
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+            >
+              {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} 
+              {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
+            </button>
+            {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
+          </div>
         </div>
       </div>
     );
   }
 
+  // ==========================================
+  // UI STATE 2: ACTIVE SESSION (Live Radar)
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
         
+        {/* TOP STATUS BAR */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -409,7 +341,7 @@ export default function LecturerDashboard() {
                 <ShieldCheck size={20} className="text-[#2563EB]" />
                 <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
               </div>
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Radar</h1>
               <div className="flex items-center gap-2 mt-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                 <span className="text-gray-500 font-bold text-lg">{data?.course || 'Loading...'}</span>
@@ -426,7 +358,7 @@ export default function LecturerDashboard() {
                 disabled={!data || data.logs.length === 0} 
                 className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
               >
-                <Download size={16} /> Export
+                <Download size={16} /> Export Live Data
               </button>
             </div>
           </div>
@@ -446,7 +378,7 @@ export default function LecturerDashboard() {
             </button>
           </div>
 
-          {/* THE CLASS REP WIDGET */}
+          {/* CLASS REP WIDGET */}
           {data?.repPasscode && (
             <div className="bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
@@ -465,6 +397,7 @@ export default function LecturerDashboard() {
           )}
         </div>
 
+        {/* MANUAL OVERRIDE INPUT */}
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
             <UserPlus size={16} className="text-[#2563EB]"/> Live Manual Override
@@ -476,7 +409,7 @@ export default function LecturerDashboard() {
               value={manualMatric} 
               onChange={(e) => setManualMatric(e.target.value.toUpperCase())} 
               onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
-              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
+              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" 
             />
             <div className="flex gap-2 w-full sm:w-auto">
               <button 
@@ -491,6 +424,7 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* LIVE VERIFIED LEDGER */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex flex-row items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
             <h3 className="font-bold text-gray-700 flex items-center gap-2">
@@ -556,6 +490,7 @@ export default function LecturerDashboard() {
             </table>
           </div>
         </div>
+
       </div>
     </div>
   );
