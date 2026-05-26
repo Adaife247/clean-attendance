@@ -5,7 +5,7 @@ import { supabase } from '../../utils/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-const FACULTY_SECRET_KEY = "OAU-FACULTY-2026";
+const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
 
 export default function LoginPage() {
   const router = useRouter();
