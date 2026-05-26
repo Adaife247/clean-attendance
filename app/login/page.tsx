@@ -40,7 +40,7 @@ export default function LoginPage() {
         
         if (data.user) {
           const { error: profileError } = await supabase.from('lecturers').insert([{
-            id: data.user.id, full_name: fullName, department: department
+            id: data.user.id, email: email, full_name: fullName, department: department
           }]);
           if (profileError) throw profileError;
         }
