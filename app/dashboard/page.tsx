@@ -5,10 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
-  User, ChevronDown, Archive, Hand, Trash2, KeyRound 
+  User, ChevronDown, Archive, Hand, KeyRound 
 } from 'lucide-react';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Log { id: string; matricNumber: string; status: string; time: string; }
 interface DashboardData { course: string; isActive: boolean; repPasscode: string; logs: Log[]; }
@@ -30,7 +33,6 @@ export default function LecturerDashboard() {
   
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
 
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
@@ -139,13 +141,15 @@ export default function LecturerDashboard() {
     
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
+      
+      // We give the lecturer 15 seconds to grab a coordinate (instead of 8)
       if (bestAcc !== 9999) {
         executeSessionCreation(bestLat, bestLng);
       } else { 
-        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON."); 
+        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON and try near a window."); 
         setIsStarting(false); 
       }
-    }, 8000); 
+    }, 15000); 
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -156,7 +160,9 @@ export default function LecturerDashboard() {
             bestLng = position.coords.longitude;
             setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
         }
-        if (bestAcc <= 60) {
+        
+        // Loosen the lecturer's strict requirement to 150m.
+        if (bestAcc <= 150) {
             clearTimeout(timeoutId);
             navigator.geolocation.clearWatch(watchId); 
             executeSessionCreation(bestLat, bestLng);
@@ -171,7 +177,7 @@ export default function LecturerDashboard() {
         else setSetupError("Failed to grab GPS.");
         setIsStarting(false);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   };
 
@@ -230,32 +236,6 @@ export default function LecturerDashboard() {
     }
   };
 
-  const handleDeviceReset = async (targetMatric: string) => {
-    const safeMatric = String(targetMatric || "").trim();
-    if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
-    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
-
-    setIsResetting(true);
-    try {
-      const response = await fetch('/api/reset-device', {
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber: safeMatric })
-      });
-      if (response.ok) { 
-        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); 
-        setManualMatric(''); 
-      } else { 
-        const errorData = await response.json(); 
-        alert(`⚠️ Failed: ${errorData.message}`); 
-      }
-    } catch (err: any) { 
-      alert("💥 Network Error."); 
-    } finally { 
-      setIsResetting(false); 
-    }
-  };
-
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
     if (!logsToExport || logsToExport.length === 0) { 
       alert("No check-ins recorded."); 
@@ -273,7 +253,12 @@ export default function LecturerDashboard() {
     ];
     const rows = logsToExport
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [log.matricNumber, log.status.toUpperCase(), log.time, "Verified via Secure Platform"]);
+      .map(log => [
+        log.matricNumber, 
+        log.status.toUpperCase(), 
+        log.time, 
+        "Verified via Secure Platform"
+      ]);
     
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -304,7 +289,6 @@ export default function LecturerDashboard() {
     }
   };
 
-  // --- UNIFIED COPY FUNCTION ---
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
@@ -461,11 +445,29 @@ export default function LecturerDashboard() {
               <XCircle size={16} /> End Lecture
             </button>
           </div>
+
+          {/* THE CLASS REP WIDGET */}
+          {data?.repPasscode && (
+            <div className="bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="font-bold text-blue-900 flex items-center gap-2">
+                  <KeyRound size={18} /> Class Rep Access
+                </h3>
+                <p className="text-blue-700 text-sm mt-1 font-medium">Delegate manual override approvals to the class rep.</p>
+              </div>
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="bg-white px-4 py-2 rounded-lg border border-blue-200 shadow-sm">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-0.5">Session PIN</p>
+                  <p className="text-xl font-black text-blue-900 tracking-widest">{data.repPasscode}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <UserPlus size={16} className="text-[#2563EB]"/> Student Management
+            <UserPlus size={16} className="text-[#2563EB]"/> Live Manual Override
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input 
@@ -476,23 +478,14 @@ export default function LecturerDashboard() {
               onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
               className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
             />
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               <button 
                 onClick={() => handleManualOverride(manualMatric)} 
                 disabled={!manualMatric.trim() || isOverriding} 
-                className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+                className="w-full sm:w-auto whitespace-nowrap bg-gray-900 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
               >
                 {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} 
-                {isOverriding ? "Forcing..." : "Force Check-In"}
-              </button>
-              <button 
-                onClick={() => handleDeviceReset(manualMatric)} 
-                disabled={!manualMatric.trim() || isResetting} 
-                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2" 
-                title="Wipe hardware lock if student bought a new phone"
-              >
-                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} 
-                Wipe Biometrics
+                {isOverriding ? "Forcing Status..." : "Grant Manual Override"}
               </button>
             </div>
           </div>

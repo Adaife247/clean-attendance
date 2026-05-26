@@ -46,9 +46,12 @@ app/api/admin-login/route.ts
 app/api/attendance-history/route.ts
 app/api/create-session/route.ts
 app/api/dashboard-data/route.ts
+app/api/master-export/route.ts
 app/api/override-attendance/route.ts
 app/api/request-override/route.ts
+app/api/reset-device/route.ts
 app/api/verify-attendance/route.ts
+app/api/verify-rep/route.ts
 app/api/webauthn/auth/generate/route.ts
 app/api/webauthn/auth/verify/route.ts
 app/api/webauthn/register/generate/route.ts
@@ -63,6 +66,7 @@ app/layout.tsx
 app/login/page.tsx
 app/page.tsx
 app/portal/page.tsx
+app/rep/page.tsx
 CLAUDE.md
 components/StudentCheckIn.tsx
 eslint.config.mjs
@@ -152,6 +156,94 @@ export async function GET(request: Request) {
 }
 </file>
 
+<file path="app/api/master-export/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const courseCode = searchParams.get('courseCode');
+
+    if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
+
+    // 1. Get all sessions for this specific course
+    const { data: sessions, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('session_id')
+      .ilike('course_code', courseCode);
+
+    if (sessionError) throw sessionError;
+
+    if (!sessions || sessions.length === 0) {
+      return NextResponse.json({ message: "No sessions recorded for this course yet." }, { status: 404 });
+    }
+
+    const sessionIds = sessions.map(s => s.session_id);
+    const totalClasses = sessions.length;
+
+    // 2. Get the official course roster
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('roster')
+      .ilike('course_code', courseCode)
+      .single();
+
+    const roster = courseData?.roster || [];
+
+    // 3. Get all verified attendance logs for the entire semester
+    const { data: logs, error: logError } = await supabase
+      .from('attendance_logs')
+      .select('matric_number, status')
+      .in('session_id', sessionIds)
+      .eq('status', 'verified'); // Only count verified attendances!
+
+    if (logError) throw logError;
+
+    // 4. Calculate Attendance
+    const attendanceMap = new Map<string, number>();
+
+    // Start by assuming everyone on the roster has 0 attendance
+    roster.forEach((matric: string) => attendanceMap.set(matric, 0));
+
+    // Now loop through the logs and increment their scores
+    (logs || []).forEach(log => {
+      // If a student checked in but wasn't on the official roster, add them now
+      if (!attendanceMap.has(log.matric_number)) {
+         attendanceMap.set(log.matric_number, 0);
+      }
+      attendanceMap.set(log.matric_number, attendanceMap.get(log.matric_number)! + 1);
+    });
+
+    // 5. Format the data for the CSV download
+    const report = Array.from(attendanceMap.entries()).map(([matric, attended]) => {
+      const percentage = Math.round((attended / totalClasses) * 100);
+      return {
+        matricNumber: matric,
+        totalClasses,
+        attended,
+        percentage,
+        eligible: percentage >= 70 ? 'YES' : 'NO' // Exam eligibility flag
+      };
+    });
+
+    // Sort alphabetically by Matric Number
+    report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+
+    return NextResponse.json({
+        course: courseCode,
+        totalClasses,
+        report
+    });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/request-override/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -200,6 +292,72 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/reset-device/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const rawMatric = body.matricNumber;
+
+    if (!rawMatric) {
+      return NextResponse.json({ message: "Matric number required." }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // Delete the device binding. This forces the student to re-register a new passkey.
+    // Their attendance history remains perfectly intact in the attendance_logs table.
+    const { error } = await supabase
+      .from('user_devices')
+      .delete()
+      .eq('matric_number', cleanMatric);
+
+    if (error) throw error;
+
+    return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
+
+  } catch (error: any) {
+    console.error("Device Reset Error:", error.message);
+    return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/verify-rep/route.ts">
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const { sessionId, passcode } = await request.json();
+
+    if (!sessionId || !passcode) {
+      return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
+    }
+
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('rep_passcode')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (session && session.rep_passcode === passcode) {
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
+
+    return NextResponse.json({ message: "Invalid passcode" }, { status: 401 });
+  } catch (error: any) {
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 }
 </file>
@@ -901,231 +1059,6 @@ next-env.d.ts
 .vercel
 </file>
 
-<file path="app/api/webauthn/register/generate/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { rpName, rpID } from '../../../../../utils/webauthn';
-
-export async function POST(request: Request) {
-  try {
-    const { matricNumber } = await request.json();
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: new TextEncoder().encode(cleanMatric),
-      userName: cleanMatric,
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform', // BLOCKS CLOUD PASSKEYS - FORCES DEVICE HARDWARE
-        residentKey: 'required',
-        userVerification: 'required', 
-      },
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 300,
-      path: '/',
-    });
-
-    return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/dashboard/courses/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '../../../utils/supabase';
-import { BookOpen, Upload, Users, Plus, Loader2, FileSpreadsheet, Layers } from 'lucide-react';
-
-interface Course {
-  id: string;
-  course_code: string;
-  roster: string[];
-}
-
-export default function CourseManagement() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [newCourseCode, setNewCourseCode] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  const fetchCourses = async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*')
-      .eq('lecturer_id', session.user.id)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setCourses(data);
-    }
-    setIsLoading(false);
-  };
-
-  const createCourse = async () => {
-    if (!newCourseCode.trim()) return;
-    setIsCreating(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    // Instant creation without GPS dependency
-    const { error } = await supabase.from('courses').insert([{
-      lecturer_id: session.user.id,
-      course_code: newCourseCode.toUpperCase(),
-      roster: []
-    }]);
-
-    if (!error) {
-      setNewCourseCode('');
-      fetchCourses();
-    } else {
-      alert("Failed to create course.");
-    }
-    setIsCreating(false);
-  };
-
-  // --- UPDATED MULTI-CSV MERGE LOGIC ---
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingId(courseId);
-    const reader = new FileReader();
-    
-    reader.onload = async (event) => {
-      const csvText = event.target?.result as string;
-      
-      // Extract new matrics
-      const rawMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase());
-      const cleanMatrics = rawMatrics.filter(m => m.length > 5 && !m.includes('MATRIC'));
-      
-      // THE MAGIC: Merge the old roster with the new CSV, and remove duplicates using a Set
-      const combinedRoster = [...(existingRoster || []), ...cleanMatrics];
-      const uniqueMatrics = Array.from(new Set(combinedRoster));
-
-      const { error } = await supabase
-        .from('courses')
-        .update({ roster: uniqueMatrics })
-        .eq('id', courseId);
-
-      if (!error) {
-        alert(`Success! Course roster now has ${uniqueMatrics.length} total students.`);
-        fetchCourses();
-      } else {
-        alert("Failed to upload roster.");
-      }
-      setUploadingId(null);
-      
-      // Reset the file input so the same file can be selected again if needed
-      e.target.value = '';
-    };
-
-    reader.readAsText(file);
-  };
-
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
-      
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            <BookOpen className="text-[#2563EB]" size={28} /> Course Registry
-          </h1>
-          <p className="text-gray-500 mt-1 font-medium">Create your courses and merge official student rosters.</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider">Add New Course</h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input 
-            type="text" 
-            placeholder="Course Code (e.g., MTH 101)" 
-            value={newCourseCode}
-            onChange={(e) => setNewCourseCode(e.target.value)}
-            className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-lg focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all uppercase"
-          />
-          <button 
-            onClick={createCourse}
-            disabled={isCreating || !newCourseCode.trim()}
-            className="whitespace-nowrap bg-gray-900 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
-          >
-            {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-            {isCreating ? "Creating..." : "Create Course"}
-          </button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
-        </div>
-      ) : courses.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
-          <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No courses established yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {courses.map(course => (
-            <div key={course.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-200 transition-all flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">{course.course_code}</h2>
-                  <p className="text-xs font-bold text-green-600 mt-1 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md w-fit">
-                    Active Registry
-                  </p>
-                </div>
-                <div className="bg-blue-50 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-blue-100">
-                  <Users size={16} className="text-[#2563EB]" />
-                  <span className="font-bold text-[#2563EB]">{course.roster?.length || 0}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 transition-all">
-                  {uploadingId === course.id ? (
-                    <Loader2 size={16} className="animate-spin text-[#2563EB]" />
-                  ) : (
-                    <FileSpreadsheet size={16} className="text-[#2563EB]" />
-                  )}
-                  {uploadingId === course.id ? "Syncing Roster..." : "Merge CSV Class List"}
-                  <input 
-                    type="file" 
-                    accept=".csv" 
-                    className="hidden" 
-                    onChange={(e) => handleFileUpload(e, course.id, course.roster)}
-                    disabled={uploadingId === course.id}
-                  />
-                </label>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-</file>
-
 <file path="app/portal/page.tsx">
 'use client';
 import { useState } from 'react';
@@ -1230,100 +1163,167 @@ export default function StudentPortal() {
 }
 </file>
 
-<file path="app/api/create-session/route.ts">
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+<file path="app/rep/page.tsx">
+'use client';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ShieldCheck, Hand, CheckCircle, Loader2, KeyRound } from 'lucide-react';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+interface Log { id: string; matricNumber: string; status: string; time: string; }
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    
-    // THE FIX: Specifically target 'courseCode' so it grabs "GST401", NOT the UUID
-    const courseCodeToSave = body.courseCode || body.course_code;
+function RepPortalContent() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
 
-    if (!courseCodeToSave) {
-      return NextResponse.json({ error: "Missing course code. Check frontend payload." }, { status: 400 });
+  const [passcode, setPasscode] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [error, setError] = useState('');
+  
+  const [pendingLogs, setPendingLogs] = useState<Log[]>([]);
+  const [courseName, setCourseName] = useState('');
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+
+  const verifyPasscode = async () => {
+    if (passcode.length !== 4) { setError("Passcode must be 4 digits."); return; }
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/verify-rep', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, passcode })
+      });
+      if (response.ok) setIsAuthenticated(true);
+      else setError("Invalid passcode.");
+    } catch (err) { setError("Network error."); }
+    finally { setIsVerifying(false); }
+  };
+
+  const fetchPendingRequests = async () => {
+    if (!sessionId || !isAuthenticated) return;
+    try {
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCourseName(data.course);
+        setPendingLogs(data.logs.filter((l: Log) => l.status === 'pending_override'));
+      }
+    } catch (error) { console.error("Failed to fetch data"); }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchPendingRequests();
+      const interval = setInterval(fetchPendingRequests, 3000);
+      return () => clearInterval(interval);
     }
+  }, [isAuthenticated, sessionId]);
 
-    const { data, error } = await supabase
-      .from('lecture_sessions')
-      .insert([{
-        course_code: courseCodeToSave, 
-        anchor_latitude: body.latitude || body.lat, 
-        anchor_longitude: body.longitude || body.lng, 
-        is_active: true 
-      }])
-      .select('session_id') 
-      .single();
+  const handleApprove = async (matricNumber: string) => {
+    setIsProcessing(matricNumber);
+    try {
+      await fetch('/api/override-attendance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber })
+      });
+      fetchPendingRequests();
+    } catch (err) { alert("Failed to approve."); } 
+    finally { setIsProcessing(null); }
+  };
 
-    if (error) {
-      console.error("Supabase Insert Error:", error);
-      throw error;
-    }
-
-    return NextResponse.json({ sessionId: data.session_id });
-    
-  } catch (err: any) {
-    console.error("Critical API Error:", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  if (!sessionId) {
+    return <div className="p-8 text-center text-red-500 font-bold">Invalid Link. Missing Session ID.</div>;
   }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 font-sans">
+        <div className="max-w-sm w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-8 text-center">
+          <div className="bg-[#2563EB] text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-md">
+            <KeyRound size={32} />
+          </div>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Class Rep Access</h2>
+          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 4-digit session PIN provided by the lecturer.</p>
+          
+          <input 
+            type="text" 
+            maxLength={4}
+            placeholder="• • • •" 
+            value={passcode} 
+            onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ''))} 
+            onKeyDown={(e) => e.key === 'Enter' && verifyPasscode()}
+            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.5em]" 
+          />
+          {error && <p className="text-red-500 text-sm font-bold mt-3">{error}</p>}
+          
+          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 4} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
+            {isVerifying ? <Loader2 className="animate-spin" size={20} /> : "Unlock Portal"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-6 font-sans">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="bg-[#2563EB] rounded-2xl p-6 text-white shadow-md flex justify-between items-center">
+          <div>
+            <div className="flex items-center gap-2 mb-1"><ShieldCheck size={20} className="text-blue-200" /><span className="text-xs font-bold text-blue-200 uppercase tracking-wider">Class Rep Terminal</span></div>
+            <h1 className="text-2xl font-extrabold tracking-tight">{courseName}</h1>
+          </div>
+          <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm text-center">
+            <p className="text-2xl font-black">{pendingLogs.length}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-200">Pending</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <Hand size={18} className="text-orange-500" />
+            <h3 className="font-bold text-gray-700">Raised Hands</h3>
+          </div>
+
+          <div className="divide-y divide-gray-50">
+            {pendingLogs.length === 0 ? (
+              <div className="p-12 text-center">
+                <CheckCircle size={40} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-bold">No pending appeals.</p>
+                <p className="text-xs text-gray-400 mt-1">Class is running smoothly.</p>
+              </div>
+            ) : (
+              pendingLogs.map((log) => (
+                <div key={log.id} className="p-4 sm:px-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                  <div>
+                    <p className="font-extrabold text-gray-900 text-lg">{log.matricNumber}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">{log.time}</p>
+                  </div>
+                  <button 
+                    onClick={() => handleApprove(log.matricNumber)} 
+                    disabled={isProcessing === log.matricNumber}
+                    className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm hover:bg-green-100 transition-all disabled:opacity-50"
+                  >
+                    {isProcessing === log.matricNumber ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                    Accept
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
-</file>
 
-<file path="app/api/dashboard-data/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-
-    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
-
-    // 1. Get the session directly from the CORRECT table (lecture_sessions)
-    const { data: session, error: sessionError } = await supabase
-      .from('lecture_sessions')
-      .select('is_active, course_code')
-      .eq('session_id', sessionId) // Matching the correct primary key
-      .single();
-    
-    if (sessionError) {
-      console.error("Dashboard API Error fetching session:", sessionError.message);
-    }
-
-    // 2. The course code (e.g. "GST401") is already in the row! No extra lookup needed.
-    const courseName = session?.course_code || "Unknown Course";
-
-    // 3. Get the ledger
-    const { data: logs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('check_in_time', { ascending: false });
-
-    return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true, // Map the boolean correctly
-      logs: (logs || []).map((l: any) => ({
-        id: l.id,
-        matricNumber: l.matric_number,
-        status: l.status,
-        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }))
-    });
-  } catch (e: any) {
-    console.error("Dashboard Data Fatal Error:", e.message);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
-  }
+// THE SUSPENSE WRAPPER FIX
+export default function ClassRepPortal() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
+      <RepPortalContent />
+    </Suspense>
+  );
 }
 </file>
 
@@ -1557,6 +1557,96 @@ export default function LecturerLogin() {
 }
 </file>
 
+<file path="app/api/create-session/route.ts">
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const courseCodeToSave = body.courseCode || body.course_code;
+
+    if (!courseCodeToSave) {
+      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
+    }
+
+    // Generate a random 4-digit passcode for the Class Rep
+    const repPasscode = Math.floor(1000 + Math.random() * 9000).toString();
+
+    const { data, error } = await supabase
+      .from('lecture_sessions')
+      .insert([{
+        course_code: courseCodeToSave, 
+        anchor_latitude: body.latitude || body.lat, 
+        anchor_longitude: body.longitude || body.lng, 
+        is_active: true,
+        rep_passcode: repPasscode
+      }])
+      .select('session_id') 
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ sessionId: data.session_id });
+    
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
+
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code, rep_passcode')
+      .eq('session_id', sessionId)
+      .single();
+    
+    if (sessionError) console.error("Session Error:", sessionError.message);
+
+    const courseName = session?.course_code || "Unknown Course";
+
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
+
+    return NextResponse.json({
+      course: courseName,
+      isActive: session?.is_active === true,
+      repPasscode: session?.rep_passcode || 'N/A', // Send passcode to frontend
+      logs: (logs || []).map((l: any) => ({
+        id: l.id,
+        matricNumber: l.matric_number,
+        status: l.status,
+        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }))
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/override-attendance/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -1627,6 +1717,319 @@ export async function POST(request: Request) {
     
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/api/webauthn/register/generate/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { generateRegistrationOptions } from '@simplewebauthn/server';
+import { createClient } from '@supabase/supabase-js';
+import { rpName, rpID } from '../../../../../utils/webauthn';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+
+export async function POST(request: Request) {
+  try {
+    const { matricNumber, hardwareFingerprint } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    // --- THE INCOGNITO / PROXY KILLER ---
+    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
+      const { data: existingDevice } = await supabase
+        .from('user_devices')
+        .select('matric_number')
+        .eq('device_hash', hardwareFingerprint)
+        .single();
+
+      if (existingDevice && existingDevice.matric_number !== cleanMatric) {
+        return NextResponse.json(
+          { error: `Hardware Block: This physical device is permanently bound to ${existingDevice.matric_number}. Proxy registration denied.` },
+          { status: 403 }
+        );
+      }
+    }
+
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: new TextEncoder().encode(cleanMatric),
+      userName: cleanMatric,
+      authenticatorSelection: {
+        // REMOVED: authenticatorAttachment: 'platform' 
+        // This is the fix for iPhones without iCloud Keychain active.
+        residentKey: 'required',
+        userVerification: 'required', 
+      },
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('webauthn_challenge', options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 300,
+      path: '/',
+    });
+
+    return NextResponse.json(options);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/dashboard/courses/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../../utils/supabase';
+import { BookOpen, Users, Plus, Loader2, FileSpreadsheet, Layers, Download } from 'lucide-react';
+interface Course {
+  id: string;
+  course_code: string;
+  roster: string[];
+}
+
+export default function CourseManagement() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newCourseCode, setNewCourseCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const fetchCourses = async () => {
+    setIsLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setCourses(data);
+    }
+    setIsLoading(false);
+  };
+
+  const createCourse = async () => {
+    if (!newCourseCode.trim()) return;
+    setIsCreating(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { error } = await supabase.from('courses').insert([{
+      lecturer_id: session.user.id,
+      course_code: newCourseCode.toUpperCase(),
+      roster: []
+    }]);
+
+    if (!error) {
+      setNewCourseCode('');
+      fetchCourses();
+    } else {
+      alert("Failed to create course.");
+    }
+    setIsCreating(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingId(courseId);
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      const csvText = event.target?.result as string;
+      const rawMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase());
+      const cleanMatrics = rawMatrics.filter(m => m.length > 5 && !m.includes('MATRIC'));
+      
+      const combinedRoster = [...(existingRoster || []), ...cleanMatrics];
+      const uniqueMatrics = Array.from(new Set(combinedRoster));
+
+      const { error } = await supabase
+        .from('courses')
+        .update({ roster: uniqueMatrics })
+        .eq('id', courseId);
+
+      if (!error) {
+        alert(`Success! Course roster now has ${uniqueMatrics.length} total students.`);
+        fetchCourses();
+      } else {
+        alert("Failed to upload roster.");
+      }
+      setUploadingId(null);
+      e.target.value = '';
+    };
+
+    reader.readAsText(file);
+  };
+
+  // --- THE NEW MASTER EXPORT LOGIC ---
+  const downloadMasterReport = async (courseCode: string, courseId: string) => {
+    setDownloadingId(courseId);
+    try {
+      const response = await fetch(`/api/master-export?courseCode=${courseCode}`);
+      
+      if (response.status === 404) {
+        alert("No classes have been held for this course yet.");
+        setDownloadingId(null);
+        return;
+      }
+
+      if (!response.ok) throw new Error("Failed to fetch report");
+      
+      const data = await response.json();
+      const report = data.report;
+
+      if (!report || report.length === 0) {
+        alert("No attendance data found for this course.");
+        setDownloadingId(null);
+        return;
+      }
+
+      // Build the CSV Header
+      const header = [
+        [`MASTER SEMESTER REPORT: ${courseCode}`],
+        [`Generated on: ${new Date().toLocaleDateString()}`],
+        [`Total Classes Held: ${data.totalClasses}`],
+        [], 
+        ["Matric Number", "Classes Attended", `Total Classes`, "Percentage (%)", "Exam Eligible (>=70%)"]
+      ];
+
+      // Map the Data
+      const rows = report.map((student: any) => [
+        student.matricNumber, 
+        student.attended, 
+        student.totalClasses, 
+        student.percentage, 
+        student.eligible
+      ]);
+
+      const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `${courseCode.replace(/\s+/g, '_')}_Master_Attendance.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (e) {
+      alert("Failed to generate master report. Check your network.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  return (
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+            <BookOpen className="text-[#2563EB]" size={28} /> Course Registry
+          </h1>
+          <p className="text-gray-500 mt-1 font-medium">Create your courses, merge rosters, and download semester reports.</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider">Add New Course</h3>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input 
+            type="text" 
+            placeholder="Course Code (e.g., MTH 101)" 
+            value={newCourseCode}
+            onChange={(e) => setNewCourseCode(e.target.value)}
+            className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-lg focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all uppercase"
+          />
+          <button 
+            onClick={createCourse}
+            disabled={isCreating || !newCourseCode.trim()}
+            className="whitespace-nowrap bg-gray-900 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+          >
+            {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+            {isCreating ? "Creating..." : "Create Course"}
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
+        </div>
+      ) : courses.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+          <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">No courses established yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {courses.map(course => (
+            <div key={course.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-200 transition-all flex flex-col justify-between">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">{course.course_code}</h2>
+                  <p className="text-xs font-bold text-green-600 mt-1 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md w-fit">
+                    Active Registry
+                  </p>
+                </div>
+                <div className="bg-blue-50 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-blue-100">
+                  <Users size={16} className="text-[#2563EB]" />
+                  <span className="font-bold text-[#2563EB]">{course.roster?.length || 0}</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                
+                {/* Roster Upload Button */}
+                <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 transition-all">
+                  {uploadingId === course.id ? (
+                    <Loader2 size={16} className="animate-spin text-[#2563EB]" />
+                  ) : (
+                    <FileSpreadsheet size={16} className="text-[#2563EB]" />
+                  )}
+                  {uploadingId === course.id ? "Syncing Roster..." : "Merge CSV Class List"}
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    className="hidden" 
+                    onChange={(e) => handleFileUpload(e, course.id, course.roster)}
+                    disabled={uploadingId === course.id}
+                  />
+                </label>
+
+                {/* Master Export Button */}
+                <button 
+                  onClick={() => downloadMasterReport(course.course_code, course.id)}
+                  disabled={downloadingId === course.id}
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl font-bold text-sm hover:bg-green-100 transition-all disabled:opacity-50"
+                >
+                  {downloadingId === course.id ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  {downloadingId === course.id ? "Compiling Semester..." : "Download Final Gradebook"}
+                </button>
+                
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 </file>
 
@@ -1823,7 +2226,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse } = body;
+    const { matricNumber, authResponse, hardwareFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     const cookieStore = await cookies();
@@ -1841,7 +2244,6 @@ export async function POST(request: Request) {
     if (verification.verified && verification.registrationInfo) {
       const { credential } = verification.registrationInfo;
 
-      // IMMUNE POSTGRES FORMAT: Prefixing with \x prevents all database corruption
       const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
       const immuneKey = `\\x${hex}`;
 
@@ -1853,6 +2255,7 @@ export async function POST(request: Request) {
           public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
+          device_hash: hardwareFingerprint || 'unknown-hardware', // --- THE FIX: LOCK IT TO DB ---
           created_at: new Date().toISOString()
         }, { onConflict: 'matric_number' });
 
@@ -1896,7 +2299,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 1. GET THE LECTURER'S SESSION DATA
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code')
@@ -1906,22 +2308,15 @@ export async function POST(request: Request) {
     if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
     if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
 
-    // 2. SMART ROSTER ENFORCEMENT
     let roster: string[] = [];
     if (session.course_code) {
       const { data: courseData } = await supabase.from('courses').select('roster').eq('course_code', session.course_code).single();
       if (courseData && courseData.roster) roster = courseData.roster;
     }
     
-    if (roster.length > 0 && !roster.includes(cleanMatric)) {
-      return NextResponse.json({ message: 'Unregistered: Your matric number is not on the official class list.' }, { status: 403 });
-    }
-
-    // 3. PREVENT DUPLICATES
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
-    // 4. HARDWARE GHOST CATCHER (Browser Wipe Bypass Prevention)
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -1930,7 +2325,6 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint);
         
       if (ghostLogs && ghostLogs.length > 0) {
-        // They wiped their browser to check someone else in. Flag them instantly.
         await supabase.from('attendance_logs').insert([{
           session_id: sessionId,
           matric_number: cleanMatric,
@@ -1942,26 +2336,38 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. THE SPOOF CATCHER MATH
     let isSpoofed = false;
     let totalDrift = 0;
-    const initialLat = telemetry[0].lat;
-    const initialLng = telemetry[0].lng;
+    let bestPing = telemetry[0]; 
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
       if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
       if (ping.alt === 0) isSpoofed = true;
+      
       if (i > 0) {
         const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
         totalDrift += drift;
+      }
+      if (ping.acc < bestPing.acc) {
+        bestPing = ping;
       }
     }
 
     if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    // 6. THE GEOFENCE (Expanded to 150 meters for large halls and window overflow)
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, initialLat, initialLng);
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
+    
+    // --- THE STRICT DISTANCE FIREWALL ---
+    // Anyone further than 500 meters gets blocked entirely. No database entry, no dashboard flag.
+    if (distanceToLecturer > 500) {
+      return NextResponse.json({ 
+        status: 'rejected', 
+        distance: Math.round(distanceToLecturer), 
+        message: "out of bounds" // Simple flag for the frontend to read
+      }, { status: 403 });
+    }
+
     let finalStatus = 'absent';
     let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
 
@@ -1975,12 +2381,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. WRITE TO THE LEDGER
     await supabase.from('attendance_logs').insert([{
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry }),
+      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }),
       device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 
@@ -1998,33 +2403,18 @@ export async function POST(request: Request) {
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, User, ChevronDown, Archive, Hand } from 'lucide-react';
+import { 
+  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
+  RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
+  User, ChevronDown, Archive, Hand, Trash2, KeyRound 
+} from 'lucide-react';
 
-// Directly initialize Supabase to prevent Next.js pathing errors
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
-interface Log {
-  id: string;
-  matricNumber: string;
-  status: string;
-  time: string;
-}
-
-interface DashboardData {
-  course: string;
-  isActive: boolean;
-  logs: Log[];
-}
-
-interface LecturerProfile {
-  full_name: string;
-  department: string;
-}
-
-interface Course {
-  id: string;
-  course_code: string;
-}
+interface Log { id: string; matricNumber: string; status: string; time: string; }
+interface DashboardData { course: string; isActive: boolean; repPasscode: string; logs: Log[]; }
+interface LecturerProfile { full_name: string; department: string; }
+interface Course { id: string; course_code: string; }
 
 export default function LecturerDashboard() {
   const router = useRouter();
@@ -2038,10 +2428,11 @@ export default function LecturerDashboard() {
   const [setupError, setSetupError] = useState('');
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // --- VAULT STATE ---
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [pastSessions, setPastSessions] = useState<any[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -2049,10 +2440,9 @@ export default function LecturerDashboard() {
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      if (!session) { 
         window.location.href = '/login'; 
-        return;
+        return; 
       }
 
       const { data: profileData } = await supabase
@@ -2062,10 +2452,7 @@ export default function LecturerDashboard() {
         .single();
 
       if (profileData) {
-        setProfile({
-          full_name: profileData.full_name,
-          department: profileData.department
-        });
+        setProfile({ full_name: profileData.full_name, department: profileData.department });
       }
 
       const { data: courseData } = await supabase
@@ -2100,88 +2487,92 @@ export default function LecturerDashboard() {
     }
   };
 
-  useEffect(() => {
-    if (viewMode === 'history') {
-      loadHistory();
-    }
+  useEffect(() => { 
+    if (viewMode === 'history') loadHistory(); 
   }, [viewMode, selectedCourseId]);
 
-  // --- BULLETPROOF GPS WAKEUP LOGIC ---
   const startNewSession = () => {
-    if (!selectedCourseId) {
-      setSetupError("Please register a course first.");
-      return;
+    if (!selectedCourseId) { 
+      setSetupError("Please register a course first."); 
+      return; 
     }
     setIsStarting(true);
-    setSetupError("Waking up GPS hardware... Waiting for satellite lock.");
+    setSetupError("Waking up GPS hardware...");
     
-    if (!navigator.geolocation) {
-      setSetupError("Location services not supported by your browser.");
-      setIsStarting(false);
-      return;
+    if (!navigator.geolocation) { 
+      setSetupError("Location services not supported by your browser."); 
+      setIsStarting(false); 
+      return; 
     }
     
     let watchId: number;
+    let bestLat = 0;
+    let bestLng = 0;
+    let bestAcc = 9999;
+
+    const executeSessionCreation = async (lat: number, lng: number) => {
+      setSetupError("Coordinates secured. Creating session...");
+      try {
+        const response = await fetch('/api/create-session', {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: selectedCourseId, 
+            courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
+            latitude: lat, 
+            longitude: lng
+          })
+        });
+        if (response.ok) {
+          const result = await response.json();
+          localStorage.setItem('active_attendance_session', result.sessionId);
+          setActiveSessionId(result.sessionId); 
+          setViewMode('live'); 
+        } else { 
+          setSetupError("Failed to create session on server."); 
+        }
+      } catch (error) { 
+        setSetupError("Network error. Please try again."); 
+      } finally { 
+        setIsStarting(false); 
+      }
+    };
     
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON.");
-      setIsStarting(false);
-    }, 25000); // Generous 25-second timeout
+      if (bestAcc !== 9999) {
+        executeSessionCreation(bestLat, bestLng);
+      } else { 
+        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON."); 
+        setIsStarting(false); 
+      }
+    }, 8000); 
 
     watchId = navigator.geolocation.watchPosition(
-      async (position) => {
-        // --- THE FIX: Ignore Cell Towers ---
-        if (position.coords.accuracy > 60) {
-            setSetupError(`Calibrating... Current accuracy: ${Math.round(position.coords.accuracy)}m. Please wait.`);
-            return; // Ignore this ping and wait for the next one
+      (position) => {
+        const currentAcc = position.coords.accuracy;
+        if (currentAcc < bestAcc) {
+            bestAcc = currentAcc;
+            bestLat = position.coords.latitude;
+            bestLng = position.coords.longitude;
+            setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
         }
-
-        clearTimeout(timeoutId);
-        navigator.geolocation.clearWatch(watchId); 
-        
-        setSetupError("Coordinates secured. Creating session...");
-        try {
-          const response = await fetch('/api/create-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              courseId: selectedCourseId,
-              courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude
-            })
-          });
-          if (response.ok) {
-            const result = await response.json();
-            localStorage.setItem('active_attendance_session', result.sessionId);
-            setActiveSessionId(result.sessionId); 
-            setViewMode('live'); 
-          } else {
-            setSetupError("Failed to create session on server.");
-          }
-        } catch (error) {
-          setSetupError("Network error. Please try again.");
-        } finally {
-          setIsStarting(false);
+        if (bestAcc <= 60) {
+            clearTimeout(timeoutId);
+            navigator.geolocation.clearWatch(watchId); 
+            executeSessionCreation(bestLat, bestLng);
         }
       },
       (error) => {
         clearTimeout(timeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        
         if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
         else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
         else if (error.code === 3) setSetupError("Timeout: GPS took too long indoors.");
         else setSetupError("Failed to grab GPS.");
-        
         setIsStarting(false);
       },
-      { 
-        enableHighAccuracy: true, // Forces physical GPS chip
-        maximumAge: 0,            // Rejects cached locations
-        timeout: 25000 
-      }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
     );
   };
 
@@ -2202,8 +2593,8 @@ export default function LecturerDashboard() {
         setData(result);
         setLastRefreshed(new Date().toLocaleTimeString());
       }
-    } catch (error) {
-      console.error("Failed to fetch dashboard data");
+    } catch (error) { 
+      console.error("Failed to fetch data"); 
     }
   };
 
@@ -2218,71 +2609,86 @@ export default function LecturerDashboard() {
   const handleManualOverride = async (targetMatric: string) => {
     try {
       if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
-      
       const safeMatric = String(targetMatric || "").trim();
       if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
 
       setIsOverriding(true);
-
       const response = await fetch('/api/override-attendance', {
-        method: 'POST',
+        method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric })
       });
-
-      if (response.ok) {
+      if (response.ok) { 
         setManualMatric(''); 
         fetchDashboardData(); 
-      } else {
-        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`);
+      } else { 
+        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`); 
       }
-    } catch (err: any) {
-      alert("💥 CRITICAL CRASH: " + err.message);
-    } finally {
-      setIsOverriding(false);
+    } catch (err: any) { 
+      alert("💥 CRITICAL CRASH: " + err.message); 
+    } finally { 
+      setIsOverriding(false); 
+    }
+  };
+
+  const handleDeviceReset = async (targetMatric: string) => {
+    const safeMatric = String(targetMatric || "").trim();
+    if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
+    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
+
+    setIsResetting(true);
+    try {
+      const response = await fetch('/api/reset-device', {
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: safeMatric })
+      });
+      if (response.ok) { 
+        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); 
+        setManualMatric(''); 
+      } else { 
+        const errorData = await response.json(); 
+        alert(`⚠️ Failed: ${errorData.message}`); 
+      }
+    } catch (err: any) { 
+      alert("💥 Network Error."); 
+    } finally { 
+      setIsResetting(false); 
     }
   };
 
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
-    if (!logsToExport || logsToExport.length === 0) {
-      alert("No check-ins were recorded during this session.");
-      return;
+    if (!logsToExport || logsToExport.length === 0) { 
+      alert("No check-ins recorded."); 
+      return; 
     }
-    
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
-
     const header = [
-      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
-      ["Course Code", courseName],
-      ["Date Generated", dateStr],
-      ["Total Present", verifiedCount],
-      ["Total Records Logged", logsToExport.length],
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`], 
+      ["Course Code", courseName], 
+      ["Date Generated", dateStr], 
+      ["Total Present", verifiedCount], 
+      ["Total Records Logged", logsToExport.length], 
       [], 
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
-
     const rows = logsToExport
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [
-        log.matricNumber, 
-        log.status.toUpperCase(), 
-        log.time, 
-        "Verified via Secure Platform"
-      ]);
-
+      .map(log => [log.matricNumber, log.status.toUpperCase(), log.time, "Verified via Secure Platform"]);
+    
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    const link = document.createElement("a"); 
+    link.href = URL.createObjectURL(blob); 
     link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
-    document.body.appendChild(link);
-    link.click();
+    document.body.appendChild(link); 
+    link.click(); 
     document.body.removeChild(link);
   };
 
-  const exportLiveCSV = () => {
-    if (!data) return;
-    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
+  const exportLiveCSV = () => { 
+    if (!data) return; 
+    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false); 
   };
 
   const downloadPastSession = async (sessionId: string, dateString: string) => {
@@ -2291,46 +2697,47 @@ export default function LecturerDashboard() {
       const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
-      
       generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
-    } catch (e) {
-      alert("Failed to download historical records. Check network.");
-    } finally {
-      setDownloadingId(null);
+    } catch (e) { 
+      alert("Failed to download. Check network."); 
+    } finally { 
+      setDownloadingId(null); 
     }
   };
 
-  const copyInviteLink = () => {
+  // --- UNIFIED COPY FUNCTION ---
+  const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    navigator.clipboard.writeText(link);
-    alert("Check-in link copied! Send this to the students.");
+    const passcode = data?.repPasscode || 'N/A';
+    
+    const clipboardText = `📌 Attendance Link:\n${link}\n\n🔑 Class Rep PIN: ${passcode}\n(If you are the Class Rep, open the link and click 'Class Rep Login' at the bottom)`;
+    
+    navigator.clipboard.writeText(clipboardText);
+    alert("Session info copied! Send this to the Class Rep.");
   };
 
   if (!activeSessionId || viewMode === 'history') {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center">
-          
           <div className="bg-[#2563EB] text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
             <User size={40} strokeWidth={2.5} />
           </div>
-          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            Welcome, {profile?.full_name || 'Lecturer'}
-          </h2>
+          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Welcome, {profile?.full_name || 'Lecturer'}</h2>
           <p className="text-[#2563EB] mt-1 text-xs font-bold uppercase tracking-widest mb-6 bg-blue-50 inline-block px-3 py-1 rounded-full">
             {profile?.department || 'Faculty Member'}
           </p>
 
           <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
             <button 
-              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
+              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }} 
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Start Class
             </button>
             <button 
-              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }}
+              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} 
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Past Records
@@ -2346,8 +2753,8 @@ export default function LecturerDashboard() {
           ) : (
             <div className="relative mb-6">
               <select 
-                value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
+                value={selectedCourseId} 
+                onChange={(e) => setSelectedCourseId(e.target.value)} 
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer"
               >
                 {courses.map(course => (
@@ -2362,15 +2769,12 @@ export default function LecturerDashboard() {
 
           {viewMode === 'live' ? (
             <div>
-              <p className="text-gray-500 text-sm font-medium mb-4">
-                Drop a dynamic geofence at your current location.
-              </p>
               <button 
-                onClick={startNewSession}
-                disabled={isStarting || courses.length === 0}
+                onClick={startNewSession} 
+                disabled={isStarting || courses.length === 0} 
                 className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
               >
-                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
+                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} 
                 {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
               </button>
               {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
@@ -2378,7 +2782,7 @@ export default function LecturerDashboard() {
           ) : (
             <div className="text-left border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/30">
               <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                 <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Archive size={16}/> Vault Archive</h3>
               </div>
               <div className="max-h-60 overflow-y-auto">
                 {pastSessions.length === 0 ? (
@@ -2391,16 +2795,14 @@ export default function LecturerDashboard() {
                           <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
                           <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
                         </div>
-                        
                         <button 
-                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
-                          disabled={downloadingId === session.session_id}
+                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())} 
+                          disabled={downloadingId === session.session_id} 
                           className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
                         >
-                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} 
                           {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
                         </button>
-                        
                       </div>
                     ))}
                   </div>
@@ -2422,9 +2824,7 @@ export default function LecturerDashboard() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <ShieldCheck size={20} className="text-[#2563EB]" />
-                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">
-                  CampusCheck • {profile?.full_name || 'Faculty'}
-                </span>
+                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
               <div className="flex items-center gap-2 mt-2">
@@ -2450,10 +2850,10 @@ export default function LecturerDashboard() {
 
           <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
             <button 
-              onClick={copyInviteLink} 
+              onClick={copySessionInfo} 
               className="flex justify-center items-center gap-2 text-sm font-bold bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all"
             >
-              <Copy size={16} /> Copy Link
+              <Copy size={16} /> Share Session Info
             </button>
             <button 
               onClick={endSession} 
@@ -2466,7 +2866,7 @@ export default function LecturerDashboard() {
 
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <UserPlus size={16} className="text-[#2563EB]"/> Manual Override
+            <UserPlus size={16} className="text-[#2563EB]"/> Student Management
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input 
@@ -2477,14 +2877,25 @@ export default function LecturerDashboard() {
               onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
               className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
             />
-            <button 
-              onClick={() => handleManualOverride(manualMatric)} 
-              disabled={!manualMatric.trim() || isOverriding} 
-              className="w-full sm:w-auto whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
-            >
-              {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-              {isOverriding ? "Forcing..." : "Force Check-In"}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => handleManualOverride(manualMatric)} 
+                disabled={!manualMatric.trim() || isOverriding} 
+                className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
+              >
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} 
+                {isOverriding ? "Forcing..." : "Force Check-In"}
+              </button>
+              <button 
+                onClick={() => handleDeviceReset(manualMatric)} 
+                disabled={!manualMatric.trim() || isResetting} 
+                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2" 
+                title="Wipe hardware lock if student bought a new phone"
+              >
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} 
+                Wipe Biometrics
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2562,7 +2973,7 @@ export default function LecturerDashboard() {
 <file path="components/StudentCheckIn.tsx">
 'use client';
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight } from 'lucide-react';
+import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, RefreshCw, KeyRound } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
@@ -2578,7 +2989,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // --- HARDWARE FINGERPRINT GENERATOR ---
   const generateHardwareFingerprint = async () => {
     try {
       const nav = window.navigator as any;
@@ -2650,7 +3060,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
-      // LAYER 1: The Browser Anchor
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
       if (existingAnchor && existingAnchor !== matricNumber) {
         setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
@@ -2659,18 +3068,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
 
       setStatus('locating');
+      const hf = await generateHardwareFingerprint();
+
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber })
+        body: JSON.stringify({ matricNumber, hardwareFingerprint: hf })
       });
+      
       const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
+      if (!genRes.ok || options.error) {
+         throw new Error(options.error || "Server rejected registration.");
+      }
 
       const attResp = await startRegistration(options);
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp })
+        body: JSON.stringify({ matricNumber, authResponse: attResp, hardwareFingerprint: hf })
       });
       const verifyResult = await verifyRes.json();
       
@@ -2718,38 +3132,34 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     let pings: Telemetry[] = [];
     let watchId: number;
-    let bestAccuracy = 9999;
+    let bestAcc = 9999;
     
-    // Increased to 25 seconds
     const timeoutId = setTimeout(() => {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("Couldn't get a strong GPS lock indoors. Try moving slightly."); setStatus('failed'); }
-    }, 25000);
+      else { setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS."); setStatus('failed'); }
+    }, 8000); 
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        if (position.coords.accuracy < bestAccuracy) bestAccuracy = position.coords.accuracy;
-
-        // --- THE FIX: Ignore Cell Towers ---
-        if (position.coords.accuracy > 60) {
-            return; // Ignore garbage pings
-        }
+        const currentAcc = position.coords.accuracy;
+        if (currentAcc < bestAcc) bestAcc = currentAcc;
 
         pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
-        if (pings.length >= 3) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); sendPayloadToVercel(pings); }
+        
+        if (pings.length >= 3 && bestAcc <= 100) { 
+            clearTimeout(timeoutId); 
+            navigator.geolocation.clearWatch(watchId); 
+            sendPayloadToVercel(pings); 
+        }
       },
       (error) => {
         clearTimeout(timeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS Blocked (Code ${error.code})`); setStatus('failed'); }
+        else { setErrorMessage(`GPS Blocked (Code ${error.code}). Pull down your menu and turn on Location.`); setStatus('failed'); }
       },
-      { 
-        enableHighAccuracy: true, 
-        maximumAge: 0,            
-        timeout: 25000 // Increased to 25 seconds
-      }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
     );
   };
 
@@ -2768,8 +3178,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration(); 
         setStatus('success'); 
       } 
-      else if (result.status === 'flagged') { 
-        setErrorMessage(result.message || "Anomaly detected. Please see the lecturer."); 
+      else if (result.status === 'flagged' || response.status === 403) { 
+        setErrorMessage(result.message || "Verification failed."); 
         setStatus('failed'); 
       } 
       else { 
@@ -2890,15 +3300,35 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
 
         {status === 'failed' && (
-          <div className="py-4 text-center">
+          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">{errorMessage}</p>
+            
+            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
+              {errorMessage.includes("out of bounds") 
+                ? "You are too far away. You must be inside the lecture hall to check in." 
+                : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down")
+                ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again."
+                : errorMessage}
+            </p>
+
             <div className="mt-6 space-y-3">
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 active:scale-[0.98] transition-all shadow-sm">Start Over</button>
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
-                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (Digital Appeal)
+              {!errorMessage.includes("out of bounds") && (
+                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md">
+                  <RefreshCw size={18} /> Try Again (Reset GPS)
+                </button>
+              )}
+              
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+                Start Over Completely
               </button>
+
+              {!errorMessage.includes("out of bounds") && (
+                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} 
+                  Raise Hand (I am in the hall)
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -2913,9 +3343,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
       </div>
       
-      <p className="text-center text-xs font-semibold text-gray-400 mt-8">
-        Make sure you are physically inside the lecture hall before checking in.
-      </p>
+      <div className="mt-8 text-center space-y-4">
+        <p className="text-xs font-semibold text-gray-400">
+          Make sure you are physically inside the lecture hall before checking in.
+        </p>
+        
+        {/* THE CLASS REP BACKDOOR LINK */}
+        <a 
+          href={`/rep?sessionId=${sessionId}`} 
+          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"
+        >
+          <KeyRound size={12} /> Class Rep Login
+        </a>
+      </div>
     </div>
   );
 }

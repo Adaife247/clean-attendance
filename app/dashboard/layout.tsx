@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
-import { Radio, BarChart3, BookOpen, LogOut, ShieldCheck, Menu, X } from 'lucide-react';
+import { Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -15,10 +15,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = '/login';
   };
 
+  // --- UPDATED NAVIGATION TABS ---
   const navItems = [
     { name: 'Live Radar', href: '/dashboard', icon: Radio },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Course Roster', href: '/dashboard/courses', icon: BookOpen },
+    { name: 'Student Management', href: '/dashboard/courses', icon: Users },
+    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
   ];
 
   return (
@@ -86,7 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Main Content Area - This automatically renders your existing page.tsx! */}
+      {/* Main Content Area */}
       <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
         {children}
       </main>

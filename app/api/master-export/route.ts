@@ -7,19 +7,33 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const courseCode = searchParams.get('courseCode');
+    
+    // NEW: Capture the optional date filters
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
 
     if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
 
-    // 1. Get all sessions for this specific course
-    const { data: sessions, error: sessionError } = await supabase
+    // 1. Build the dynamic session query
+    let sessionQuery = supabase
       .from('lecture_sessions')
       .select('session_id')
       .ilike('course_code', courseCode);
 
+    // Apply date filters if they exist
+    if (startDate) {
+      sessionQuery = sessionQuery.gte('created_at', `${startDate}T00:00:00.000Z`);
+    }
+    if (endDate) {
+      sessionQuery = sessionQuery.lte('created_at', `${endDate}T23:59:59.999Z`);
+    }
+
+    const { data: sessions, error: sessionError } = await sessionQuery;
+
     if (sessionError) throw sessionError;
 
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ message: "No sessions recorded for this course yet." }, { status: 404 });
+      return NextResponse.json({ message: "No sessions recorded for this course in this timeframe." }, { status: 404 });
     }
 
     const sessionIds = sessions.map(s => s.session_id);
@@ -34,24 +48,21 @@ export async function GET(request: Request) {
 
     const roster = courseData?.roster || [];
 
-    // 3. Get all verified attendance logs for the entire semester
+    // 3. Get all verified attendance logs
     const { data: logs, error: logError } = await supabase
       .from('attendance_logs')
       .select('matric_number, status')
       .in('session_id', sessionIds)
-      .eq('status', 'verified'); // Only count verified attendances!
+      .eq('status', 'verified'); 
 
     if (logError) throw logError;
 
     // 4. Calculate Attendance
     const attendanceMap = new Map<string, number>();
 
-    // Start by assuming everyone on the roster has 0 attendance
     roster.forEach((matric: string) => attendanceMap.set(matric, 0));
 
-    // Now loop through the logs and increment their scores
     (logs || []).forEach(log => {
-      // If a student checked in but wasn't on the official roster, add them now
       if (!attendanceMap.has(log.matric_number)) {
          attendanceMap.set(log.matric_number, 0);
       }
@@ -66,11 +77,10 @@ export async function GET(request: Request) {
         totalClasses,
         attended,
         percentage,
-        eligible: percentage >= 70 ? 'YES' : 'NO' // Exam eligibility flag
+        eligible: percentage >= 70 ? 'YES' : 'NO' 
       };
     });
 
-    // Sort alphabetically by Matric Number
     report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
 
     return NextResponse.json({

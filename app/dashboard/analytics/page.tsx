@@ -1,7 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { BarChart3, TrendingUp, AlertTriangle, Users, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { 
+  BarChart3, 
+  AlertTriangle, 
+  Calendar, 
+  Download, 
+  Loader2, 
+  FileSpreadsheet, 
+  CheckCircle 
+} from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!, 
@@ -11,130 +19,119 @@ const supabase = createClient(
 export default function AnalyticsPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
-  const [stats, setStats] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  
+  const [reportData, setReportData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Fetch available courses for the dropdown
   useEffect(() => {
     const fetchCourses = async () => {
-      try {
-        const { data, error } = await supabase.from('courses').select('id, course_code');
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          setCourses(data);
-          setSelectedCourseCode(data[0].course_code); 
-        } else {
-          setIsLoading(false);
-        }
-      } catch (err: any) {
-        console.error("Error fetching courses:", err);
-        setErrorMessage("Could not load courses.");
-        setIsLoading(false);
+      const { data } = await supabase.from('courses').select('id, course_code');
+      if (data && data.length > 0) {
+        setCourses(data);
+        setSelectedCourseCode(data[0].course_code); 
       }
     };
     fetchCourses();
   }, []);
 
+  // Fetch the report data whenever the course or dates change
   useEffect(() => {
     if (!selectedCourseCode) return;
+    fetchReportData();
+  }, [selectedCourseCode, startDate, endDate]);
 
-    const generateAnalytics = async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
+  const fetchReportData = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
+      if (startDate) url += `&startDate=${startDate}`;
+      if (endDate) url += `&endDate=${endDate}`;
+
+      const response = await fetch(url);
       
-      try {
-        // Optimized case-insensitive query
-        const { data: sessions, error: sessionError } = await supabase
-          .from('lecture_sessions')
-          .select('session_id, created_at')
-          .ilike('course_code', selectedCourseCode.trim())
-          .order('created_at', { ascending: true });
-
-        if (sessionError) throw sessionError;
-
-        if (!sessions || sessions.length === 0) {
-          setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
-          return;
-        }
-
-        const sessionIds = sessions.map(s => s.session_id);
-        const { data: logs, error: logError } = await supabase
-          .from('attendance_logs')
-          .select('matric_number, status, session_id')
-          .in('session_id', sessionIds);
-
-        if (logError) throw logError;
-
-        const safeLogs = logs || []; 
-
-        const trendData = sessions.map((session, index) => {
-          const sessionLogs = safeLogs.filter(l => l.session_id === session.session_id);
-          const verifiedCount = sessionLogs.filter(l => l.status === 'verified').length;
-          
-          const dateLabel = session.created_at 
-            ? new Date(session.created_at).toLocaleDateString() 
-            : 'Unknown Date';
-
-          return {
-            label: `Class ${index + 1}`,
-            date: dateLabel,
-            count: verifiedCount,
-            height: verifiedCount > 0 ? Math.min((verifiedCount / 100) * 100, 100) : 5 
-          };
-        });
-
-        const flaggedLogs = safeLogs.filter(l => l.status === 'flagged');
-        const flagCounts = flaggedLogs.reduce((acc: any, log) => {
-          acc[log.matric_number] = (acc[log.matric_number] || 0) + 1;
-          return acc;
-        }, {});
-
-        const flaggedStudents = Object.keys(flagCounts)
-          .map(matric => ({ matric, count: flagCounts[matric] }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5); 
-
-        const totalVerified = safeLogs.filter(l => l.status === 'verified').length;
-        const avgAttendance = Math.round(totalVerified / sessions.length);
-
-        setStats({
-          totalSessions: sessions.length,
-          avgAttendance,
-          flaggedStudents,
-          trendData
-        });
-
-      } catch (err: any) {
-        console.error("Analytics Calculation Error:", err);
-        setErrorMessage(err.message || "An error occurred fetching the data.");
-        setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
-      } finally {
+      if (response.status === 404) {
+        setReportData(null);
+        setErrorMessage("No classes found for this date range.");
         setIsLoading(false);
+        return;
       }
-    };
+      
+      if (!response.ok) throw new Error("Failed to load analytics.");
+      
+      const data = await response.json();
+      setReportData(data);
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setReportData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    generateAnalytics();
-  }, [selectedCourseCode]);
+  const handleDownload = () => {
+    if (!reportData || !reportData.report) return;
+    setIsDownloading(true);
+    
+    const header = [
+      [`OFFICIAL GRADEBOOK REPORT: ${selectedCourseCode}`],
+      [`Period: ${startDate || 'Start of Term'} to ${endDate || 'End of Term'}`],
+      [`Total Classes Held: ${reportData.totalClasses}`],
+      [], 
+      ["Matric Number", "Classes Attended", `Total Classes`, "Percentage (%)", "Exam Eligible (>=70%)"]
+    ];
+
+    const rows = reportData.report.map((s: any) => [
+      s.matricNumber, 
+      s.attended, 
+      s.totalClasses, 
+      s.percentage, 
+      s.eligible
+    ]);
+    
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${selectedCourseCode}_Gradebook_${startDate || 'All'}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setIsDownloading(false);
+  };
+
+  // Filter students who are below 70%
+  const atRiskStudents = reportData?.report?.filter((s: any) => s.eligible === 'NO') || [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* Header Area */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
           <div>
-            <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
-              <BarChart3 className="text-[#2563EB]" size={32} />
-              Historical Analytics
+            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB]" size={28} /> 
+              Analytics & Reports
             </h1>
-            <p className="text-gray-500 font-medium mt-1">Track attendance trends and identify at-risk students.</p>
+            <p className="text-gray-500 font-medium mt-1 text-sm">
+              Generate final gradebooks and monitor exam eligibility.
+            </p>
           </div>
-
           <select 
             value={selectedCourseCode} 
-            onChange={(e) => setSelectedCourseCode(e.target.value)}
-            disabled={courses.length === 0}
-            className="bg-white border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] disabled:opacity-50 cursor-pointer"
+            onChange={(e) => setSelectedCourseCode(e.target.value)} 
+            disabled={courses.length === 0} 
+            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] cursor-pointer"
           >
             {courses.length === 0 ? (
               <option>No Courses Found</option>
@@ -144,112 +141,128 @@ export default function AnalyticsPage() {
           </select>
         </div>
 
-        {errorMessage && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 font-bold flex items-center gap-2">
-            <AlertTriangle size={20} />
-            {errorMessage}
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="h-64 flex flex-col items-center justify-center space-y-4">
-            <div className="w-10 h-10 border-4 border-blue-200 border-t-[#2563EB] rounded-full animate-spin"></div>
-            <p className="font-bold text-gray-400">Crunching data...</p>
-          </div>
-        ) : !stats || stats.totalSessions === 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          <div className="h-64 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 text-gray-400 shadow-sm transition-all">
-            <Calendar size={48} className="mb-4 opacity-50 text-gray-300" />
-            <p className="font-bold text-gray-500">No lecture sessions recorded for {selectedCourseCode} yet.</p>
-            <p className="text-sm mt-2">Start a dynamic geofence session to begin tracking data.</p>
-          </div>
-          
-        ) : (
-          
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Avg. Attendance</p>
-                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.avgAttendance}</h3>
-                  </div>
-                  <div className="bg-blue-50 p-3 rounded-xl"><Users className="text-[#2563EB]" size={24} /></div>
+          {/* THE MASTER EXPORT WIDGET */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-green-100 p-3 rounded-xl text-green-700">
+                  <FileSpreadsheet size={24} />
                 </div>
-                <p className="text-sm font-bold text-green-600 mt-4 flex items-center gap-1"><ArrowUpRight size={16}/> Students per class</p>
+                <div>
+                  <h3 className="text-lg font-extrabold text-gray-900">Report Generator</h3>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    Excel / CSV Format
+                  </p>
+                </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Total Sessions</p>
-                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.totalSessions}</h3>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    From Date (Optional)
+                  </label>
+                  <div className="relative">
+                    <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="date" 
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)} 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-green-500 transition-all" 
+                    />
                   </div>
-                  <div className="bg-purple-50 p-3 rounded-xl"><Calendar className="text-purple-600" size={24} /></div>
                 </div>
-                <p className="text-sm font-bold text-gray-400 mt-4">Classes held this semester</p>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    To Date (Optional)
+                  </label>
+                  <div className="relative">
+                    <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input 
+                      type="date" 
+                      value={endDate} 
+                      onChange={(e) => setEndDate(e.target.value)} 
+                      min={startDate} 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-10 pr-4 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-green-500 transition-all" 
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">High-Risk Students</p>
-                    <h3 className="text-4xl font-extrabold text-red-600 mt-2">{stats.flaggedStudents.length}</h3>
-                  </div>
-                  <div className="bg-red-50 p-3 rounded-xl"><AlertTriangle className="text-red-600" size={24} /></div>
+              <button 
+                onClick={handleDownload} 
+                disabled={isDownloading || !reportData} 
+                className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-md active:scale-[0.98]"
+              >
+                {isDownloading ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />} 
+                Download Gradebook
+              </button>
+            </div>
+          </div>
+
+          {/* EXAM ELIGIBILITY WATCHLIST */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="text-red-500" size={24} />
+                <div>
+                  <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
+                  <p className="text-xs text-gray-500 font-medium">Students below the 70% threshold based on selected dates.</p>
                 </div>
-                <p className="text-sm font-bold text-red-500 mt-4 flex items-center gap-1"><ArrowDownRight size={16}/> Require frequent overrides</p>
+              </div>
+              <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm text-center">
+                <p className="text-2xl font-black text-gray-900">{reportData?.totalClasses || 0}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Classes Held</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
-              
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
-                  <TrendingUp className="text-[#2563EB]" size={20} />
-                  <h3 className="font-extrabold text-gray-900 text-lg">Attendance Trajectory</h3>
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center h-64">
+                  <Loader2 className="animate-spin text-[#2563EB]" size={32}/>
+                  <p className="mt-4 font-bold text-gray-400">Crunching roster data...</p>
                 </div>
-                
-                <div className="flex items-end gap-4 h-64 overflow-x-auto pb-4 pt-4">
-                  {stats.trendData.map((data: any, i: number) => (
-                    <div key={i} className="flex flex-col items-center flex-shrink-0 w-16 group">
-                      <span className="text-xs font-bold text-[#2563EB] mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 px-2 py-1 rounded-md">{data.count}</span>
-                      <div 
-                        className="w-full bg-[#2563EB] rounded-t-md hover:bg-blue-700 transition-all cursor-pointer shadow-sm"
-                        style={{ height: `${data.height}%`, minHeight: '20px' }}
-                      ></div>
-                      <span className="text-xs font-bold text-gray-500 mt-3">{data.label}</span>
-                    </div>
-                  ))}
+              ) : errorMessage ? (
+                <div className="flex flex-col items-center justify-center h-64 text-center p-6">
+                  <Calendar size={48} className="text-gray-300 mb-4"/>
+                  <p className="font-bold text-gray-500">{errorMessage}</p>
                 </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-                  <AlertTriangle className="text-red-500" size={20} />
-                  <h3 className="font-extrabold text-gray-900 text-lg">Override Watchlist</h3>
+              ) : atRiskStudents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-center">
+                  <CheckCircle size={48} className="text-green-300 mb-4"/>
+                  <p className="font-bold text-green-700">All students are eligible for the exam!</p>
                 </div>
-                
-                {stats.flaggedStudents.length === 0 ? (
-                  <p className="text-sm font-bold text-gray-400 text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">No flagged students yet.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {stats.flaggedStudents.map((student: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-red-50 rounded-xl border border-red-100 transition-all hover:bg-red-100">
-                        <span className="font-extrabold text-gray-900">{student.matric}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-red-200 text-red-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm">
-                            {student.count} flags
+              ) : (
+                <table className="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                      <th className="px-6 py-4 font-bold">Matric Number</th>
+                      <th className="px-6 py-4 font-bold text-center">Classes Attended</th>
+                      <th className="px-6 py-4 font-bold text-right">Current Standing</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {atRiskStudents.map((student: any, i: number) => (
+                      <tr key={i} className="hover:bg-red-50/50 transition-colors">
+                        <td className="px-6 py-4 font-black text-gray-900">{student.matricNumber}</td>
+                        <td className="px-6 py-4 text-center font-bold text-gray-600">
+                          {student.attended} / {student.totalClasses}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-black bg-red-100 text-red-700">
+                            {student.percentage}%
                           </span>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                )}
-              </div>
+                  </tbody>
+                </table>
+              )}
             </div>
-          </>
-        )}
+          </div>
+
+        </div>
       </div>
     </div>
   );
