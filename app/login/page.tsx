@@ -2,10 +2,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
-// THE FIX: All missing icons are now properly imported here
-import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
-const FACULTY_SECRET_KEY = "OAU-FACULTY-2026"; // Hardcoded for MVP, can be moved to .env later
+const FACULTY_SECRET_KEY = "OAU-FACULTY-2026";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +31,6 @@ export default function LoginPage() {
         if (signInError) throw signInError;
         window.location.href = '/dashboard';
       } else {
-        // --- SECURE DOOR: Block unauthorized students ---
         if (secretKey !== FACULTY_SECRET_KEY) {
           throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
         }
@@ -80,13 +79,12 @@ export default function LoginPage() {
               <>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Full Name (e.g., Dr. Adebayo)" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Department (e.g., Computer Science)" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  <input type="text" required placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
                 </div>
-                {/* THE SECRET KEY INPUT */}
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
                   <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
@@ -117,6 +115,14 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
+
+        {/* NEW: Back to Hub Navigation */}
+        <div className="mt-6 text-center animate-in fade-in">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
       </div>
     </div>
   );

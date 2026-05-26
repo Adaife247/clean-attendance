@@ -192,6 +192,22 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
+
+    // --- ANTI-SPOOFING GPS HEURISTIC ---
+    // Fake GPS apps lock onto a mathematically static coordinate with zero drift.
+    // Real hardware always produces micro-jitter at the 6th decimal place.
+    if (gpsTelemetry.length >= 3) {
+      const p1 = gpsTelemetry[0];
+      const isStatic = gpsTelemetry.every(p => p.lat === p1.lat && p.lng === p1.lng);
+      const isImpossiblyAccurate = gpsTelemetry.some(p => p.acc < 2.5);
+
+      if (isStatic && isImpossiblyAccurate) {
+        setErrorMessage("Security Alert: Mock Location or GPS Spoofing app detected. Please disable it to check in.");
+        setStatus('failed');
+        return;
+      }
+    }
+
     try {
       const hardwareFingerprint = await generateHardwareFingerprint();
 
@@ -375,13 +391,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
           Make sure you are physically inside the lecture hall before checking in.
         </p>
         
-        {/* THE CLASS REP BACKDOOR LINK */}
-        <a 
-          href={`/rep?sessionId=${sessionId}`} 
-          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"
+       {/* THE HIDDEN CLASS REP DOOR */}
+      <div className="mt-8 border-t border-gray-100 pt-6 text-center">
+        <button 
+          onClick={() => {
+            const pin = window.prompt("Enter 4-Digit Class Rep PIN:");
+            if (pin) {
+              window.location.href = `/rep?sessionId=${sessionId}&pin=${pin}`;
+            }
+          }}
+          className="text-xs font-bold text-gray-400 hover:text-[#2563EB] transition-colors flex items-center justify-center gap-1 w-full"
         >
-          <KeyRound size={12} /> Class Rep Login
-        </a>
+          Class Rep Portal Access
+        </button>
+      </div>
       </div>
     </div>
   );
