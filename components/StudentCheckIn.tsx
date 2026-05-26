@@ -38,6 +38,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
+  // --- THE NETWORK RECOVERY ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -194,8 +195,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('verifying');
 
     // --- ANTI-SPOOFING GPS HEURISTIC ---
-    // Fake GPS apps lock onto a mathematically static coordinate with zero drift.
-    // Real hardware always produces micro-jitter at the 6th decimal place.
     if (gpsTelemetry.length >= 3) {
       const p1 = gpsTelemetry[0];
       const isStatic = gpsTelemetry.every(p => p.lat === p1.lat && p.lng === p1.lng);
@@ -230,6 +229,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed'); 
       }
     } catch (error: any) {
+      // --- THE OFFLINE VAULT TRIGGER ---
+      // If the network request crashes, catch it here and save to local storage
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
         const hf = await generateHardwareFingerprint();
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
@@ -391,7 +392,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           Make sure you are physically inside the lecture hall before checking in.
         </p>
         
-       {/* THE HIDDEN CLASS REP DOOR */}
       <div className="mt-8 border-t border-gray-100 pt-6 text-center">
         <button 
           onClick={() => {
