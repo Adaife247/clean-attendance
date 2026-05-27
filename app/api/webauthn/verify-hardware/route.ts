@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase admin client to bypass RLS for this secure check
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use the secret service key, NOT the anon key
-);
-
 export async function POST(request: Request) {
   try {
+    // 1. We moved the client setup INSIDE the function!
+    // Now Next.js won't crash during the build phase.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Server missing database credentials' }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 2. The rest of the logic remains exactly the same
     const body = await request.json();
     const { matricNumber, hardwareFingerprint } = body;
 
@@ -16,8 +22,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
-    // Check the database for this specific student
-    // NOTE: Change 'students' to whatever table name holds your registered WebAuthn users
     const { data, error } = await supabase
       .from('students')
       .select('hardware_fingerprint')
@@ -25,20 +29,17 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !data) {
-      // If the student doesn't exist in the DB, the cache is definitely stale
       return NextResponse.json({ isMatch: false });
     }
 
-    // Compare the hardware fingerprint from the phone with the one in the database
     if (data.hardware_fingerprint === hardwareFingerprint) {
-      // The physical phone matches the database record. This is a legitimate device block.
       return NextResponse.json({ isMatch: true });
     } else {
-      // The phone does NOT match the database. This is a ghost/iCloud cache.
       return NextResponse.json({ isMatch: false });
     }
 
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const e = error as Error; // Fixed the "any" type error here too!
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
