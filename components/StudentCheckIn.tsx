@@ -38,7 +38,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // --- THE NETWORK RECOVERY ENGINE ---
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -89,14 +88,32 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const registerDevice = async () => {
     try {
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
+      const hf = await generateHardwareFingerprint();
+
+      // --- SMART DEVICE UNBINDING LOGIC ---
       if (existingAnchor && existingAnchor !== matricNumber) {
-        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
-        setStatus('failed');
-        return;
+        setStatus('locating'); 
+        
+        const cacheCheckRes = await fetch('/api/webauthn/verify-hardware', {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricNumber: existingAnchor, hardwareFingerprint: hf })
+        });
+        
+        const cacheCheck = await cacheCheckRes.json();
+        
+        if (!cacheCheck.isMatch) {
+          // It's a ghost cache. Nuke it and proceed.
+          localStorage.removeItem('campuscheck_device_anchor');
+        } else {
+          // It's a genuine proxy attempt. Drop the hammer.
+          setErrorMessage(`Security Block: This physical device is actively bound to ${existingAnchor}.`);
+          setStatus('failed');
+          return;
+        }
       }
 
       setStatus('locating');
-      const hf = await generateHardwareFingerprint();
 
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -194,7 +211,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
 
-    // --- ANTI-SPOOFING GPS HEURISTIC ---
     if (gpsTelemetry.length >= 3) {
       const p1 = gpsTelemetry[0];
       const isStatic = gpsTelemetry.every(p => p.lat === p1.lat && p.lng === p1.lng);
@@ -229,8 +245,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed'); 
       }
     } catch (error: any) {
-      // --- THE OFFLINE VAULT TRIGGER ---
-      // If the network request crashes, catch it here and save to local storage
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
         const hf = await generateHardwareFingerprint();
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
