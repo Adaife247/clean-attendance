@@ -1,0 +1,265 @@
+[33mcommit 3867ac2f7f7db5503a59f065e93b585cee2e2d70[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:15:02 2026 +0100
+
+    fix: updated logo design to perfect square for UI consistency
+
+[33mcommit 55b8ea1a0e3c1da9ed043ea4fd72c59f6f58d6b1[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:06:13 2026 +0100
+
+    feat: integrated enterprise brand identity and new logo
+
+[33mcommit c165a2ce82cedd73b32c9c9a56d8106f3e8c05c3[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:02:56 2026 +0100
+
+    feat: updated logo
+
+[33mcommit 425dc248e680d98bf812f85b5c661323c6052b47[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 07:49:31 2026 +0100
+
+    feat: integrated enterprise brand identity and new logo
+
+[33mcommit beaef4389e813080296a090c61c8a66b386ba233[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Wed May 27 14:52:31 2026 +0100
+
+    fix: resolve vercel build error and deploy smart device unbinding
+
+[33mcommit c5daea5b016a29e9b88924bc67b1f9b54171415c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Wed May 27 13:34:21 2026 +0100
+
+    hardwar testing
+
+[33mcommit 7eb60bfd701159c10b4c0940588819fe7e7216ee[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 18:00:09 2026 +0100
+
+    added emails
+
+[33mcommit 09e7768c8183c4c5119ccfb9fbfe23eb5a08ba61[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 17:55:02 2026 +0100
+
+    little fixes
+
+[33mcommit 60121ec2e219175a3c664cbf463431354d8ce5bf[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 13:06:00 2026 +0100
+
+    fixees
+
+[33mcommit 55ea70b19bccff67e93b02b507a484957d713942[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 13:01:10 2026 +0100
+
+    fixes
+
+[33mcommit ba1f478b50e005c8abd70616dd4c0180476906f5[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:47:30 2026 +0100
+
+    fix: explicit metadata icons with cache buster
+
+[33mcommit 71e83da9178478b09ce446e04ff6fb12bc565878[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:39:51 2026 +0100
+
+    fix: explicit metadata icons with cache buster
+
+[33mcommit 0f4a3520d9c3ef6889c628f8b3306b3eef84d4d3[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:00:54 2026 +0100
+
+    style: unify CampusCheck branding across portal and biometrics
+
+[33mcommit 5be8742dd14df155616322765578533638ea0639[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:42:46 2026 +0100
+
+    feat: complete next-safe PWA engine and universal app hub
+
+[33mcommit d506c2b35d50c07ab62d4cfed5ac56a3a3674ca6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:30:39 2026 +0100
+
+    chore: add PWA logo assets
+
+[33mcommit b0df66bae7069dcd125710f87fdf948febd621ce[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:05:03 2026 +0100
+
+    feat: refine analytics UI and add student microscope features
+
+[33mcommit aa82c4b744054c580952f99e4d46c2424d3ad8cc[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 10:52:53 2026 +0100
+
+    refactor: optimize live radar layout
+
+[33mcommit b0133e22aac3ac38b982499737787d84b11e33ca[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 08:02:02 2026 +0100
+
+    feat: complete 3-tab dashboard architecture with master gradebook export
+
+[33mcommit 00b8471aeffbaa76643937698b5177182e709809[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 21:30:24 2026 +0100
+
+    fix: wrap rep portal in suspense and remove unused imports
+
+[33mcommit f9e034f7b1cf3b9dc953c002f9bcd520b77b3782[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 20:55:40 2026 +0100
+
+    feat: build master semester export and automated gradebook
+
+[33mcommit 9af59081aceae459c0d805e711936e7531a10cdb[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 16:00:38 2026 +0100
+
+    feat: add biometric wipe functionality
+
+[33mcommit ba7b49a2e3754b012b7ba3cc35babc7e4f372f70[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 15:30:53 2026 +0100
+
+    feat: add biometric wipe functionality
+
+[33mcommit e88612f40263403e46b59c6041cdbadc9a26faaf[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 11:02:27 2026 +0100
+
+    fix: auto-adjust server ping selection and reduce timeouts
+
+[33mcommit 0ad2810584605e14b263654c70b9e80842332a0a[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 10:48:41 2026 +0100
+
+    fix: auto-adjust server ping selection and reduce timeouts
+
+[33mcommit 0a8f99707200c5082509ee77a68336fdfb705bfd[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 09:51:39 2026 +0100
+
+    fix: enforce 60m gps accuracy filter and extend timeouts
+
+[33mcommit a4ed2132c9f6c538669e0992c84beb3f6f75c7a6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:55:32 2026 +0100
+
+    increase geofence radius to 150 meters
+
+[33mcommit df62e14d9dce8980bb72ccbce76dfee7219683b6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:17:57 2026 +0100
+
+    nuke cache and implement immune hex decoding
+
+[33mcommit 273ca9b98e611032449bbc10920c63d5346dc5fc[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:01:19 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 5ec84494b2e7522d2bc4908af43f48a068e80d9c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:50:56 2026 +0100
+
+    bypass typescript compiler in verify route
+
+[33mcommit 3cfe79416d822f1a733e8bdeedc3d273595e772c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:45:28 2026 +0100
+
+    bypass typescript compiler in verify route
+
+[33mcommit b0d8787679c3eca9a27b308c6dc11d67971b5088[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:37:58 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit e832f830ddb996bd245294eb0d2b943caad17216[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:29:50 2026 +0100
+
+    fix cose key encoding
+
+[33mcommit faa42fe66a693e03a02583e034a0a7636af54385[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:25:37 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit b83da311ff22f1ddee75775f0754749e6de53bb7[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 17:08:51 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 6d6bee68ed4a1614c91222c27cd46ba7a31889f5[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 17:02:54 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 0297d4887305ea526d5c9fb51bbd3bb3a4e0b9c2[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:42:09 2026 +0100
+
+    unmask error
+
+[33mcommit f5c122d4fff2f9bce93b6b70939e46761c34d16f[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:30:44 2026 +0100
+
+    fix passkey crypto bug
+
+[33mcommit 1229dddf352a07b629f01b1be0e6ece3affa054a[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:09:25 2026 +0100
+
+    remove dynamic export to fix build crash
+
+[33mcommit 1958cce91c0310b2fcafdc9b2e40bd91046c4b04[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 15:51:46 2026 +0100
+
+    remove dynamic export to fix build crash
+
+[33mcommit b7963b6a860707f9a6353d271e046031a2209bdb[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 13:53:25 2026 +0100
+
+    import correct biometric component to homepage
+
+[33mcommit 3433aa0e455c5fb4227a1d5dc43d2fc67c175dab[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 13:39:34 2026 +0100
+
+    shatter vercel cache
+
+[33mcommit 81851956017d03fdeb2790b0f254a18c0df2c776[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 19:28:03 2026 +0100
+
+    force update student portal structure
+
+[33mcommit 7a7b006ac348cdde30e8a3f535cb49744a7d620f[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 18:56:08 2026 +0100
+
+    Add device fingerprint anti-sharing protection
+
+[33mcommit e47f9a99a2630513bd37c47b85498ed0354ed72b[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 12:17:43 2026 +0100
+
+    final webauthn and gps optimizations
+
+[
