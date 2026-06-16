@@ -5,8 +5,12 @@ export async function POST(request: Request) {
   try {
     const { password } = await request.json();
 
-    // HARDCODED PASSWORD (For testing. In production, put this in your .env file)
-    const CORRECT_PASSWORD = "fuoye2026"; 
+    // SECURED: Pulled dynamically from Vercel parameters
+    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
+
+    if (!CORRECT_PASSWORD) {
+      return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
+    }
 
     if (password === CORRECT_PASSWORD) {
       // Next.js 15 requires awaiting the cookies API before setting them

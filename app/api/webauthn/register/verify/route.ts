@@ -2,15 +2,13 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID, origin } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse, hardwareFingerprint } = body;
+    const { matricNumber, authResponse } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     const cookieStore = await cookies();
@@ -39,7 +37,7 @@ export async function POST(request: Request) {
           public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
-          device_hash: hardwareFingerprint || 'unknown-hardware', // --- THE FIX: LOCK IT TO DB ---
+          device_hash: 'webauthn-verified', // Rely strictly on WebAuthn identity
           created_at: new Date().toISOString()
         }, { onConflict: 'matric_number' });
 

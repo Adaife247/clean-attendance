@@ -2,10 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {

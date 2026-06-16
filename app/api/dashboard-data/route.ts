@@ -1,8 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function GET(request: Request) {
   try {

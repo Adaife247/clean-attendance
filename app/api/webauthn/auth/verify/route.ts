@@ -2,10 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID, origin } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +24,6 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // IMMUNE DECODER: Safely strip the \x and convert back to pure bytes
     let dbKey = String(device.public_key);
     if (dbKey.startsWith('\\x')) dbKey = dbKey.slice(2);
     

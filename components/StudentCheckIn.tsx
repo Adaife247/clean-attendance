@@ -16,28 +16,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  const generateHardwareFingerprint = async () => {
-    try {
-      const nav = window.navigator as any;
-      const components = [
-        nav.userAgent,
-        nav.language,
-        window.screen.colorDepth,
-        window.screen.width + 'x' + window.screen.height,
-        nav.hardwareConcurrency || 'unknown',
-        nav.deviceMemory || 'unknown',
-        new Date().getTimezoneOffset()
-      ];
-      const rawHash = components.join('|||');
-      const msgBuffer = new TextEncoder().encode(rawHash);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch (e) {
-      return 'unknown-hardware';
-    }
-  };
-
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -49,7 +27,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, hardwareFingerprint: item.hardwareFingerprint })
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -88,36 +66,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const registerDevice = async () => {
     try {
       const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
-      const hf = await generateHardwareFingerprint();
-
-      // --- SMART DEVICE UNBINDING LOGIC ---
       if (existingAnchor && existingAnchor !== matricNumber) {
-        setStatus('locating'); 
-        
-        const cacheCheckRes = await fetch('/api/webauthn/verify-hardware', {
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ matricNumber: existingAnchor, hardwareFingerprint: hf })
-        });
-        
-        const cacheCheck = await cacheCheckRes.json();
-        
-        if (!cacheCheck.isMatch) {
-          // It's a ghost cache. Nuke it and proceed.
-          localStorage.removeItem('campuscheck_device_anchor');
-        } else {
-          // It's a genuine proxy attempt. Drop the hammer.
-          setErrorMessage(`Security Block: This physical device is actively bound to ${existingAnchor}.`);
-          setStatus('failed');
-          return;
-        }
+        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
+        setStatus('failed');
+        return;
       }
 
       setStatus('locating');
 
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, hardwareFingerprint: hf })
+        body: JSON.stringify({ matricNumber })
       });
       
       const options = await genRes.json();
@@ -129,7 +88,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp, hardwareFingerprint: hf })
+        body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
       
@@ -210,25 +169,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
-
-    if (gpsTelemetry.length >= 3) {
-      const p1 = gpsTelemetry[0];
-      const isStatic = gpsTelemetry.every(p => p.lat === p1.lat && p.lng === p1.lng);
-      const isImpossiblyAccurate = gpsTelemetry.some(p => p.acc < 2.5);
-
-      if (isStatic && isImpossiblyAccurate) {
-        setErrorMessage("Security Alert: Mock Location or GPS Spoofing app detected. Please disable it to check in.");
-        setStatus('failed');
-        return;
-      }
-    }
-
     try {
-      const hardwareFingerprint = await generateHardwareFingerprint();
-
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, hardwareFingerprint })
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
       });
       const result = await response.json();
       
@@ -246,9 +190,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (error: any) {
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        const hf = await generateHardwareFingerprint();
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hf, timestamp: Date.now() });
+        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, timestamp: Date.now() });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
       }
@@ -406,19 +349,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
           Make sure you are physically inside the lecture hall before checking in.
         </p>
         
-      <div className="mt-8 border-t border-gray-100 pt-6 text-center">
-        <button 
-          onClick={() => {
-            const pin = window.prompt("Enter 4-Digit Class Rep PIN:");
-            if (pin) {
-              window.location.href = `/rep?sessionId=${sessionId}&pin=${pin}`;
-            }
-          }}
-          className="text-xs font-bold text-gray-400 hover:text-[#2563EB] transition-colors flex items-center justify-center gap-1 w-full"
+        <a 
+          href={`/rep?sessionId=${sessionId}`} 
+          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"
         >
-          Class Rep Portal Access
-        </button>
-      </div>
+          <KeyRound size={12} /> Class Rep Login
+        </a>
       </div>
     </div>
   );

@@ -1,10 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function POST(request: Request) {
   try {
@@ -15,8 +10,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing course code." }, { status: 400 });
     }
 
-    // Generate a random 4-digit passcode for the Class Rep
-    const repPasscode = Math.floor(1000 + Math.random() * 9000).toString();
+    // Entropy Upgrade: Generate a 6-character alphanumeric passcode for the Class Rep
+    const repPasscode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const { data, error } = await supabase
       .from('lecture_sessions')
