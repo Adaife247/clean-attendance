@@ -19,7 +19,8 @@ function RepPortalContent() {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   const verifyPasscode = async () => {
-    if (passcode.length !== 4) { setError("Passcode must be 4 digits."); return; }
+    // --- UPDATED: Expect 6 characters ---
+    if (passcode.length !== 6) { setError("Passcode must be 6 characters."); return; }
     setIsVerifying(true);
     setError('');
 
@@ -78,20 +79,22 @@ function RepPortalContent() {
             <KeyRound size={32} />
           </div>
           <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Class Rep Access</h2>
-          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 4-digit session PIN provided by the lecturer.</p>
+          {/* --- UPDATED: UI Text --- */}
+          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 6-character session PIN provided by the lecturer.</p>
           
+          {/* --- UPDATED: Allows A-Z and 0-9, Max Length 6 --- */}
           <input 
             type="text" 
-            maxLength={4}
-            placeholder="• • • •" 
+            maxLength={6}
+            placeholder="• • • • • •" 
             value={passcode} 
-            onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ''))} 
+            onChange={(e) => setPasscode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
             onKeyDown={(e) => e.key === 'Enter' && verifyPasscode()}
-            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.5em]" 
+            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.3em]" 
           />
           {error && <p className="text-red-500 text-sm font-bold mt-3">{error}</p>}
           
-          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 4} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
+          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 6} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
             {isVerifying ? <Loader2 className="animate-spin" size={20} /> : "Unlock Portal"}
           </button>
         </div>
@@ -151,7 +154,6 @@ function RepPortalContent() {
   );
 }
 
-// THE SUSPENSE WRAPPER FIX
 export default function ClassRepPortal() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
