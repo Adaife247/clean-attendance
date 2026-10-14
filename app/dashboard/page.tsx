@@ -97,7 +97,7 @@ export default function LecturerDashboard() {
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (bestAcc !== 9999) { executeSessionCreation(bestLat, bestLng); } 
       else { setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON and try near a window."); setIsStarting(false); }
-    }, 15000); 
+    }, 30000); 
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
