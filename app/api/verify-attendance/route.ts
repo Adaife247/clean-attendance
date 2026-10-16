@@ -4,6 +4,10 @@ import { createClient } from '@supabase/supabase-js';
 const GEOFENCE_RADIUS_METERS = 250;
 const HARD_BLOCK_METERS = 500;
 
+interface AttendanceLogDeviceInfo {
+  deviceFingerprint?: string;
+}
+
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -22,7 +26,7 @@ export async function POST(request: Request) {
     );
 
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, hardwareFingerprint } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -62,6 +66,33 @@ export async function POST(request: Request) {
       }
     }
 
+    // Enrollment check
+    const { data: courseRow } = await supabase
+      .from('courses')
+      .select('id')
+      .ilike('course_code', session.course_code)
+      .limit(1)
+      .maybeSingle();
+
+    if (!courseRow) {
+      return NextResponse.json({
+        message: "Course configuration error. Please notify your lecturer."
+      }, { status: 500 });
+    }
+
+    const { data: enrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', courseRow.id)
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (!enrollment) {
+      return NextResponse.json({
+        message: `You are not registered for ${session.course_code}. Contact your lecturer to be added.`
+      }, { status: 403 });
+    }
+
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -73,6 +104,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
+    // ── Layer 1: hardware fingerprint proxy check ──
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -85,7 +117,11 @@ export async function POST(request: Request) {
           session_id: sessionId,
           matric_number: cleanMatric,
           status: 'flagged',
-          device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
+          device_info: JSON.stringify({
+            telemetry,
+            reason: `Hardware proxy match with ${ghostLogs[0].matric_number}`,
+            deviceFingerprint,
+          }),
           device_hash: hardwareFingerprint
         }]);
         return NextResponse.json({
@@ -96,12 +132,45 @@ export async function POST(request: Request) {
       }
     }
 
-    // ─── Anomaly detection ───
-    // We only flag two things that are physically impossible / highly suspicious:
-    //   1. Movement faster than 200 m/s (720 km/h) between consecutive pings
-    //   2. Reported accuracy < 3m — real GPS never reports sub-3m indoors/outdoors
-    // Everything else (standing still, no altitude, weird accuracy) is normal
-    // Android behaviour indoors and must NOT be flagged.
+    // ── Layer 2: cross-browser device fingerprint check ──
+    if (deviceFingerprint && deviceFingerprint !== 'unknown') {
+      const { data: existingFingerprints } = await supabase
+        .from('attendance_logs')
+        .select('matric_number, device_info')
+        .eq('session_id', sessionId)
+        .neq('matric_number', cleanMatric);
+
+      if (existingFingerprints) {
+        for (const log of existingFingerprints) {
+          const info: AttendanceLogDeviceInfo =
+            typeof log.device_info === 'string'
+              ? JSON.parse(log.device_info)
+              : (log.device_info as AttendanceLogDeviceInfo);
+
+          if (info?.deviceFingerprint === deviceFingerprint) {
+            await supabase.from('attendance_logs').insert([{
+              session_id: sessionId,
+              matric_number: cleanMatric,
+              status: 'flagged',
+              device_info: JSON.stringify({
+                telemetry,
+                reason: `Cross-browser device match with ${log.matric_number}`,
+                deviceFingerprint,
+              }),
+              device_hash: deviceFingerprint,
+            }]);
+
+            return NextResponse.json({
+              status: 'flagged',
+              distance: 0,
+              message: 'Security Block: This device has already been used to check in for another student in this session.',
+            }, { status: 200 });
+          }
+        }
+      }
+    }
+
+    // ── Anomaly detection ──
     let isSpoofed = false;
     let bestPing = telemetry[0];
 
@@ -110,21 +179,14 @@ export async function POST(request: Request) {
       if (ping.acc < bestPing.acc) bestPing = ping;
     }
 
-    // Suspiciously perfect accuracy
-    if (bestPing.acc < 3) {
-      isSpoofed = true;
-    }
+    if (bestPing.acc < 3) isSpoofed = true;
 
-    // Impossible movement between consecutive pings
     for (let i = 1; i < telemetry.length; i++) {
       const prev = telemetry[i - 1];
       const curr = telemetry[i];
       const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
       const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
-
-      if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) {
-        isSpoofed = true;
-      }
+      if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
     }
 
     const distanceToLecturer = getDistanceInMeters(
@@ -163,9 +225,9 @@ export async function POST(request: Request) {
         telemetry,
         evaluatedAccuracy: bestPing.acc,
         distanceMeters: Math.round(distanceToLecturer),
-        spoofReasons: isSpoofed ? ['see_server_logs'] : []
+        deviceFingerprint: deviceFingerprint || 'unknown',
       }),
-      device_hash: hardwareFingerprint || 'unknown-hardware'
+      device_hash: hardwareFingerprint || 'unknown-hardware',
     }]);
 
     return NextResponse.json({

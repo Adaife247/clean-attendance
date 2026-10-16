@@ -5,6 +5,7 @@ import {
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -26,7 +27,7 @@ const RATING_TAGS = [
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
 const GPS_MIN_PINGS_TO_SEND = 1;
-const SEND_INTERVAL_MS = 4000; // resend cadence while waiting for backend verdict
+const SEND_INTERVAL_MS = 4000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
@@ -54,11 +55,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
 
+  // Cache device fingerprint per session — it's expensive, generate once
+  const fingerprintRef = useRef<string | null>(null);
+
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // Pre-warm GPS on page load — buffer pings silently
+  // Pre-warm GPS on page load
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
@@ -76,7 +80,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         }
       },
       () => {
-        // Silent failure — pre-warm is best-effort
+        // Silent — best-effort
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
@@ -87,6 +91,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (prewarmWatchIdRef.current !== null) {
         navigator.geolocation.clearWatch(prewarmWatchIdRef.current);
       }
+    };
+  }, []);
+
+  // Pre-warm device fingerprint (generate once, cache in ref)
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      try {
+        const fp = await generateDeviceFingerprint();
+        if (!cancelled) fingerprintRef.current = fp.hash;
+      } catch {
+        // Non-fatal — fingerprint is best-effort
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
     };
   }, []);
 
@@ -122,7 +143,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+          body: JSON.stringify({
+            sessionId: item.session,
+            matricNumber: item.matric,
+            telemetry: item.telemetry,
+            deviceFingerprint: item.fingerprint,
+          })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -220,10 +246,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[]) => {
     try {
+      // Fingerprint may not be ready yet — wait for it (max 2s)
+      let fingerprint = fingerprintRef.current;
+      if (!fingerprint) {
+        const start = Date.now();
+        while (!fingerprint && Date.now() - start < 2000) {
+          await new Promise(r => setTimeout(r, 100));
+          fingerprint = fingerprintRef.current;
+        }
+      }
+
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
+        body: JSON.stringify({
+          sessionId,
+          matricNumber,
+          telemetry: gpsTelemetry,
+          deviceFingerprint: fingerprint || 'unknown',
+        })
       });
       const result = await response.json();
 
@@ -243,7 +284,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
         (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, timestamp: Date.now() });
+        existing.push({
+          session: sessionId,
+          matric: matricNumber,
+          telemetry: gpsTelemetry,
+          fingerprint: fingerprintRef.current,
+          timestamp: Date.now(),
+        });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
       } else {
@@ -257,7 +304,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('locating');
     setLiveAccuracy(null);
 
-    // Biometric auth
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
@@ -311,13 +357,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     };
 
-    // If pre-warm gave us anything, fire immediately — do not wait for accuracy.
     if (pings.length >= 1) {
       sentAny = true;
       sendPayloadToVercel(pings);
     }
 
-    // Keep watching for better data. Resend every SEND_INTERVAL_MS if still not done.
     const overallTimeoutId = setTimeout(() => {
       if (!sentAny && pings.length === 0) {
         finishWith(pings);
