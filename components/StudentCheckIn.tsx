@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
-  ShieldCheck, Hand, ArrowRight, RefreshCw, Star
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
@@ -26,20 +26,13 @@ const RATING_TAGS = [
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
 const GPS_MIN_PINGS_TO_SEND = 1;
+const GPS_GOOD_ACCURACY = 150; // meters — send as soon as we hit this
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
-  if (minutesLate <= 2) {
-    return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
-  }
-  if (minutesLate <= 10) {
-    return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
-  }
-  if (minutesLate <= 25) {
-    return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
-  }
-  if (minutesLate <= 45) {
-    return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
-  }
+  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
+  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
+  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
+  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
@@ -55,15 +48,53 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
-  // Captured once when we successfully verify, so the meme uses a stable "now"
-  // and we don't call Date.now() during render.
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
+
+  // Live accuracy display while GPS is locking
+  const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
+
+  // Pre-warm buffer — pings collected before the user submits
+  const prewarmBufferRef = useRef<Telemetry[]>([]);
+  const prewarmWatchIdRef = useRef<number | null>(null);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // Fetch session metadata once on mount (for meme calculation)
+  // ─── PRE-WARM: start GPS on page load, buffer pings silently ───
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        prewarmBufferRef.current.push({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          alt: position.coords.altitude,
+          acc: position.coords.accuracy,
+          timestamp: position.timestamp
+        });
+        // Keep only the last 30 pings so memory doesn't grow
+        if (prewarmBufferRef.current.length > 30) {
+          prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
+        }
+      },
+      () => {
+        // Silent failure — pre-warm is best-effort
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+    );
+
+    prewarmWatchIdRef.current = id;
+
+    return () => {
+      if (prewarmWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(prewarmWatchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Fetch session metadata
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -71,14 +102,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && data?.createdAt) {
-          setSessionCreatedAt(data.createdAt);
-        }
+        if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
       } catch {
         // Non-fatal
       }
     };
-    // Defer to next tick so setState doesn't fire synchronously inside the effect
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => {
       cancelled = true;
@@ -117,7 +145,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
-    // Defer initial sync so it doesn't run setState synchronously
     const id = setTimeout(() => { syncOfflineQueue(); }, 0);
     return () => {
       window.removeEventListener('online', syncOfflineQueue);
@@ -125,7 +152,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
   }, [syncOfflineQueue]);
 
-  // Auto-advance from 'success' to 'rating' after showing the celebration briefly
   useEffect(() => {
     if (status !== 'success') return;
     const t = setTimeout(() => setStatus('rating'), 2500);
@@ -210,9 +236,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
-      } else if (result.status === 'flagged' || response.status === 403) {
-        setErrorMessage(result.message || "Verification failed.");
-        setStatus('failed');
       } else {
         setErrorMessage(result.message || "Verification failed.");
         setStatus('failed');
@@ -234,7 +257,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const executeFinalCheckIn = async () => {
     setStatus('locating');
+    setLiveAccuracy(null);
 
+    // Biometric auth first
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
@@ -242,7 +267,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-
       if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
       const asseResp = await startAuthentication(options);
@@ -256,7 +280,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
       if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
-
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown Auth Error occurred.";
       setErrorMessage(msg);
@@ -270,9 +293,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
       return;
     }
 
-    const pings: Telemetry[] = [];
+    // Take whatever pre-warm gave us — it's already warm
+    const pings: Telemetry[] = [...prewarmBufferRef.current];
+    let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
+    if (pings.length > 0) setLiveAccuracy(Math.round(bestAcc));
+
     let watchId = 0;
-    let bestAcc = 9999;
     let didFinish = false;
 
     const finishWith = (finalPings: Telemetry[]) => {
@@ -287,14 +313,22 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     };
 
+    // If pre-warm already gave us good enough data, send immediately
+    if (pings.length >= 3 && bestAcc <= GPS_GOOD_ACCURACY) {
+      finishWith(pings);
+      return;
+    }
+
+    // Otherwise, keep watching
     const overallTimeoutId = setTimeout(() => {
       finishWith(pings);
     }, GPS_OVERALL_TIMEOUT_MS);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const currentAcc = position.coords.accuracy;
-        if (currentAcc < bestAcc) bestAcc = currentAcc;
+        const acc = position.coords.accuracy;
+        if (acc < bestAcc) bestAcc = acc;
+        setLiveAccuracy(Math.round(bestAcc));
 
         pings.push({
           lat: position.coords.latitude,
@@ -304,7 +338,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           timestamp: position.timestamp
         });
 
-        if (pings.length >= 3 && bestAcc <= 100) {
+        if (pings.length >= 3 && bestAcc <= GPS_GOOD_ACCURACY) {
           clearTimeout(overallTimeoutId);
           finishWith(pings);
         }
@@ -347,9 +381,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   };
 
   const toggleTag = (tag: string) => {
-    setRatingTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
+    setRatingTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
   const submitRating = async (skip: boolean) => {
@@ -359,11 +391,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         await fetch('/api/rate-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            rating: ratingStars,
-            tags: ratingTags,
-          })
+          body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
     } catch {
@@ -374,7 +402,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // Compute the meme object via useMemo — no impure calls during render.
   const memeData = useMemo(() => {
     if (!sessionCreatedAt || verifiedAt === null) {
       return { minutesLate: 0, meme: getMeme(0) };
@@ -465,12 +492,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
         {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-gray-700 font-bold animate-pulse text-center">
+            <p className="text-gray-700 font-bold text-center">
               {status === 'checking' ? "Verifying ledger..."
-                : status === 'locating' ? "Acquiring GPS lock... stay still, this can take up to 20 seconds..."
+                : status === 'locating' ? "Locking onto your position..."
                 : status === 'syncing' ? "Syncing offline data..."
                 : "Verifying coordinates..."}
             </p>
+            {liveAccuracy !== null && status === 'locating' && (
+              <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+                <Signal size={14} className="text-[#2563EB]" />
+                <span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span>
+              </div>
+            )}
           </div>
         )}
 

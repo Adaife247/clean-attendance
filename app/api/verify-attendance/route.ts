@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+const GEOFENCE_RADIUS_METERS = 250;
+const HARD_BLOCK_METERS = 500;
+
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3; 
+  const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -13,7 +16,6 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 
 export async function POST(request: Request) {
   try {
-    // Initialize Supabase INSIDE the handler so env vars are loaded at request time
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -29,19 +31,48 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    
-    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    if (sessionError || !session) {
+      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+    }
+
+    if (session.is_active !== true) {
+      return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    }
+
     if (session.expires_at && new Date() > new Date(session.expires_at)) {
       return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
     }
 
-    const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
-    if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    // Per-session check-in window
+    const opensAfter = session.checkin_opens_after_minutes ?? 10;
+
+    if (opensAfter > 0 && session.created_at) {
+      const sessionStart = new Date(session.created_at).getTime();
+      const now = Date.now();
+      const elapsedMinutes = (now - sessionStart) / 60000;
+
+      if (elapsedMinutes < opensAfter) {
+        const remaining = Math.ceil(opensAfter - elapsedMinutes);
+        return NextResponse.json({
+          message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}. Wait until the lecture has started.`
+        }, { status: 403 });
+      }
+    }
+
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    }
 
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
@@ -49,28 +80,32 @@ export async function POST(request: Request) {
         .select('matric_number')
         .eq('session_id', sessionId)
         .eq('device_hash', hardwareFingerprint);
-        
+
       if (ghostLogs && ghostLogs.length > 0) {
         await supabase.from('attendance_logs').insert([{
           session_id: sessionId,
           matric_number: cleanMatric,
           status: 'flagged',
           device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
-          device_hash: hardwareFingerprint 
+          device_hash: hardwareFingerprint
         }]);
-        return NextResponse.json({ status: 'flagged', distance: 0, message: "Security Block: Multiple check-ins detected from identical hardware specs." }, { status: 200 });
+        return NextResponse.json({
+          status: 'flagged',
+          distance: 0,
+          message: "Security Block: Multiple check-ins detected from identical hardware specs."
+        }, { status: 200 });
       }
     }
 
     let isSpoofed = false;
     let totalDrift = 0;
-    let bestPing = telemetry[0]; 
+    let bestPing = telemetry[0];
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
       if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
       if (ping.alt === 0) isSpoofed = true;
-      
+
       if (i > 0) {
         const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
         totalDrift += drift;
@@ -82,25 +117,30 @@ export async function POST(request: Request) {
 
     if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
 
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
-    
-    if (distanceToLecturer > 500) {
-      return NextResponse.json({ 
-        status: 'rejected', 
-        distance: Math.round(distanceToLecturer), 
-        message: "out of bounds" 
+    const distanceToLecturer = getDistanceInMeters(
+      session.anchor_latitude,
+      session.anchor_longitude,
+      bestPing.lat,
+      bestPing.lng
+    );
+
+    if (distanceToLecturer > HARD_BLOCK_METERS) {
+      return NextResponse.json({
+        status: 'rejected',
+        distance: Math.round(distanceToLecturer),
+        message: "out of bounds"
       }, { status: 403 });
     }
 
     let finalStatus = 'absent';
-    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
+    let responseMessage = `You are ${Math.round(distanceToLecturer)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
 
-    if (distanceToLecturer <= 150) {
+    if (distanceToLecturer <= GEOFENCE_RADIUS_METERS) {
       if (isSpoofed) {
-        finalStatus = 'flagged'; 
+        finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
       } else {
-        finalStatus = 'verified'; 
+        finalStatus = 'verified';
         responseMessage = "Verified";
       }
     }
@@ -109,11 +149,19 @@ export async function POST(request: Request) {
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }),
+      device_info: JSON.stringify({
+        telemetry,
+        evaluatedAccuracy: bestPing.acc,
+        distanceMeters: Math.round(distanceToLecturer)
+      }),
       device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 
-    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
+    return NextResponse.json({
+      status: finalStatus,
+      distance: Math.round(distanceToLecturer),
+      message: responseMessage
+    }, { status: 200 });
 
   } catch (error) {
     console.error("Verification API Error:", error);
