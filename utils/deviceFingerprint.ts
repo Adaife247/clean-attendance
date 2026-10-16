@@ -2,230 +2,133 @@
 
 /**
  * Device Fingerprint Utility
- * Combines research-backed signals to create a cross-browser device identifier.
+ * 
+ * Stable-across-incognito fingerprint built from hardware-stable signals:
+ * - WebGL renderer + vendor strings (GPU model)
+ * - Screen dimensions + DPR
+ * - CPU cores, touch points, platform
+ * - Timezone
+ * 
+ * Deliberately EXCLUDES signals that change between normal/incognito:
+ * - GPU timing
+ * - AudioContext processing
+ * - deviceMemory (often masked)
+ * - vendor (often spoofed)
  */
 
-// Narrow types for browser APIs not in standard TS lib
 interface NavigatorWithMemory extends Navigator {
   deviceMemory?: number;
-}
-
-interface WebkitWindow extends Window {
-  webkitAudioContext?: typeof AudioContext;
 }
 
 export interface DeviceFingerprintResult {
   hash: string;
   components: {
-    gpuTiming: string;
-    audioHash: string;
+    gpu: string;
+    screen: string;
     hardware: string;
   };
   duration: number;
 }
 
-/**
- * GPU Timing Fingerprint (DrawnApart)
- */
-async function getGpuTimingFingerprint(): Promise<string> {
+function getGpuInfo(): string {
   if (typeof document === 'undefined') return 'no-document';
 
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const gl = canvas.getContext('webgl', {
-    antialias: false,
-    depth: false,
-    stencil: false,
-    powerPreference: 'high-performance',
-  });
+  const gl = (canvas.getContext('webgl') ||
+    canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
 
   if (!gl) return 'no-webgl';
 
-  const vsSource = `
-    attribute vec2 a_position;
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
-    }
-  `;
+  const parts: string[] = [];
 
-  const fsSource = `
-    precision highp float;
-    void main() {
-      float x = gl_FragCoord.x * 0.001;
-      float y = gl_FragCoord.y * 0.001;
-      gl_FragColor = vec4(x, y, x * y, 1.0);
-    }
-  `;
-
-  function compileShader(
-    context: WebGLRenderingContext,
-    type: number,
-    source: string
-  ): WebGLShader | null {
-    const shader = context.createShader(type);
-    if (!shader) return null;
-    context.shaderSource(shader, source);
-    context.compileShader(shader);
-    return shader;
+  // Unmasked renderer + vendor (the good stuff)
+  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+  if (debugInfo) {
+    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+    parts.push(`r:${renderer}`);
+    parts.push(`v:${vendor}`);
+  } else {
+    // Fallback: masked values (less unique, but better than nothing)
+    parts.push(`r:${gl.getParameter(gl.RENDERER)}`);
+    parts.push(`v:${gl.getParameter(gl.VENDOR)}`);
   }
 
-  const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-  const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-  if (!vs || !fs) return 'shader-compile-failed';
+  // WebGL parameters that are stable per GPU/driver
+  parts.push(`ver:${gl.getParameter(gl.VERSION)}`);
+  parts.push(`sl:${gl.getParameter(gl.SHADING_LANGUAGE_VERSION)}`);
+  parts.push(`maxtex:${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`);
+  parts.push(`maxvp:${gl.getParameter(gl.MAX_VIEWPORT_DIMS)?.toString()}`);
+  parts.push(`maxvtx:${gl.getParameter(gl.MAX_VERTEX_ATTRIBS)}`);
+  parts.push(`maxvary:${gl.getParameter(gl.MAX_VARYING_VECTORS)}`);
 
-  const program = gl.createProgram();
-  if (!program) return 'program-create-failed';
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  gl.useProgram(program);
+  // Extensions list — very stable per GPU/driver combo
+  const extensions = gl.getSupportedExtensions() || [];
+  parts.push(`ext:${extensions.sort().join(',')}`);
 
-  const vertices = new Float32Array(200 * 2);
-  for (let i = 0; i < 200; i++) {
-    vertices[i * 2] = Math.sin(i) * 0.5;
-    vertices[i * 2 + 1] = Math.cos(i) * 0.5;
-  }
-
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-  const positionLoc = gl.getAttribLocation(program, 'a_position');
-  gl.enableVertexAttribArray(positionLoc);
-  gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
-
-  for (let i = 0; i < 10; i++) {
-    gl.drawArrays(gl.TRIANGLES, 0, 200);
-  }
-  gl.finish();
-
-  const iterations = 200;
-  const start = performance.now();
-  for (let i = 0; i < iterations; i++) {
-    gl.drawArrays(gl.TRIANGLES, 0, 200);
-  }
-  gl.finish();
-  const duration = performance.now() - start;
-
-  gl.deleteBuffer(buffer);
-  gl.deleteProgram(program);
-
-  return duration.toFixed(3);
+  return parts.join('|');
 }
 
-/**
- * AudioContext Fingerprint
- */
-async function getAudioFingerprint(): Promise<string> {
+function getScreenInfo(): string {
   if (typeof window === 'undefined') return 'no-window';
-
-  const w = window as WebkitWindow;
-  const AudioCtx = window.AudioContext || w.webkitAudioContext;
-  if (!AudioCtx) return 'no-audio';
-
-  try {
-    const ctx = new AudioCtx();
-
-    const oscillator = ctx.createOscillator();
-    oscillator.type = 'triangle';
-    oscillator.frequency.value = 10000;
-
-    const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -50;
-    compressor.knee.value = 40;
-    compressor.ratio.value = 12;
-    compressor.attack.value = 0;
-    compressor.release.value = 0.25;
-
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-
-    oscillator.connect(compressor);
-    compressor.connect(analyser);
-
-    oscillator.start(0);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    const dataArray = new Float32Array(analyser.frequencyBinCount);
-    analyser.getFloatFrequencyData(dataArray);
-
-    oscillator.stop();
-    await ctx.close();
-
-    const slice = Array.from(dataArray.slice(0, 100));
-    const sum = slice.reduce((a, b) => a + b, 0);
-    const hash = slice.map((v) => v.toFixed(4)).join('|');
-
-    let h = 0;
-    for (let i = 0; i < hash.length; i++) {
-      h = (h << 5) - h + hash.charCodeAt(i);
-      h |= 0;
-    }
-
-    return `${h.toString(16)}_${sum.toFixed(2)}`;
-  } catch {
-    return 'audio-error';
-  }
-}
-
-/**
- * Hardware Signals Fingerprint
- */
-function getHardwareFingerprint(): string {
-  if (typeof window === 'undefined') return 'no-window';
-
-  const nav = navigator as NavigatorWithMemory;
-  const screen = window.screen;
-
-  const signals: Array<string | number> = [
-    screen.width,
-    screen.height,
-    screen.colorDepth,
-    screen.pixelDepth,
+  const s = window.screen;
+  return [
+    s.width,
+    s.height,
+    s.availWidth,
+    s.availHeight,
+    s.colorDepth,
+    s.pixelDepth,
     window.devicePixelRatio || 1,
+  ].join(':');
+}
+
+function getHardwareInfo(): string {
+  if (typeof window === 'undefined') return 'no-window';
+  const nav = navigator as NavigatorWithMemory;
+
+  return [
     nav.hardwareConcurrency || 0,
-    nav.deviceMemory || 0,
     nav.maxTouchPoints || 0,
     nav.platform || 'unknown',
-    nav.vendor || 'unknown',
     Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
-    nav.language || 'unknown',
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? '1' : '0',
-    window.matchMedia('(prefers-contrast: more)').matches ? '1' : '0',
-    window.matchMedia('(forced-colors: active)').matches ? '1' : '0',
-  ];
-
-  return signals.join(':');
+    // Note: intentionally NOT including nav.vendor, nav.language, deviceMemory,
+    // or prefers-* media queries — these change in incognito
+  ].join(':');
 }
 
 function hashString(str: string): string {
-  let h = 0;
+  // Use two 32-bit hashes for a 64-bit result (less collision risk)
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    h = (h << 5) - h + char;
-    h |= 0;
+    h1 ^= char;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= char;
+    h2 = Math.imul(h2, 0x85ebca6b);
   }
-  return Math.abs(h).toString(16).padStart(16, '0');
+
+  const p1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const p2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return p1 + p2;
 }
 
 export async function generateDeviceFingerprint(): Promise<DeviceFingerprintResult> {
   const start = performance.now();
 
-  const [gpuTiming, audioHash] = await Promise.all([
-    getGpuTimingFingerprint(),
-    getAudioFingerprint(),
-  ]);
+  const gpu = getGpuInfo();
+  const screen = getScreenInfo();
+  const hardware = getHardwareInfo();
 
-  const hardware = getHardwareFingerprint();
-  const combined = `${gpuTiming}||${audioHash}||${hardware}`;
+  const combined = `${gpu}||${screen}||${hardware}`;
   const hash = hashString(combined);
   const duration = performance.now() - start;
 
   return {
     hash,
-    components: { gpuTiming, audioHash, hardware },
+    components: { gpu, screen, hardware },
     duration,
   };
 }
