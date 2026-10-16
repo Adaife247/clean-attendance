@@ -40,54 +40,159 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+app/
+  api/
+    admin-login/
+      route.ts
+    attendance-history/
+      route.ts
+    create-session/
+      route.ts
+    dashboard-data/
+      route.ts
+    master-export/
+      route.ts
+    override-attendance/
+      route.ts
+    request-override/
+      route.ts
+    reset-device/
+      route.ts
+    verify-attendance/
+      route.ts
+    verify-rep/
+      route.ts
+    webauthn/
+      auth/
+        generate/
+          route.ts
+        verify/
+          route.ts
+      register/
+        generate/
+          route.ts
+        verify/
+          route.ts
+      verify-hardware/
+        route.ts
+  dashboard/
+    analytics/
+      page.tsx
+    courses/
+      page.tsx
+    layout.tsx
+    page.tsx
+  login/
+    page.tsx
+  portal/
+    page.tsx
+  rep/
+    page.tsx
+  globals.css
+  icon.png
+  layout.tsx
+  page.tsx
+components/
+  PWARegister.tsx
+  StudentCheckIn.tsx
+public/
+  file.svg
+  globe.svg
+  icon-192x192.png
+  icon-512x512.png
+  manifest.json
+  next.svg
+  sw.js
+  vercel.svg
+  window.svg
+utils/
+  supabase-admin.ts
+  supabase.ts
+  webauthn.ts
 .gitignore
 AGENTS.md
-app/api/admin-login/route.ts
-app/api/attendance-history/route.ts
-app/api/create-session/route.ts
-app/api/dashboard-data/route.ts
-app/api/master-export/route.ts
-app/api/override-attendance/route.ts
-app/api/request-override/route.ts
-app/api/reset-device/route.ts
-app/api/verify-attendance/route.ts
-app/api/verify-rep/route.ts
-app/api/webauthn/auth/generate/route.ts
-app/api/webauthn/auth/verify/route.ts
-app/api/webauthn/register/generate/route.ts
-app/api/webauthn/register/verify/route.ts
-app/dashboard/analytics/page.tsx
-app/dashboard/courses/page.tsx
-app/dashboard/layout.tsx
-app/dashboard/page.tsx
-app/favicon.ico
-app/globals.css
-app/layout.tsx
-app/login/page.tsx
-app/page.tsx
-app/portal/page.tsx
-app/rep/page.tsx
+app.py
 CLAUDE.md
-components/StudentCheckIn.tsx
 eslint.config.mjs
+et --hard beaef43
 middleware_backup.ts
 next.config.ts
 package.json
 postcss.config.mjs
-public/file.svg
-public/globe.svg
-public/manifest.json
-public/next.svg
-public/vercel.svg
-public/window.svg
 README.md
 tsconfig.json
-utils/supabase.ts
-utils/webauthn.ts
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="utils/supabase-admin.ts">
+import { createClient } from '@supabase/supabase-js';
+
+// This client bypasses RLS. ONLY use this inside the /app/api/ folders.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+</file>
+
+<file path="utils/supabase.ts">
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+</file>
 
 <file path="AGENTS.md">
 <!-- BEGIN:nextjs-agent-rules -->
@@ -95,6 +200,496 @@ This section contains the contents of the repository's files.
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+</file>
+
+<file path="app.py">
+import os
+from openai import OpenAI
+
+# Initialize the Qwen Client using your hackathon voucher API key
+client = OpenAI(
+    api_key=os.getenv("QWEN_API_KEY"),
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+)
+
+# Simulated Campus State (No database required for the prototype)
+CAMPUS_DATA = {
+    "student_schedule": "10:00 AM - Gross Anatomy Lab (Building A)",
+    "current_time": "09:48 AM",
+    "current_location": "Main Campus Gate",
+    "active_hazards": ["The central walkway between Main Gate and Building A is severely flooded after the morning rain."],
+    "syllabus": "Today's Gross Anatomy Lab covers the exhaustive structural pathways of the Perineal Muscles and deep pelvic fascia."
+}
+
+def navigation_agent(student_query, campus_context):
+    """Specialized Agent for handling spatial reasoning and routing."""
+    system_prompt = (
+        "You are the Campus Wayfinder Agent. Your sole job is to navigate students through physical campus hurdles "
+        "(flooding, power outages, crowd bottlenecks). You have access to real-time hazards. Always provide alternative paths "
+        "and explain why they are safer or faster. Keep your tone direct and helpful."
+    )
+    
+    user_content = f"Student Query: {student_query}\nContext: {campus_context}"
+    
+    response = client.chat.completions.create(
+        model="qwen-max", # Using the flagship model for complex reasoning
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+    )
+    return response.choices[0].message.content
+
+def ta_agent(student_query, campus_context):
+    """Specialized Agent for handling academic administrative inquiries."""
+    system_prompt = (
+        "You are the Academic TA Agent. Your job is to field student questions about class schedules, syllabus details, "
+        "and lab requirements. Keep students on track academically."
+    )
+    
+    user_content = f"Student Query: {student_query}\nContext: {campus_context}"
+    
+    response = client.chat.completions.create(
+        model="qwen-plus", # Using a faster, cost-effective model for text tasks
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+    )
+    return response.choices[0].message.content
+
+# --- Run the Multi-Agent Simulation ---
+if __name__ == "__main__":
+    print("=== OMNI-CAMPUS BACKEND INITIALIZED ===\n")
+    
+    # Simulation: Student opens the app and panics because it's raining and they have a lab
+    student_input = "It's pouring, I'm at the gate, and I don't know how to get to my anatomy lab or what we are even covering today!"
+    print(f"Student Input: '{student_input}'\n")
+    
+    print("--- Routing to Navigation Agent... ---")
+    nav_response = navigation_agent(student_input, CAMPUS_DATA)
+    print(f"Wayfinder AI:\n{nav_response}\n")
+    
+    print("--- Routing to TA Agent... ---")
+    academic_response = ta_agent(student_input, CAMPUS_DATA)
+    print(f"TA AI:\n{academic_response}\n")
+    
+    print("=======================================")
+</file>
+
+<file path="CLAUDE.md">
+@AGENTS.md
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;
+</file>
+
+<file path="et --hard beaef43">
+[33mcommit 3867ac2f7f7db5503a59f065e93b585cee2e2d70[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:15:02 2026 +0100
+
+    fix: updated logo design to perfect square for UI consistency
+
+[33mcommit 55b8ea1a0e3c1da9ed043ea4fd72c59f6f58d6b1[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:06:13 2026 +0100
+
+    feat: integrated enterprise brand identity and new logo
+
+[33mcommit c165a2ce82cedd73b32c9c9a56d8106f3e8c05c3[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 08:02:56 2026 +0100
+
+    feat: updated logo
+
+[33mcommit 425dc248e680d98bf812f85b5c661323c6052b47[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon Jun 8 07:49:31 2026 +0100
+
+    feat: integrated enterprise brand identity and new logo
+
+[33mcommit beaef4389e813080296a090c61c8a66b386ba233[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Wed May 27 14:52:31 2026 +0100
+
+    fix: resolve vercel build error and deploy smart device unbinding
+
+[33mcommit c5daea5b016a29e9b88924bc67b1f9b54171415c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Wed May 27 13:34:21 2026 +0100
+
+    hardwar testing
+
+[33mcommit 7eb60bfd701159c10b4c0940588819fe7e7216ee[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 18:00:09 2026 +0100
+
+    added emails
+
+[33mcommit 09e7768c8183c4c5119ccfb9fbfe23eb5a08ba61[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 17:55:02 2026 +0100
+
+    little fixes
+
+[33mcommit 60121ec2e219175a3c664cbf463431354d8ce5bf[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 13:06:00 2026 +0100
+
+    fixees
+
+[33mcommit 55ea70b19bccff67e93b02b507a484957d713942[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 13:01:10 2026 +0100
+
+    fixes
+
+[33mcommit ba1f478b50e005c8abd70616dd4c0180476906f5[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:47:30 2026 +0100
+
+    fix: explicit metadata icons with cache buster
+
+[33mcommit 71e83da9178478b09ce446e04ff6fb12bc565878[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:39:51 2026 +0100
+
+    fix: explicit metadata icons with cache buster
+
+[33mcommit 0f4a3520d9c3ef6889c628f8b3306b3eef84d4d3[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 12:00:54 2026 +0100
+
+    style: unify CampusCheck branding across portal and biometrics
+
+[33mcommit 5be8742dd14df155616322765578533638ea0639[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:42:46 2026 +0100
+
+    feat: complete next-safe PWA engine and universal app hub
+
+[33mcommit d506c2b35d50c07ab62d4cfed5ac56a3a3674ca6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:30:39 2026 +0100
+
+    chore: add PWA logo assets
+
+[33mcommit b0df66bae7069dcd125710f87fdf948febd621ce[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 11:05:03 2026 +0100
+
+    feat: refine analytics UI and add student microscope features
+
+[33mcommit aa82c4b744054c580952f99e4d46c2424d3ad8cc[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 10:52:53 2026 +0100
+
+    refactor: optimize live radar layout
+
+[33mcommit b0133e22aac3ac38b982499737787d84b11e33ca[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Tue May 26 08:02:02 2026 +0100
+
+    feat: complete 3-tab dashboard architecture with master gradebook export
+
+[33mcommit 00b8471aeffbaa76643937698b5177182e709809[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 21:30:24 2026 +0100
+
+    fix: wrap rep portal in suspense and remove unused imports
+
+[33mcommit f9e034f7b1cf3b9dc953c002f9bcd520b77b3782[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 20:55:40 2026 +0100
+
+    feat: build master semester export and automated gradebook
+
+[33mcommit 9af59081aceae459c0d805e711936e7531a10cdb[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 16:00:38 2026 +0100
+
+    feat: add biometric wipe functionality
+
+[33mcommit ba7b49a2e3754b012b7ba3cc35babc7e4f372f70[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 15:30:53 2026 +0100
+
+    feat: add biometric wipe functionality
+
+[33mcommit e88612f40263403e46b59c6041cdbadc9a26faaf[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 11:02:27 2026 +0100
+
+    fix: auto-adjust server ping selection and reduce timeouts
+
+[33mcommit 0ad2810584605e14b263654c70b9e80842332a0a[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 10:48:41 2026 +0100
+
+    fix: auto-adjust server ping selection and reduce timeouts
+
+[33mcommit 0a8f99707200c5082509ee77a68336fdfb705bfd[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 09:51:39 2026 +0100
+
+    fix: enforce 60m gps accuracy filter and extend timeouts
+
+[33mcommit a4ed2132c9f6c538669e0992c84beb3f6f75c7a6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:55:32 2026 +0100
+
+    increase geofence radius to 150 meters
+
+[33mcommit df62e14d9dce8980bb72ccbce76dfee7219683b6[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:17:57 2026 +0100
+
+    nuke cache and implement immune hex decoding
+
+[33mcommit 273ca9b98e611032449bbc10920c63d5346dc5fc[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 05:01:19 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 5ec84494b2e7522d2bc4908af43f48a068e80d9c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:50:56 2026 +0100
+
+    bypass typescript compiler in verify route
+
+[33mcommit 3cfe79416d822f1a733e8bdeedc3d273595e772c[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:45:28 2026 +0100
+
+    bypass typescript compiler in verify route
+
+[33mcommit b0d8787679c3eca9a27b308c6dc11d67971b5088[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:37:58 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit e832f830ddb996bd245294eb0d2b943caad17216[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:29:50 2026 +0100
+
+    fix cose key encoding
+
+[33mcommit faa42fe66a693e03a02583e034a0a7636af54385[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Mon May 25 04:25:37 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit b83da311ff22f1ddee75775f0754749e6de53bb7[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 17:08:51 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 6d6bee68ed4a1614c91222c27cd46ba7a31889f5[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 17:02:54 2026 +0100
+
+    bypass ts compiler error
+
+[33mcommit 0297d4887305ea526d5c9fb51bbd3bb3a4e0b9c2[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:42:09 2026 +0100
+
+    unmask error
+
+[33mcommit f5c122d4fff2f9bce93b6b70939e46761c34d16f[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:30:44 2026 +0100
+
+    fix passkey crypto bug
+
+[33mcommit 1229dddf352a07b629f01b1be0e6ece3affa054a[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 16:09:25 2026 +0100
+
+    remove dynamic export to fix build crash
+
+[33mcommit 1958cce91c0310b2fcafdc9b2e40bd91046c4b04[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 15:51:46 2026 +0100
+
+    remove dynamic export to fix build crash
+
+[33mcommit b7963b6a860707f9a6353d271e046031a2209bdb[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 13:53:25 2026 +0100
+
+    import correct biometric component to homepage
+
+[33mcommit 3433aa0e455c5fb4227a1d5dc43d2fc67c175dab[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sun May 24 13:39:34 2026 +0100
+
+    shatter vercel cache
+
+[33mcommit 81851956017d03fdeb2790b0f254a18c0df2c776[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 19:28:03 2026 +0100
+
+    force update student portal structure
+
+[33mcommit 7a7b006ac348cdde30e8a3f535cb49744a7d620f[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 18:56:08 2026 +0100
+
+    Add device fingerprint anti-sharing protection
+
+[33mcommit e47f9a99a2630513bd37c47b85498ed0354ed72b[m
+Author: adaife247 <ifeadameji123@gmail.com>
+Date:   Sat May 23 12:17:43 2026 +0100
+
+    final webauthn and gps optimizations
+
+[
+</file>
+
+<file path="middleware_backup.ts">
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  // If someone tries to access the dashboard...
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    // Check if they have the secret VIP stamp (cookie)
+    const isAdmin = request.cookies.get('attendance_admin_token');
+
+    // If they don't have it, instantly kick them to the login page
+    if (!isAdmin || isAdmin.value !== 'verified') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  // If they have the stamp, let them pass
+  return NextResponse.next();
+}
+
+// Tell the bouncer to only watch the dashboard routes to save server speed
+export const config = {
+  matcher: ['/dashboard/:path*'],
+};
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
 </file>
 
 <file path="app/api/admin-login/route.ts">
@@ -105,8 +700,12 @@ export async function POST(request: Request) {
   try {
     const { password } = await request.json();
 
-    // HARDCODED PASSWORD (For testing. In production, put this in your .env file)
-    const CORRECT_PASSWORD = "fuoye2026"; 
+    // SECURED: Pulled dynamically from Vercel parameters
+    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
+
+    if (!CORRECT_PASSWORD) {
+      return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
+    }
 
     if (password === CORRECT_PASSWORD) {
       // Next.js 15 requires awaiting the cookies API before setting them
@@ -135,9 +734,7 @@ export async function POST(request: Request) {
 
 <file path="app/api/attendance-history/route.ts">
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -156,11 +753,399 @@ export async function GET(request: Request) {
 }
 </file>
 
-<file path="app/api/master-export/route.ts">
+<file path="app/api/request-override/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+export async function POST(request: Request) {
+  try {
+    const { sessionId, matricNumber } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    if (!sessionId || !cleanMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    // Check if they are already in the system
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id, status')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      if (existingLog.status === 'verified') {
+        return NextResponse.json({ message: "You are already verified." }, { status: 409 });
+      }
+      
+      // Update their failed/flagged status to the appeal queue
+      await supabase.from('attendance_logs').update({ 
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" }) 
+      }).eq('id', existingLog.id);
+      
+    } else {
+      // Insert them directly into the appeal queue
+      await supabase.from('attendance_logs').insert([{
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" })
+      }]);
+    }
+
+    return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
+
+  } catch (error: any) {
+    return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/reset-device/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const rawMatric = body.matricNumber;
+
+    if (!rawMatric) {
+      return NextResponse.json({ message: "Matric number required." }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // Delete the device binding. This forces the student to re-register a new passkey.
+    // Their attendance history remains perfectly intact in the attendance_logs table.
+    const { error } = await supabase
+      .from('user_devices')
+      .delete()
+      .eq('matric_number', cleanMatric);
+
+    if (error) throw error;
+
+    return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
+
+  } catch (error: any) {
+    console.error("Device Reset Error:", error.message);
+    return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/verify-rep/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+export async function POST(request: Request) {
+  try {
+    const { sessionId, passcode } = await request.json();
+
+    if (!sessionId || !passcode) {
+      return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
+    }
+
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('rep_passcode')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (session && session.rep_passcode === passcode) {
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
+
+    return NextResponse.json({ message: "Invalid passcode" }, { status: 401 });
+  } catch (error: any) {
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/webauthn/verify-hardware/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+export async function POST(request: Request) {
+  try {
+    // 1. We moved the client setup INSIDE the function!
+    // Now Next.js won't crash during the build phase.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: 'Server missing database credentials' }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 2. The rest of the logic remains exactly the same
+    const body = await request.json();
+    const { matricNumber, hardwareFingerprint } = body;
+
+    if (!matricNumber || !hardwareFingerprint) {
+      return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('students')
+      .select('hardware_fingerprint')
+      .eq('matric_number', matricNumber)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ isMatch: false });
+    }
+
+    if (data.hardware_fingerprint === hardwareFingerprint) {
+      return NextResponse.json({ isMatch: true });
+    } else {
+      return NextResponse.json({ isMatch: false });
+    }
+
+  } catch (error) {
+    const e = error as Error; // Fixed the "any" type error here too!
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/dashboard/layout.tsx">
+'use client';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users } from 'lucide-react';
+import Link from 'next/link';
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
+  // --- UPDATED NAVIGATION TABS ---
+  const navItems = [
+    { name: 'Live Radar', href: '/dashboard', icon: Radio },
+    { name: 'Student Management', href: '/dashboard/courses', icon: Users },
+    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
+  ];
+
+  return (
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+      
+      {/* Mobile Top Navigation */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
+          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
+        </div>
+        <button 
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200"
+        >
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      {/* Desktop Sidebar & Mobile Dropdown */}
+      <aside className={`
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 transition-transform duration-300 ease-in-out
+        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
+        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
+      `}>
+        {/* Desktop Branding (Hidden on Mobile) */}
+        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100">
+          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+            <ShieldCheck size={22} strokeWidth={2.5} />
+          </div>
+          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Secure Logout Button */}
+        <div className="p-4 border-t border-gray-100">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all"
+          >
+            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
+        {children}
+      </main>
+
+      {/* Mobile Overlay (Click to close menu) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900/20 z-30 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="components/PWARegister.tsx">
+'use client';
+import { useEffect } from 'react';
+
+export default function PWARegister() {
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(() => console.log('✅ PWA Engine Activated'))
+        .catch((err) => console.error('⚠️ PWA Engine Failed:', err));
+    }
+  }, []);
+
+  return null; 
+}
+</file>
+
+<file path="public/manifest.json">
+{
+  "name": "CampusCheck",
+  "short_name": "CampusCheck",
+  "description": "Geofenced campus verification system.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+</file>
+
+<file path="public/sw.js">
+const CACHE_NAME = 'campuscheck-v2';
+
+self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Instantly activate the new service worker
+});
+
+self.addEventListener('activate', (event) => {
+  self.clients.claim(); // Take control of all pages immediately
+});
+
+self.addEventListener('fetch', (event) => {
+  // Minimal fetch handler required to trigger the "Install PWA" prompt.
+  // We use "network-first" to ensure Next.js App Router works perfectly.
+  event.respondWith(
+    fetch(event.request).catch(() => {
+      return new Response(
+        "Network connection lost. Please check your internet.", 
+        { status: 503, statusText: "Service Unavailable" }
+      );
+    })
+  );
+});
+</file>
+
+<file path="utils/webauthn.ts">
+// This is the name that shows up natively on FaceID / Fingerprint prompts
+export const rpName = 'CampusCheck';
+
+export const rpID = process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_DOMAIN! : 'localhost';
+
+export const origin = process.env.NODE_ENV === 'production' ? `https://${process.env.NEXT_PUBLIC_DOMAIN}` : 'http://localhost:3000';
+</file>
+
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.vercel
+</file>
+
+<file path="app/api/master-export/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function GET(request: Request) {
   try {
@@ -244,826 +1229,12 @@ export async function GET(request: Request) {
 }
 </file>
 
-<file path="app/api/request-override/route.ts">
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const { sessionId, matricNumber } = await request.json();
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    if (!sessionId || !cleanMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    // Check if they are already in the system
-    const { data: existingLog } = await supabase
-      .from('attendance_logs')
-      .select('id, status')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (existingLog) {
-      if (existingLog.status === 'verified') {
-        return NextResponse.json({ message: "You are already verified." }, { status: 409 });
-      }
-      
-      // Update their failed/flagged status to the appeal queue
-      await supabase.from('attendance_logs').update({ 
-        status: 'pending_override',
-        device_info: JSON.stringify({ method: "Digital Hand Raise" }) 
-      }).eq('id', existingLog.id);
-      
-    } else {
-      // Insert them directly into the appeal queue
-      await supabase.from('attendance_logs').insert([{
-        session_id: sessionId,
-        matric_number: cleanMatric,
-        status: 'pending_override',
-        device_info: JSON.stringify({ method: "Digital Hand Raise" })
-      }]);
-    }
-
-    return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
-
-  } catch (error: any) {
-    return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/reset-device/route.ts">
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const rawMatric = body.matricNumber;
-
-    if (!rawMatric) {
-      return NextResponse.json({ message: "Matric number required." }, { status: 400 });
-    }
-
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
-
-    // Delete the device binding. This forces the student to re-register a new passkey.
-    // Their attendance history remains perfectly intact in the attendance_logs table.
-    const { error } = await supabase
-      .from('user_devices')
-      .delete()
-      .eq('matric_number', cleanMatric);
-
-    if (error) throw error;
-
-    return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
-
-  } catch (error: any) {
-    console.error("Device Reset Error:", error.message);
-    return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/verify-rep/route.ts">
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
-export async function POST(request: Request) {
-  try {
-    const { sessionId, passcode } = await request.json();
-
-    if (!sessionId || !passcode) {
-      return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
-    }
-
-    const { data: session } = await supabase
-      .from('lecture_sessions')
-      .select('rep_passcode')
-      .eq('session_id', sessionId)
-      .single();
-
-    if (session && session.rep_passcode === passcode) {
-      return NextResponse.json({ success: true }, { status: 200 });
-    }
-
-    return NextResponse.json({ message: "Invalid passcode" }, { status: 401 });
-  } catch (error: any) {
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/dashboard/analytics/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { BarChart3, TrendingUp, AlertTriangle, Users, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export default function AnalyticsPage() {
-  const [courses, setCourses] = useState<any[]>([]);
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
-  const [stats, setStats] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const { data, error } = await supabase.from('courses').select('id, course_code');
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          setCourses(data);
-          setSelectedCourseCode(data[0].course_code); 
-        } else {
-          setIsLoading(false);
-        }
-      } catch (err: any) {
-        console.error("Error fetching courses:", err);
-        setErrorMessage("Could not load courses.");
-        setIsLoading(false);
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedCourseCode) return;
-
-    const generateAnalytics = async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
-      
-      try {
-        // Optimized case-insensitive query
-        const { data: sessions, error: sessionError } = await supabase
-          .from('lecture_sessions')
-          .select('session_id, created_at')
-          .ilike('course_code', selectedCourseCode.trim())
-          .order('created_at', { ascending: true });
-
-        if (sessionError) throw sessionError;
-
-        if (!sessions || sessions.length === 0) {
-          setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
-          return;
-        }
-
-        const sessionIds = sessions.map(s => s.session_id);
-        const { data: logs, error: logError } = await supabase
-          .from('attendance_logs')
-          .select('matric_number, status, session_id')
-          .in('session_id', sessionIds);
-
-        if (logError) throw logError;
-
-        const safeLogs = logs || []; 
-
-        const trendData = sessions.map((session, index) => {
-          const sessionLogs = safeLogs.filter(l => l.session_id === session.session_id);
-          const verifiedCount = sessionLogs.filter(l => l.status === 'verified').length;
-          
-          const dateLabel = session.created_at 
-            ? new Date(session.created_at).toLocaleDateString() 
-            : 'Unknown Date';
-
-          return {
-            label: `Class ${index + 1}`,
-            date: dateLabel,
-            count: verifiedCount,
-            height: verifiedCount > 0 ? Math.min((verifiedCount / 100) * 100, 100) : 5 
-          };
-        });
-
-        const flaggedLogs = safeLogs.filter(l => l.status === 'flagged');
-        const flagCounts = flaggedLogs.reduce((acc: any, log) => {
-          acc[log.matric_number] = (acc[log.matric_number] || 0) + 1;
-          return acc;
-        }, {});
-
-        const flaggedStudents = Object.keys(flagCounts)
-          .map(matric => ({ matric, count: flagCounts[matric] }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5); 
-
-        const totalVerified = safeLogs.filter(l => l.status === 'verified').length;
-        const avgAttendance = Math.round(totalVerified / sessions.length);
-
-        setStats({
-          totalSessions: sessions.length,
-          avgAttendance,
-          flaggedStudents,
-          trendData
-        });
-
-      } catch (err: any) {
-        console.error("Analytics Calculation Error:", err);
-        setErrorMessage(err.message || "An error occurred fetching the data.");
-        setStats({ totalSessions: 0, avgAttendance: 0, flaggedStudents: [], trendData: [] });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    generateAnalytics();
-  }, [selectedCourseCode]);
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
-              <BarChart3 className="text-[#2563EB]" size={32} />
-              Historical Analytics
-            </h1>
-            <p className="text-gray-500 font-medium mt-1">Track attendance trends and identify at-risk students.</p>
-          </div>
-
-          <select 
-            value={selectedCourseCode} 
-            onChange={(e) => setSelectedCourseCode(e.target.value)}
-            disabled={courses.length === 0}
-            className="bg-white border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] disabled:opacity-50 cursor-pointer"
-          >
-            {courses.length === 0 ? (
-              <option>No Courses Found</option>
-            ) : (
-              courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
-            )}
-          </select>
-        </div>
-
-        {errorMessage && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 font-bold flex items-center gap-2">
-            <AlertTriangle size={20} />
-            {errorMessage}
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="h-64 flex flex-col items-center justify-center space-y-4">
-            <div className="w-10 h-10 border-4 border-blue-200 border-t-[#2563EB] rounded-full animate-spin"></div>
-            <p className="font-bold text-gray-400">Crunching data...</p>
-          </div>
-        ) : !stats || stats.totalSessions === 0 ? (
-          
-          <div className="h-64 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 text-gray-400 shadow-sm transition-all">
-            <Calendar size={48} className="mb-4 opacity-50 text-gray-300" />
-            <p className="font-bold text-gray-500">No lecture sessions recorded for {selectedCourseCode} yet.</p>
-            <p className="text-sm mt-2">Start a dynamic geofence session to begin tracking data.</p>
-          </div>
-          
-        ) : (
-          
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Avg. Attendance</p>
-                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.avgAttendance}</h3>
-                  </div>
-                  <div className="bg-blue-50 p-3 rounded-xl"><Users className="text-[#2563EB]" size={24} /></div>
-                </div>
-                <p className="text-sm font-bold text-green-600 mt-4 flex items-center gap-1"><ArrowUpRight size={16}/> Students per class</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">Total Sessions</p>
-                    <h3 className="text-4xl font-extrabold text-gray-900 mt-2">{stats.totalSessions}</h3>
-                  </div>
-                  <div className="bg-purple-50 p-3 rounded-xl"><Calendar className="text-purple-600" size={24} /></div>
-                </div>
-                <p className="text-sm font-bold text-gray-400 mt-4">Classes held this semester</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-gray-500 font-bold text-sm uppercase tracking-wider">High-Risk Students</p>
-                    <h3 className="text-4xl font-extrabold text-red-600 mt-2">{stats.flaggedStudents.length}</h3>
-                  </div>
-                  <div className="bg-red-50 p-3 rounded-xl"><AlertTriangle className="text-red-600" size={24} /></div>
-                </div>
-                <p className="text-sm font-bold text-red-500 mt-4 flex items-center gap-1"><ArrowDownRight size={16}/> Require frequent overrides</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
-              
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
-                  <TrendingUp className="text-[#2563EB]" size={20} />
-                  <h3 className="font-extrabold text-gray-900 text-lg">Attendance Trajectory</h3>
-                </div>
-                
-                <div className="flex items-end gap-4 h-64 overflow-x-auto pb-4 pt-4">
-                  {stats.trendData.map((data: any, i: number) => (
-                    <div key={i} className="flex flex-col items-center flex-shrink-0 w-16 group">
-                      <span className="text-xs font-bold text-[#2563EB] mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 px-2 py-1 rounded-md">{data.count}</span>
-                      <div 
-                        className="w-full bg-[#2563EB] rounded-t-md hover:bg-blue-700 transition-all cursor-pointer shadow-sm"
-                        style={{ height: `${data.height}%`, minHeight: '20px' }}
-                      ></div>
-                      <span className="text-xs font-bold text-gray-500 mt-3">{data.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-                  <AlertTriangle className="text-red-500" size={20} />
-                  <h3 className="font-extrabold text-gray-900 text-lg">Override Watchlist</h3>
-                </div>
-                
-                {stats.flaggedStudents.length === 0 ? (
-                  <p className="text-sm font-bold text-gray-400 text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">No flagged students yet.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {stats.flaggedStudents.map((student: any, index: number) => (
-                      <div key={index} className="flex items-center justify-between p-4 bg-red-50 rounded-xl border border-red-100 transition-all hover:bg-red-100">
-                        <span className="font-extrabold text-gray-900">{student.matric}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-red-200 text-red-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm">
-                            {student.count} flags
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="app/dashboard/layout.tsx">
-'use client';
-import { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { Radio, BarChart3, BookOpen, LogOut, ShieldCheck, Menu, X } from 'lucide-react';
-import Link from 'next/link';
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
-  const navItems = [
-    { name: 'Live Radar', href: '/dashboard', icon: Radio },
-    { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Course Roster', href: '/dashboard/courses', icon: BookOpen },
-  ];
-
-  return (
-    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
-      
-      {/* Mobile Top Navigation */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
-          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
-        </div>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200"
-        >
-          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </div>
-
-      {/* Desktop Sidebar & Mobile Dropdown */}
-      <aside className={`
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 transition-transform duration-300 ease-in-out
-        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
-        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
-      `}>
-        {/* Desktop Branding (Hidden on Mobile) */}
-        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100">
-          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
-            <ShieldCheck size={22} strokeWidth={2.5} />
-          </div>
-          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
-        </div>
-
-        {/* Navigation Links */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link 
-                key={item.name} 
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Secure Logout Button */}
-        <div className="p-4 border-t border-gray-100">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all"
-          >
-            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area - This automatically renders your existing page.tsx! */}
-      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
-        {children}
-      </main>
-
-      {/* Mobile Overlay (Click to close menu) */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-gray-900/20 z-30 md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-</file>
-
-<file path="app/globals.css">
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-</file>
-
-<file path="app/layout.tsx">
-import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// NEW: This locks the screen so it doesn't scatter or zoom on mobile
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#111827',
-};
-
-export const metadata: Metadata = {
-  title: "FUOYE Live Attendance",
-  description: "Geofenced campus verification system",
-  manifest: "/manifest.json", 
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
-  );
-}
-</file>
-
-<file path="CLAUDE.md">
-@AGENTS.md
-</file>
-
-<file path="eslint.config.mjs">
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
-
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-]);
-
-export default eslintConfig;
-</file>
-
-<file path="middleware_backup.ts">
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-
-export function middleware(request: NextRequest) {
-  // If someone tries to access the dashboard...
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    // Check if they have the secret VIP stamp (cookie)
-    const isAdmin = request.cookies.get('attendance_admin_token');
-
-    // If they don't have it, instantly kick them to the login page
-    if (!isAdmin || isAdmin.value !== 'verified') {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
-
-  // If they have the stamp, let them pass
-  return NextResponse.next();
-}
-
-// Tell the bouncer to only watch the dashboard routes to save server speed
-export const config = {
-  matcher: ['/dashboard/:path*'],
-};
-</file>
-
-<file path="next.config.ts">
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
-};
-
-export default nextConfig;
-</file>
-
-<file path="postcss.config.mjs">
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-
-export default config;
-</file>
-
-<file path="public/file.svg">
-<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
-</file>
-
-<file path="public/globe.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
-</file>
-
-<file path="public/manifest.json">
-{
-  "name": "FUOYE Attendance",
-  "short_name": "Attendance",
-  "description": "Geofenced student check-in system.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#F9FAFB",
-  "theme_color": "#111827",
-  "orientation": "portrait-primary",
-  "icons": [
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
-}
-</file>
-
-<file path="public/next.svg">
-<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
-</file>
-
-<file path="public/vercel.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
-</file>
-
-<file path="public/window.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
-</file>
-
-<file path="README.md">
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-</file>
-
-<file path="tsconfig.json">
-{
-  "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./*"]
-    }
-  },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules"]
-}
-</file>
-
-<file path="utils/supabase.ts">
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-</file>
-
-<file path="utils/webauthn.ts">
-export const rpName = 'CampusCheck FUOYE';
-
-// NEXT_PUBLIC_DOMAIN should be your Vercel URL when deployed (e.g., 'campuscheck.vercel.app')
-export const rpID = process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_DOMAIN! : 'localhost';
-
-export const origin = process.env.NODE_ENV === 'production' ? `https://${process.env.NEXT_PUBLIC_DOMAIN}` : 'http://localhost:3000';
-</file>
-
-<file path=".gitignore">
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-.vercel
-</file>
-
 <file path="app/portal/page.tsx">
 'use client';
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Search, ShieldCheck, User, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { Search, ShieldCheck, User, CheckCircle, AlertTriangle, Clock, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
@@ -1116,47 +1287,73 @@ export default function StudentPortal() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-8 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1.5 bg-gray-900"></div>
-        <div className="text-center mb-8 mt-2">
-          <ShieldCheck size={28} className="text-gray-900 mx-auto mb-2" strokeWidth={2.5} />
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Student Portal</h1>
-          <p className="text-gray-500 mt-2 text-sm font-medium">Check your exam eligibility status.</p>
-        </div>
-
-        <div className="relative mb-4">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-          <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && fetchRecords()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-gray-900 transition-all uppercase placeholder:text-sm placeholder:font-medium" />
-        </div>
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md">
         
-        <button onClick={fetchRecords} disabled={matricNumber.length < 5 || isSearching} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
-          {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />} {isSearching ? "Searching Ledger..." : "Check Records"}
-        </button>
-
-        {error && <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center"><p className="text-red-700 font-bold text-sm">{error}</p></div>}
-
-        {records && records.length > 0 && (
-          <div className="mt-8 space-y-4">
-            <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Your Attendance</h3>
-            {records.map((record) => (
-              <div key={record.course_code} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center">
-                <div>
-                  <p className="font-extrabold text-gray-900">{record.course_code}</p>
-                  <p className="text-xs text-gray-500 font-medium mt-1">Attended {record.attended_classes} of {record.total_classes} classes</p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-black text-xl ${record.percentage >= 70 ? 'text-green-600' : 'text-red-600'}`}>{record.percentage}%</p>
-                  {record.percentage >= 70 ? (
-                    <span className="text-[10px] uppercase font-bold text-green-600 flex items-center gap-1"><CheckCircle size={10}/> Eligible</span>
-                  ) : (
-                    <span className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1"><AlertTriangle size={10}/> At Risk</span>
-                  )}
-                </div>
-              </div>
-            ))}
+        {/* PREMIUM BRANDING HEADER */}
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
-        )}
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-2 font-medium">Student Records Portal</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 animate-in fade-in slide-in-from-bottom-6">
+          <div className="relative mb-4">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+            <input 
+              type="text" 
+              placeholder="Matric Number (e.g. CSC/2021/001)" 
+              value={matricNumber} 
+              onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
+              onKeyDown={(e) => e.key === 'Enter' && fetchRecords()} 
+              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
+            />
+          </div>
+          
+          <button 
+            onClick={fetchRecords} 
+            disabled={matricNumber.length < 5 || isSearching} 
+            className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+          >
+            {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />} 
+            {isSearching ? "Searching Ledger..." : "Check Records"}
+          </button>
+
+          {error && <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center"><p className="text-red-700 font-bold text-sm">{error}</p></div>}
+
+          {records && records.length > 0 && (
+            <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+              <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Your Attendance</h3>
+              {records.map((record) => (
+                <div key={record.course_code} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center hover:border-blue-200 transition-colors">
+                  <div>
+                    <p className="font-extrabold text-gray-900">{record.course_code}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1">Attended {record.attended_classes} of {record.total_classes} classes</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-black text-xl ${record.percentage >= 70 ? 'text-green-600' : 'text-red-600'}`}>{record.percentage}%</p>
+                    {record.percentage >= 70 ? (
+                      <span className="text-[10px] uppercase font-bold text-green-600 flex items-center gap-1"><CheckCircle size={10}/> Eligible</span>
+                    ) : (
+                      <span className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1"><AlertTriangle size={10}/> At Risk</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Back to Hub Navigation */}
+        <div className="mt-6 text-center animate-in fade-in">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
       </div>
     </div>
   );
@@ -1185,7 +1382,8 @@ function RepPortalContent() {
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
   const verifyPasscode = async () => {
-    if (passcode.length !== 4) { setError("Passcode must be 4 digits."); return; }
+    // --- UPDATED: Expect 6 characters ---
+    if (passcode.length !== 6) { setError("Passcode must be 6 characters."); return; }
     setIsVerifying(true);
     setError('');
 
@@ -1244,20 +1442,22 @@ function RepPortalContent() {
             <KeyRound size={32} />
           </div>
           <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Class Rep Access</h2>
-          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 4-digit session PIN provided by the lecturer.</p>
+          {/* --- UPDATED: UI Text --- */}
+          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 6-character session PIN provided by the lecturer.</p>
           
+          {/* --- UPDATED: Allows A-Z and 0-9, Max Length 6 --- */}
           <input 
             type="text" 
-            maxLength={4}
-            placeholder="• • • •" 
+            maxLength={6}
+            placeholder="• • • • • •" 
             value={passcode} 
-            onChange={(e) => setPasscode(e.target.value.replace(/\D/g, ''))} 
+            onChange={(e) => setPasscode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
             onKeyDown={(e) => e.key === 'Enter' && verifyPasscode()}
-            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.5em]" 
+            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.3em]" 
           />
           {error && <p className="text-red-500 text-sm font-bold mt-3">{error}</p>}
           
-          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 4} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
+          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 6} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
             {isVerifying ? <Loader2 className="animate-spin" size={20} /> : "Unlock Portal"}
           </button>
         </div>
@@ -1317,209 +1517,11 @@ function RepPortalContent() {
   );
 }
 
-// THE SUSPENSE WRAPPER FIX
 export default function ClassRepPortal() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
       <RepPortalContent />
     </Suspense>
-  );
-}
-</file>
-
-<file path="app/login/page.tsx">
-'use client';
-import { useState } from 'react';
-import { Mail, Lock, User, Building, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
-import { supabase } from '../../utils/supabase'; 
-
-export default function LecturerLogin() {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [department, setDepartment] = useState('');
-
-  const handleAuth = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    try {
-      if (isSignUp) {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-        if (authError) throw authError;
-
-        if (authData.user) {
-          const { error: dbError } = await supabase
-            .from('lecturers')
-            .insert([
-              { 
-                id: authData.user.id, 
-                email: email, 
-                full_name: fullName, 
-                department: department 
-              }
-            ]);
-            
-          if (dbError) throw dbError;
-          
-          window.location.href = '/dashboard';
-        } else {
-          throw new Error("Signup failed. Please check your Supabase settings.");
-        }
-      } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (signInError) throw signInError;
-        
-        if (data.session) {
-          window.location.href = '/dashboard';
-        } else {
-          throw new Error("No active session returned. Make sure 'Confirm Email' is OFF in Supabase.");
-        }
-      }
-    } catch (err: any) {
-      console.error("Auth Error:", err);
-      setError(err.message || "An error occurred during authentication. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 md:p-6 font-sans">
-      <div className="w-full max-w-md">
-        
-        {/* Bulletproof Branding Header */}
-        <div className="text-center mb-8 flex flex-col items-center justify-center">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-2 font-medium">Faculty Authentication Portal</p>
-        </div>
-
-        {/* Auth Card */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8">
-          
-          {/* Toggle Tabs */}
-          <div className="flex p-1 bg-gray-50 rounded-xl mb-8 border border-gray-100">
-            <button 
-              type="button"
-              onClick={() => { setIsSignUp(false); setError(''); }}
-              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${!isSignUp ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              Sign In
-            </button>
-            <button 
-              type="button"
-              onClick={() => { setIsSignUp(true); setError(''); }}
-              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${isSignUp ? 'bg-white text-gray-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              Create Account
-            </button>
-          </div>
-
-          {error && (
-            <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-sm font-bold rounded-xl text-center">
-              {error}
-            </div>
-          )}
-
-          {/* Wrapper replacing the form tag */}
-          <div className="space-y-4">
-            
-            {isSignUp && (
-              <>
-                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                    <User size={18} />
-                  </div>
-                  <input 
-                    type="text" 
-                    placeholder="Full Name (e.g. Dr. Ojo Emmanuel)"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
-                  />
-                </div>
-                
-                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                    <Building size={18} />
-                  </div>
-                  <input 
-                    type="text" 
-                    placeholder="Department (e.g. Computer Science)"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                <Mail size={18} />
-              </div>
-              <input 
-                type="email" 
-                placeholder="Official Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
-              />
-            </div>
-
-            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                <Lock size={18} />
-              </div>
-              <input 
-                type="password" 
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-transparent text-gray-900 font-medium py-3.5 pr-4 outline-none placeholder:text-gray-400 text-sm"
-              />
-            </div>
-
-            <button 
-              type="button" 
-              onClick={handleAuth}
-              disabled={isLoading || !email || !password}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-sm py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 mt-2"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <>
-                  {isSignUp ? "Create Faculty Account" : "Secure Sign In"} <ArrowRight size={18} />
-                </>
-              )}
-            </button>
-          </div>
-
-        </div>
-        
-        <p className="text-center text-xs font-semibold text-gray-400 mt-8">
-          Secured by CampusCheck Zero-Trust Architecture
-        </p>
-      </div>
-    </div>
   );
 }
 </file>
@@ -1546,7 +1548,7 @@ export default function LecturerLogin() {
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.41",
+    "@types/node": "^20.19.43",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
@@ -1554,6 +1556,285 @@ export default function LecturerLogin() {
     "tailwindcss": "^4",
     "typescript": "^5"
   }
+}
+</file>
+
+<file path="app/dashboard/analytics/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { 
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
+} from 'lucide-react';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default function AnalyticsPage() {
+  const [courses, setCourses] = useState<any[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+  
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(false);
+  
+  const [reportData, setReportData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      const { data } = await supabase.from('courses').select('id, course_code');
+      if (data && data.length > 0) {
+        setCourses(data);
+        setSelectedCourseCode(data[0].course_code); 
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCourseCode) return;
+    fetchReportData(false);
+  }, [selectedCourseCode]);
+
+  const fetchReportData = async (useFilters: boolean = false) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
+      if (useFilters) {
+        if (startDate) url += `&startDate=${startDate}`;
+        if (endDate) url += `&endDate=${endDate}`;
+      }
+      const response = await fetch(url);
+      
+      if (response.status === 404) {
+        setReportData(null);
+        setErrorMessage("No classes found for this timeframe.");
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!response.ok) throw new Error("Failed to load analytics.");
+      
+      const data = await response.json();
+      setReportData(data);
+    } catch (err: any) {
+      setErrorMessage(err.message);
+      setReportData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- THE SENATE-GRADE CSV EXPORT ---
+  const handleDownload = (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report) return;
+    setIsDownloading(true);
+    
+    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
+    const datePrinted = new Date().toLocaleDateString();
+    
+    // Formal Senate/Exam Board Header Structure
+    const header = [
+      [`OFFICIAL ATTENDANCE REPORT`],
+      [`Course Code:`, selectedCourseCode],
+      [`Reporting Period:`, timeLabel],
+      [`Total Classes Held:`, reportData.totalClasses],
+      [`Date Generated:`, datePrinted],
+      [], // Empty row for visual spacing
+      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", "REMARK"]
+    ];
+
+    // Alphabetical Sorting & Serial Number Injection
+    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+    
+    const rows = sortedReport.map((s: any, index: number) => [
+      index + 1, // S/N
+      s.matricNumber, 
+      s.totalClasses,
+      s.attended, 
+      s.percentage, 
+      s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE" // Formal remarks
+    ]);
+    
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setIsDownloading(false);
+  };
+
+  const applyCustomDates = () => { fetchReportData(true); };
+
+  const atRiskStudents = reportData?.report?.filter((s: any) => s.eligible === 'NO') || [];
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
+            </h1>
+            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
+          </div>
+          <select value={selectedCourseCode} onChange={(e) => setSelectedCourseCode(e.target.value)} disabled={courses.length === 0} className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] cursor-pointer">
+            {courses.length === 0 ? <option>No Courses Found</option> : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+          </select>
+        </div>
+
+        {/* PRIMARY EXPORT WIDGET */}
+        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-green-100 p-4 rounded-xl text-green-700">
+              <FileSpreadsheet size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
+              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
+            </div>
+          </div>
+
+          <button onClick={() => handleDownload(true)} disabled={isDownloading || !reportData} className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6">
+            {isDownloading ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />} Download Full Semester CSV
+          </button>
+
+          <div className="border-t border-gray-100 pt-6">
+            <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
+              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showAdvanced && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
+                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" /></div>
+                <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
+                  <button onClick={applyCustomDates} className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm">Apply Filters</button>
+                  <button onClick={() => handleDownload(false)} disabled={isDownloading || !reportData} className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"><Download size={16} /> Export Range</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* WATCHLIST WIDGET */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <button onClick={() => setShowWatchlist(!showWatchlist)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">{atRiskStudents.length > 0 ? `${atRiskStudents.length} students currently below 70%` : "All students are eligible for the exam."}</p>
+              </div>
+            </div>
+            <div className="text-gray-400">{showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}</div>
+          </button>
+
+          {showWatchlist && (
+            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center h-32"><Loader2 className="animate-spin text-[#2563EB]" size={24}/></div>
+              ) : atRiskStudents.length === 0 ? (
+                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead><tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400"><th className="px-6 py-3 font-bold">Matric Number</th><th className="px-6 py-3 font-bold text-center">Attendance</th><th className="px-6 py-3 font-bold text-right">Standing</th></tr></thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {atRiskStudents.map((student: any, i: number) => (
+                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
+                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
+                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
+                          <td className="px-6 py-3 text-right"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">{student.percentage}%</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/layout.tsx">
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import PWARegister from "../components/PWARegister";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#2563EB',
+};
+
+// Required Apple PWA configuration and Cache-Busted Icons
+export const metadata: Metadata = {
+  title: "CampusCheck",
+  description: "Geofenced campus verification system",
+  manifest: "/manifest.json",
+  icons: {
+    icon: '/icon-192x192.png?v=2', 
+    apple: '/icon-192x192.png?v=2',
+  },
+  appleWebApp: {
+    capable: true,
+    title: "CampusCheck",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <PWARegister />
+        {children}
+      </body>
+    </html>
+  );
 }
 </file>
 
@@ -1570,6 +1851,9 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const courseCodeToSave = body.courseCode || body.course_code;
+    
+    // Extract duration in minutes from the frontend (default to 60 minutes if missing)
+    const durationMinutes = parseInt(body.duration) || 60;
 
     if (!courseCodeToSave) {
       return NextResponse.json({ error: "Missing course code." }, { status: 400 });
@@ -1578,6 +1862,9 @@ export async function POST(request: Request) {
     // Generate a random 4-digit passcode for the Class Rep
     const repPasscode = Math.floor(1000 + Math.random() * 9000).toString();
 
+    // Calculate expiration timestamp
+    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
+
     const { data, error } = await supabase
       .from('lecture_sessions')
       .insert([{
@@ -1585,14 +1872,18 @@ export async function POST(request: Request) {
         anchor_latitude: body.latitude || body.lat, 
         anchor_longitude: body.longitude || body.lng, 
         is_active: true,
-        rep_passcode: repPasscode
+        rep_passcode: repPasscode,
+        expires_at: expiresAt // Storing the strict countdown timer
       }])
       .select('session_id') 
       .single();
 
     if (error) throw error;
 
-    return NextResponse.json({ sessionId: data.session_id });
+    return NextResponse.json({ 
+      sessionId: data.session_id,
+      expiresAt: expiresAt 
+    });
     
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -1603,9 +1894,7 @@ export async function POST(request: Request) {
 <file path="app/api/dashboard-data/route.ts">
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function GET(request: Request) {
   try {
@@ -1649,9 +1938,7 @@ export async function GET(request: Request) {
 
 <file path="app/api/override-attendance/route.ts">
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function POST(request: Request) {
   try {
@@ -1725,31 +2012,13 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpName, rpID } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpName, rpID } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
-    const { matricNumber, hardwareFingerprint } = await request.json();
+    const { matricNumber } = await request.json();
     const cleanMatric = matricNumber.toUpperCase().trim();
-
-    // --- THE INCOGNITO / PROXY KILLER ---
-    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
-      const { data: existingDevice } = await supabase
-        .from('user_devices')
-        .select('matric_number')
-        .eq('device_hash', hardwareFingerprint)
-        .single();
-
-      if (existingDevice && existingDevice.matric_number !== cleanMatric) {
-        return NextResponse.json(
-          { error: `Hardware Block: This physical device is permanently bound to ${existingDevice.matric_number}. Proxy registration denied.` },
-          { status: 403 }
-        );
-      }
-    }
 
     const options = await generateRegistrationOptions({
       rpName,
@@ -1757,8 +2026,6 @@ export async function POST(request: Request) {
       userID: new TextEncoder().encode(cleanMatric),
       userName: cleanMatric,
       authenticatorSelection: {
-        // REMOVED: authenticatorAttachment: 'platform' 
-        // This is the fix for iPhones without iCloud Keychain active.
         residentKey: 'required',
         userVerification: 'required', 
       },
@@ -1779,285 +2046,87 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/dashboard/courses/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '../../../utils/supabase';
-import { BookOpen, Users, Plus, Loader2, FileSpreadsheet, Layers, Download } from 'lucide-react';
-interface Course {
-  id: string;
-  course_code: string;
-  roster: string[];
-}
-
-export default function CourseManagement() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [newCourseCode, setNewCourseCode] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  const fetchCourses = async () => {
-    setIsLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*')
-      .eq('lecturer_id', session.user.id)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setCourses(data);
-    }
-    setIsLoading(false);
-  };
-
-  const createCourse = async () => {
-    if (!newCourseCode.trim()) return;
-    setIsCreating(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { error } = await supabase.from('courses').insert([{
-      lecturer_id: session.user.id,
-      course_code: newCourseCode.toUpperCase(),
-      roster: []
-    }]);
-
-    if (!error) {
-      setNewCourseCode('');
-      fetchCourses();
-    } else {
-      alert("Failed to create course.");
-    }
-    setIsCreating(false);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingId(courseId);
-    const reader = new FileReader();
-    
-    reader.onload = async (event) => {
-      const csvText = event.target?.result as string;
-      const rawMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase());
-      const cleanMatrics = rawMatrics.filter(m => m.length > 5 && !m.includes('MATRIC'));
-      
-      const combinedRoster = [...(existingRoster || []), ...cleanMatrics];
-      const uniqueMatrics = Array.from(new Set(combinedRoster));
-
-      const { error } = await supabase
-        .from('courses')
-        .update({ roster: uniqueMatrics })
-        .eq('id', courseId);
-
-      if (!error) {
-        alert(`Success! Course roster now has ${uniqueMatrics.length} total students.`);
-        fetchCourses();
-      } else {
-        alert("Failed to upload roster.");
-      }
-      setUploadingId(null);
-      e.target.value = '';
-    };
-
-    reader.readAsText(file);
-  };
-
-  // --- THE NEW MASTER EXPORT LOGIC ---
-  const downloadMasterReport = async (courseCode: string, courseId: string) => {
-    setDownloadingId(courseId);
-    try {
-      const response = await fetch(`/api/master-export?courseCode=${courseCode}`);
-      
-      if (response.status === 404) {
-        alert("No classes have been held for this course yet.");
-        setDownloadingId(null);
-        return;
-      }
-
-      if (!response.ok) throw new Error("Failed to fetch report");
-      
-      const data = await response.json();
-      const report = data.report;
-
-      if (!report || report.length === 0) {
-        alert("No attendance data found for this course.");
-        setDownloadingId(null);
-        return;
-      }
-
-      // Build the CSV Header
-      const header = [
-        [`MASTER SEMESTER REPORT: ${courseCode}`],
-        [`Generated on: ${new Date().toLocaleDateString()}`],
-        [`Total Classes Held: ${data.totalClasses}`],
-        [], 
-        ["Matric Number", "Classes Attended", `Total Classes`, "Percentage (%)", "Exam Eligible (>=70%)"]
-      ];
-
-      // Map the Data
-      const rows = report.map((student: any) => [
-        student.matricNumber, 
-        student.attended, 
-        student.totalClasses, 
-        student.percentage, 
-        student.eligible
-      ]);
-
-      const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute("download", `${courseCode.replace(/\s+/g, '_')}_Master_Attendance.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-    } catch (e) {
-      alert("Failed to generate master report. Check your network.");
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
-      
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            <BookOpen className="text-[#2563EB]" size={28} /> Course Registry
-          </h1>
-          <p className="text-gray-500 mt-1 font-medium">Create your courses, merge rosters, and download semester reports.</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider">Add New Course</h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input 
-            type="text" 
-            placeholder="Course Code (e.g., MTH 101)" 
-            value={newCourseCode}
-            onChange={(e) => setNewCourseCode(e.target.value)}
-            className="flex-1 bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-lg focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/20 transition-all uppercase"
-          />
-          <button 
-            onClick={createCourse}
-            disabled={isCreating || !newCourseCode.trim()}
-            className="whitespace-nowrap bg-gray-900 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
-          >
-            {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-            {isCreating ? "Creating..." : "Create Course"}
-          </button>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
-        </div>
-      ) : courses.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
-          <Layers className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No courses established yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {courses.map(course => (
-            <div key={course.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:border-blue-200 transition-all flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">{course.course_code}</h2>
-                  <p className="text-xs font-bold text-green-600 mt-1 flex items-center gap-1 bg-green-50 px-2 py-1 rounded-md w-fit">
-                    Active Registry
-                  </p>
-                </div>
-                <div className="bg-blue-50 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-blue-100">
-                  <Users size={16} className="text-[#2563EB]" />
-                  <span className="font-bold text-[#2563EB]">{course.roster?.length || 0}</span>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100 space-y-3">
-                
-                {/* Roster Upload Button */}
-                <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 transition-all">
-                  {uploadingId === course.id ? (
-                    <Loader2 size={16} className="animate-spin text-[#2563EB]" />
-                  ) : (
-                    <FileSpreadsheet size={16} className="text-[#2563EB]" />
-                  )}
-                  {uploadingId === course.id ? "Syncing Roster..." : "Merge CSV Class List"}
-                  <input 
-                    type="file" 
-                    accept=".csv" 
-                    className="hidden" 
-                    onChange={(e) => handleFileUpload(e, course.id, course.roster)}
-                    disabled={uploadingId === course.id}
-                  />
-                </label>
-
-                {/* Master Export Button */}
-                <button 
-                  onClick={() => downloadMasterReport(course.course_code, course.id)}
-                  disabled={downloadingId === course.id}
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-green-50 text-green-700 border border-green-200 rounded-xl font-bold text-sm hover:bg-green-100 transition-all disabled:opacity-50"
-                >
-                  {downloadingId === course.id ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Download size={16} />
-                  )}
-                  {downloadingId === course.id ? "Compiling Semester..." : "Download Final Gradebook"}
-                </button>
-                
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-</file>
-
 <file path="app/page.tsx">
 'use client';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import { ShieldCheck, Loader2, User, Search, MapPin } from 'lucide-react';
 import StudentCheckInComponent from '../components/StudentCheckIn'; 
+import Link from 'next/link';
 
 function CheckInWrapper() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('sessionId');
 
-  // 1. Block access if there is no session link
+  // ==========================================
+  // STATE 1: THE UNIVERSAL HUB (No active link)
+  // ==========================================
   if (!sessionId) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-200 text-center max-w-sm w-full">
-          <AlertTriangle className="mx-auto text-red-500 mb-4" size={48} />
-          <h1 className="text-xl font-bold text-gray-900">No Session Found</h1>
-          <p className="text-gray-500 mt-2 text-sm">Please scan the QR code or use the exact link provided by your lecturer.</p>
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+        <div className="w-full max-w-md">
+          
+          <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+            <div className="bg-[#2563EB] w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+              <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
+              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+            </div>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+            <p className="text-gray-500 mt-2 font-medium">University Verification Engine</p>
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 space-y-4 animate-in fade-in slide-in-from-bottom-6">
+            
+            <Link 
+              href="/portal" 
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-2xl transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-white p-3 rounded-xl shadow-sm group-hover:text-[#2563EB] transition-colors">
+                  <Search size={20} />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-gray-900">Student Portal</h3>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">Check exam eligibility & records</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link 
+              href="/login" 
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-2xl transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-white p-3 rounded-xl shadow-sm group-hover:text-gray-900 text-gray-500 transition-colors">
+                  <User size={20} />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-bold text-gray-900">Faculty Access</h3>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">Manage live radar & dashboards</p>
+                </div>
+              </div>
+            </Link>
+            
+          </div>
+
+          <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 items-start animate-in fade-in slide-in-from-bottom-8">
+            <MapPin className="text-[#2563EB] shrink-0 mt-0.5" size={20} />
+            <div>
+              <h4 className="font-bold text-blue-900 text-sm">Joining a Live Class?</h4>
+              <p className="text-xs text-blue-700 font-medium mt-1 leading-relaxed">
+                To check into an active lecture, please click the secure session link provided by your lecturer or Class Rep.
+              </p>
+            </div>
+          </div>
+
         </div>
       </div>
     );
   }
 
-  // 2. Load the Premium Branding + The Real WebAuthn Component
+  // ==========================================
+  // STATE 2: ACTIVE CHECK-IN (Bypasses Hub)
+  // ==========================================
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
       <div className="w-full max-w-md">
@@ -2068,7 +2137,7 @@ function CheckInWrapper() {
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-2 font-medium">Student Check-In Portal</p>
+          <p className="text-gray-500 mt-2 font-medium">Live Student Check-In</p>
         </div>
 
         <StudentCheckInComponent sessionId={sessionId} />
@@ -2080,7 +2149,7 @@ function CheckInWrapper() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
       <CheckInWrapper />
     </Suspense>
   );
@@ -2092,10 +2161,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
@@ -2142,15 +2209,455 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/dashboard/courses/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../../utils/supabase';
+import { 
+  BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2, Fingerprint, RefreshCw, UserPlus, Search, FileText, CheckCircle, AlertTriangle, ShieldCheck
+} from 'lucide-react';
+
+interface Course { id: string; course_code: string; roster: string[]; }
+interface AuditRecord { sessionId: string; date: string; status: string; logId: string | null; }
+
+export default function CourseManagement() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [newCourseCode, setNewCourseCode] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+
+  // Single Student Add
+  const [singleMatric, setSingleMatric] = useState('');
+  const [targetCourseId, setTargetCourseId] = useState('');
+  const [isAddingSingle, setIsAddingSingle] = useState(false);
+
+  // The Microscope (Audit & Waivers)
+  const [auditMatric, setAuditMatric] = useState('');
+  const [auditCourseCode, setAuditCourseCode] = useState('');
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [auditRecords, setAuditRecords] = useState<AuditRecord[] | null>(null);
+
+  // Device Wipe
+  const [wipeMatric, setWipeMatric] = useState('');
+  const [isWiping, setIsWiping] = useState(false);
+
+  useEffect(() => { fetchCourses(); }, []);
+
+  const fetchCourses = async () => {
+    setIsLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    
+    const { data } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+      
+    if (data) {
+      setCourses(data);
+      if (data.length > 0) {
+        setTargetCourseId(data[0].id);
+        setAuditCourseCode(data[0].course_code);
+      }
+    }
+    setIsLoading(false);
+  };
+
+  const createCourse = async () => {
+    if (!newCourseCode.trim()) return;
+    setIsCreating(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { error } = await supabase.from('courses').insert([{ 
+        lecturer_id: session.user.id, course_code: newCourseCode.toUpperCase(), roster: [] 
+      }]);
+      if (!error) { setNewCourseCode(''); fetchCourses(); } else alert("Failed to create course.");
+    }
+    setIsCreating(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingId(courseId);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const csvText = event.target?.result as string;
+      const cleanMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase()).filter(m => m.length > 5 && !m.includes('MATRIC'));
+      const uniqueMatrics = Array.from(new Set([...(existingRoster || []), ...cleanMatrics]));
+      
+      const { error } = await supabase.from('courses').update({ roster: uniqueMatrics }).eq('id', courseId);
+      if (!error) { alert(`Success! Roster synced.`); fetchCourses(); } else alert("Upload failed.");
+      setUploadingId(null); e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSingleStudentAdd = async () => {
+    const cleanMatric = singleMatric.trim().toUpperCase();
+    if (!cleanMatric || !targetCourseId) return;
+    setIsAddingSingle(true);
+
+    const course = courses.find(c => c.id === targetCourseId);
+    if (course) {
+      const uniqueMatrics = Array.from(new Set([...(course.roster || []), cleanMatric]));
+      const { error } = await supabase.from('courses').update({ roster: uniqueMatrics }).eq('id', targetCourseId);
+      if (!error) { alert(`${cleanMatric} added successfully!`); setSingleMatric(''); fetchCourses(); } 
+      else alert("Failed to add student.");
+    }
+    setIsAddingSingle(false);
+  };
+
+  const handleStudentAudit = async () => {
+    const cleanMatric = auditMatric.trim().toUpperCase();
+    if (!cleanMatric || !auditCourseCode) return;
+    setIsAuditing(true);
+    setAuditRecords(null);
+
+    try {
+      // 1. Get all sessions for this course
+      const { data: sessions } = await supabase.from('lecture_sessions').select('session_id, created_at').ilike('course_code', auditCourseCode).order('created_at', { ascending: false });
+      if (!sessions || sessions.length === 0) throw new Error("No classes held yet.");
+
+      const sessionIds = sessions.map(s => s.session_id);
+
+      // 2. Get the student's logs for these sessions
+      const { data: logs } = await supabase.from('attendance_logs').select('id, session_id, status').eq('matric_number', cleanMatric).in('session_id', sessionIds);
+      const logMap = new Map(logs?.map(l => [l.session_id, l]) || []);
+
+      // 3. Compile the audit trail
+      const trail = sessions.map(session => {
+        const log = logMap.get(session.session_id);
+        return {
+          sessionId: session.session_id,
+          date: new Date(session.created_at).toLocaleDateString() + ' ' + new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          status: log ? log.status : 'absent',
+          logId: log ? log.id : null
+        };
+      });
+
+      setAuditRecords(trail);
+    } catch (e: any) { alert(e.message || "Audit failed."); }
+    setIsAuditing(false);
+  };
+
+  const grantMedicalWaiver = async (record: AuditRecord) => {
+    const cleanMatric = auditMatric.trim().toUpperCase();
+    if (!window.confirm(`Grant Medical/Excused Waiver for ${cleanMatric} on ${record.date}? This will count them as present.`)) return;
+
+    try {
+      if (record.logId) {
+        // Update existing failed/absent log
+        await supabase.from('attendance_logs').update({ 
+          status: 'verified', device_info: JSON.stringify({ method: "Medical Waiver / Excused" }) 
+        }).eq('id', record.logId);
+      } else {
+        // Create a new log because they never checked in
+        await supabase.from('attendance_logs').insert([{
+          session_id: record.sessionId, matric_number: cleanMatric, status: 'verified', 
+          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }), device_hash: 'admin-waiver'
+        }]);
+      }
+      alert("Waiver Granted successfully!");
+      handleStudentAudit(); // Refresh the list
+    } catch (e) { alert("Failed to grant waiver."); }
+  };
+
+  const handleDeviceReset = async () => {
+    const safeMatric = String(wipeMatric || "").trim();
+    if (!safeMatric) return;
+    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
+    setIsWiping(true);
+    try {
+      const response = await fetch('/api/reset-device', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matricNumber: safeMatric }) });
+      if (response.ok) { alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); setWipeMatric(''); } 
+      else alert("⚠️ Failed to wipe device.");
+    } catch (err) { alert("💥 Network Error."); } finally { setIsWiping(false); }
+  };
+
+  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 text-[#2563EB] animate-spin" /></div>;
+
+  return (
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
+      
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+          <Users className="text-[#2563EB]" size={28} /> Student Management
+        </h1>
+        <p className="text-gray-500 mt-1 font-medium">Manage course rosters, grant medical waivers, and wipe device locks.</p>
+      </div>
+
+      {/* ---------------- SECTION 1: COURSE REGISTRY ---------------- */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
+          <BookOpen className="text-gray-400" size={20}/>
+          <h2 className="text-lg font-bold text-gray-900">Course Registry & Rosters</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          
+          {/* Create Course */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">1. Establish New Course</h3>
+            <div className="flex gap-2">
+              <input type="text" placeholder="e.g., MTH 101" value={newCourseCode} onChange={(e) => setNewCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
+              <button onClick={createCourse} disabled={isCreating || !newCourseCode.trim()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md">
+                {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Add Single Student */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">2. Add Single Student (Late Reg)</h3>
+            <div className="flex gap-2">
+              <select value={targetCourseId} onChange={(e) => setTargetCourseId(e.target.value)} className="w-1/3 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer">
+                {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
+              </select>
+              <input type="text" placeholder="Matric Number" value={singleMatric} onChange={(e) => setSingleMatric(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
+              <button onClick={handleSingleStudentAdd} disabled={isAddingSingle || !singleMatric.trim()} className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md">
+                {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Existing Courses List (CSV Uploads) */}
+        {courses.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-gray-100">
+            {courses.map(course => (
+              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
+                <h4 className="font-extrabold text-gray-900 mb-1">{course.course_code}</h4>
+                <p className="text-xs font-bold text-gray-500 mb-3">{course.roster?.length || 0} Students</p>
+                <label className="cursor-pointer flex items-center justify-center gap-1 w-full py-2 bg-white border border-gray-200 rounded-lg font-bold text-[10px] text-gray-700 hover:bg-gray-100 transition-all shadow-sm">
+                  {uploadingId === course.id ? <Loader2 size={12} className="animate-spin text-[#2563EB]" /> : <FileSpreadsheet size={12} className="text-[#2563EB]" />}
+                  {uploadingId === course.id ? "Syncing..." : "Upload CSV"}
+                  <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFileUpload(e, course.id, course.roster)} disabled={uploadingId === course.id} />
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ---------------- SECTION 2: THE MICROSCOPE (WAIVERS) ---------------- */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
+          <Search className="text-[#2563EB]" size={20}/>
+          <h2 className="text-lg font-bold text-gray-900">Student Diagnostics & Waivers</h2>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-3 mb-6">
+          <select value={auditCourseCode} onChange={(e) => setAuditCourseCode(e.target.value)} className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer">
+            {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+          </select>
+          <div className="flex-1 flex gap-2">
+            <input type="text" placeholder="Search Matric Number (e.g., CSC/2021/001)" value={auditMatric} onChange={(e) => setAuditMatric(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
+            <button onClick={handleStudentAudit} disabled={isAuditing || !auditMatric.trim()} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md">
+              {isAuditing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />} View Record
+            </button>
+          </div>
+        </div>
+
+        {auditRecords && (
+          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+            <div className="p-4 border-b border-gray-200 bg-white">
+              <h3 className="font-extrabold text-gray-900 text-lg">Audit Trail: {auditMatric}</h3>
+              <p className="text-xs text-gray-500 font-bold">{auditCourseCode} Semester History</p>
+            </div>
+            <div className="max-h-80 overflow-y-auto p-4 space-y-2">
+              {auditRecords.map((record, i) => (
+                <div key={i} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="font-bold text-gray-900 text-sm">{record.date}</p>
+                    <div className="mt-1">
+                      {record.status === 'verified' ? (
+                        <span className="text-[10px] uppercase font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit"><CheckCircle size={10}/> Attended / Excused</span>
+                      ) : record.status === 'absent' ? (
+                        <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">Absent</span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit"><AlertTriangle size={10}/> Flagged</span>
+                      )}
+                    </div>
+                  </div>
+                  {record.status !== 'verified' && (
+                    <button 
+                      onClick={() => grantMedicalWaiver(record)}
+                      className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-100 transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <ShieldCheck size={14}/> Grant Medical Waiver
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ---------------- SECTION 3: HARDWARE SECURITY ---------------- */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-200">
+        <div className="flex items-center gap-2 mb-4 border-b border-red-100 pb-3">
+          <Fingerprint className="text-red-500" size={20}/>
+          <h2 className="text-lg font-bold text-red-700">Wipe Device Lock</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.</p>
+        
+        <div className="flex max-w-lg gap-2">
+          <input type="text" placeholder="Matric Number" value={wipeMatric} onChange={(e) => setWipeMatric(e.target.value.toUpperCase())} className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all" />
+          <button onClick={handleDeviceReset} disabled={isWiping || !wipeMatric.trim()} className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap">
+            {isWiping ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />} Wipe Device
+          </button>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        window.location.href = '/dashboard';
+      } else {
+        if (secretKey !== FACULTY_SECRET_KEY) {
+          throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
+        }
+
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        
+        if (data.user) {
+          const { error: profileError } = await supabase.from('lecturers').insert([{
+            id: data.user.id, email: email, full_name: fullName, department: department
+          }]);
+          if (profileError) throw profileError;
+        }
+        alert('Registration successful! You can now log in.');
+        setIsLogin(true);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Faculty Access</h1>
+          <p className="text-gray-500 mt-2 font-medium">CampusCheck Administration</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+          
+          <div className="flex bg-gray-50 p-1 rounded-xl mb-8">
+            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
+            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                </div>
+              </>
+            )}
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
+              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
+              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-100 flex items-start gap-2">
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-700 font-bold text-xs">{error}</p>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-3.5 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
+              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
+              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
+            </button>
+          </form>
+        </div>
+
+        {/* NEW: Back to Hub Navigation */}
+        <div className="mt-6 text-center animate-in fade-in">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/api/webauthn/auth/verify/route.ts">
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID, origin } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
@@ -2171,7 +2678,6 @@ export async function POST(request: Request) {
 
     if (error || !device) return NextResponse.json({ error: "Device record missing." }, { status: 404 });
 
-    // IMMUNE DECODER: Safely strip the \x and convert back to pure bytes
     let dbKey = String(device.public_key);
     if (dbKey.startsWith('\\x')) dbKey = dbKey.slice(2);
     
@@ -2218,15 +2724,13 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
-import { createClient } from '@supabase/supabase-js';
-import { rpID, origin } from '../../../../../utils/webauthn';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { rpID, origin } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse, hardwareFingerprint } = body;
+    const { matricNumber, authResponse } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     const cookieStore = await cookies();
@@ -2255,7 +2759,7 @@ export async function POST(request: Request) {
           public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
-          device_hash: hardwareFingerprint || 'unknown-hardware', // --- THE FIX: LOCK IT TO DB ---
+          device_hash: 'webauthn-verified', // Rely strictly on WebAuthn identity
           created_at: new Date().toISOString()
         }, { onConflict: 'matric_number' });
 
@@ -2301,19 +2805,19 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at')
       .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
-
-    let roster: string[] = [];
-    if (session.course_code) {
-      const { data: courseData } = await supabase.from('courses').select('roster').eq('course_code', session.course_code).single();
-      if (courseData && courseData.roster) roster = courseData.roster;
-    }
     
+    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    if (session.expires_at && new Date() > new Date(session.expires_at)) {
+      return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
+    }
+
+    // Removed the unused 'roster' fetching logic here to satisfy ESLint
+
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
 
@@ -2358,13 +2862,11 @@ export async function POST(request: Request) {
 
     const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
     
-    // --- THE STRICT DISTANCE FIREWALL ---
-    // Anyone further than 500 meters gets blocked entirely. No database entry, no dashboard flag.
     if (distanceToLecturer > 500) {
       return NextResponse.json({ 
         status: 'rejected', 
         distance: Math.round(distanceToLecturer), 
-        message: "out of bounds" // Simple flag for the frontend to read
+        message: "out of bounds" 
       }, { status: 403 });
     }
 
@@ -2400,13 +2902,12 @@ export async function POST(request: Request) {
 
 <file path="app/dashboard/page.tsx">
 'use client';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
-  User, ChevronDown, Archive, Hand, Trash2, KeyRound 
+  User, ChevronDown, Archive, Hand, Trash2, Timer
 } from 'lucide-react';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -2415,10 +2916,9 @@ interface Log { id: string; matricNumber: string; status: string; time: string; 
 interface DashboardData { course: string; isActive: boolean; repPasscode: string; logs: Log[]; }
 interface LecturerProfile { full_name: string; department: string; }
 interface Course { id: string; course_code: string; }
+interface PastSession { session_id: string; created_at: string; course_code: string; }
 
 export default function LecturerDashboard() {
-  const router = useRouter();
-
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -2429,12 +2929,14 @@ export default function LecturerDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   
+  const [sessionDuration, setSessionDuration] = useState<number>(60);
+  
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
-  const [pastSessions, setPastSessions] = useState<any[]>([]);
+  const [pastSessions, setPastSessions] = useState<PastSession[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2470,11 +2972,14 @@ export default function LecturerDashboard() {
   }, []);
 
   useEffect(() => {
-    const savedSession = localStorage.getItem('active_attendance_session');
-    if (savedSession) setActiveSessionId(savedSession);
+    const timeoutId = window.setTimeout(() => {
+      const savedSession = localStorage.getItem('active_attendance_session');
+      if (savedSession) setActiveSessionId(savedSession);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     const course = courses.find(c => c.id === selectedCourseId);
     if (!course) return;
     try {
@@ -2482,14 +2987,14 @@ export default function LecturerDashboard() {
       if (response.ok) {
         setPastSessions(await response.json());
       }
-    } catch (e) {
+    } catch {
       console.error("Failed to load history");
     }
-  };
+  }, [courses, selectedCourseId]);
 
   useEffect(() => { 
     if (viewMode === 'history') loadHistory(); 
-  }, [viewMode, selectedCourseId]);
+  }, [viewMode, loadHistory]);
 
   const startNewSession = () => {
     if (!selectedCourseId) { 
@@ -2505,7 +3010,8 @@ export default function LecturerDashboard() {
       return; 
     }
     
-    let watchId: number;
+    // eslint-disable-next-line prefer-const
+    let watchId: number = 0;
     let bestLat = 0;
     let bestLng = 0;
     let bestAcc = 9999;
@@ -2520,7 +3026,8 @@ export default function LecturerDashboard() {
             courseId: selectedCourseId, 
             courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
             latitude: lat, 
-            longitude: lng
+            longitude: lng,
+            duration: sessionDuration
           })
         });
         if (response.ok) {
@@ -2531,7 +3038,7 @@ export default function LecturerDashboard() {
         } else { 
           setSetupError("Failed to create session on server."); 
         }
-      } catch (error) { 
+      } catch { 
         setSetupError("Network error. Please try again."); 
       } finally { 
         setIsStarting(false); 
@@ -2539,7 +3046,7 @@ export default function LecturerDashboard() {
     };
     
     const timeoutId = setTimeout(() => {
-      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
       if (bestAcc !== 9999) {
         executeSessionCreation(bestLat, bestLng);
       } else { 
@@ -2565,7 +3072,7 @@ export default function LecturerDashboard() {
       },
       (error) => {
         clearTimeout(timeoutId);
-        if (watchId) navigator.geolocation.clearWatch(watchId);
+        if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
         if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
         else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
         else if (error.code === 3) setSetupError("Timeout: GPS took too long indoors.");
@@ -2584,7 +3091,7 @@ export default function LecturerDashboard() {
     }
   };
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!activeSessionId) return;
     try {
       const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`);
@@ -2593,10 +3100,10 @@ export default function LecturerDashboard() {
         setData(result);
         setLastRefreshed(new Date().toLocaleTimeString());
       }
-    } catch (error) { 
+    } catch { 
       console.error("Failed to fetch data"); 
     }
-  };
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (activeSessionId && viewMode === 'live') {
@@ -2604,7 +3111,7 @@ export default function LecturerDashboard() {
       const interval = setInterval(fetchDashboardData, 3000);
       return () => clearInterval(interval);
     }
-  }, [activeSessionId, viewMode]);
+  }, [activeSessionId, viewMode, fetchDashboardData]);
 
   const handleManualOverride = async (targetMatric: string) => {
     try {
@@ -2624,8 +3131,8 @@ export default function LecturerDashboard() {
       } else { 
         alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`); 
       }
-    } catch (err: any) { 
-      alert("💥 CRITICAL CRASH: " + err.message); 
+    } catch (err) { 
+      alert("💥 CRITICAL CRASH: " + (err as Error).message); 
     } finally { 
       setIsOverriding(false); 
     }
@@ -2650,7 +3157,7 @@ export default function LecturerDashboard() {
         const errorData = await response.json(); 
         alert(`⚠️ Failed: ${errorData.message}`); 
       }
-    } catch (err: any) { 
+    } catch { 
       alert("💥 Network Error."); 
     } finally { 
       setIsResetting(false); 
@@ -2698,14 +3205,13 @@ export default function LecturerDashboard() {
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
       generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
-    } catch (e) { 
+    } catch { 
       alert("Failed to download. Check network."); 
     } finally { 
       setDownloadingId(null); 
     }
   };
 
-  // --- UNIFIED COPY FUNCTION ---
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
@@ -2768,7 +3274,27 @@ export default function LecturerDashboard() {
           )}
 
           {viewMode === 'live' ? (
-            <div>
+            <div className="space-y-4">
+              <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+                <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                  <Timer size={20} />
+                </div>
+                <select 
+                  value={sessionDuration} 
+                  onChange={(e) => setSessionDuration(Number(e.target.value))}
+                  className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none appearance-none cursor-pointer"
+                >
+                  <option value={15}>15 Minutes (Quiz Mode)</option>
+                  <option value={30}>30 Minutes</option>
+                  <option value={60}>1 Hour (Standard)</option>
+                  <option value={90}>1.5 Hours</option>
+                  <option value={120}>2 Hours (Lab/Extended)</option>
+                </select>
+                <div className="pr-4 pointer-events-none text-gray-400">
+                  <ChevronDown size={20} />
+                </div>
+              </div>
+
               <button 
                 onClick={startNewSession} 
                 disabled={isStarting || courses.length === 0} 
@@ -2989,28 +3515,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  const generateHardwareFingerprint = async () => {
-    try {
-      const nav = window.navigator as any;
-      const components = [
-        nav.userAgent,
-        nav.language,
-        window.screen.colorDepth,
-        window.screen.width + 'x' + window.screen.height,
-        nav.hardwareConcurrency || 'unknown',
-        nav.deviceMemory || 'unknown',
-        new Date().getTimezoneOffset()
-      ];
-      const rawHash = components.join('|||');
-      const msgBuffer = new TextEncoder().encode(rawHash);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch (e) {
-      return 'unknown-hardware';
-    }
-  };
-
   const syncOfflineQueue = async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -3022,7 +3526,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, hardwareFingerprint: item.hardwareFingerprint })
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -3068,11 +3572,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
 
       setStatus('locating');
-      const hf = await generateHardwareFingerprint();
 
       const genRes = await fetch('/api/webauthn/register/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, hardwareFingerprint: hf })
+        body: JSON.stringify({ matricNumber })
       });
       
       const options = await genRes.json();
@@ -3084,7 +3587,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp, hardwareFingerprint: hf })
+        body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
       
@@ -3166,11 +3669,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
     setStatus('verifying');
     try {
-      const hardwareFingerprint = await generateHardwareFingerprint();
-
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, hardwareFingerprint })
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
       });
       const result = await response.json();
       
@@ -3188,9 +3689,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (error: any) {
       if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        const hf = await generateHardwareFingerprint();
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hf, timestamp: Date.now() });
+        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, timestamp: Date.now() });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
       }
@@ -3348,7 +3848,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           Make sure you are physically inside the lecture hall before checking in.
         </p>
         
-        {/* THE CLASS REP BACKDOOR LINK */}
         <a 
           href={`/rep?sessionId=${sessionId}`} 
           className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"

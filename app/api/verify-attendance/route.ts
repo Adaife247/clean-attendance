@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { createClient } from '@supabase/supabase-js';
 
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; 
@@ -13,8 +13,14 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 
 export async function POST(request: Request) {
   try {
+    // Initialize Supabase INSIDE the handler so env vars are loaded at request time
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -23,15 +29,38 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at')
       .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has closed." }, { status: 403 });
     
+    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    if (session.expires_at && new Date() > new Date(session.expires_at)) {
+      return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
+    }
+
     const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
     if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+
+    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
+      const { data: ghostLogs } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .eq('device_hash', hardwareFingerprint);
+        
+      if (ghostLogs && ghostLogs.length > 0) {
+        await supabase.from('attendance_logs').insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'flagged',
+          device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
+          device_hash: hardwareFingerprint 
+        }]);
+        return NextResponse.json({ status: 'flagged', distance: 0, message: "Security Block: Multiple check-ins detected from identical hardware specs." }, { status: 200 });
+      }
+    }
 
     let isSpoofed = false;
     let totalDrift = 0;
@@ -81,7 +110,7 @@ export async function POST(request: Request) {
       matric_number: cleanMatric,
       status: finalStatus,
       device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }),
-      device_hash: 'webauthn-verified' // Cryptographically secured by WebAuthn identity
+      device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
 
     return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
