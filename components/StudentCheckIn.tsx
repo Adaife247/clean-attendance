@@ -26,7 +26,7 @@ const RATING_TAGS = [
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
 const GPS_MIN_PINGS_TO_SEND = 1;
-const GPS_GOOD_ACCURACY = 150; // meters — send as soon as we hit this
+const SEND_INTERVAL_MS = 4000; // resend cadence while waiting for backend verdict
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
@@ -49,11 +49,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
-
-  // Live accuracy display while GPS is locking
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
 
-  // Pre-warm buffer — pings collected before the user submits
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
 
@@ -61,7 +58,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // ─── PRE-WARM: start GPS on page load, buffer pings silently ───
+  // Pre-warm GPS on page load — buffer pings silently
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
@@ -74,7 +71,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           acc: position.coords.accuracy,
           timestamp: position.timestamp
         });
-        // Keep only the last 30 pings so memory doesn't grow
         if (prewarmBufferRef.current.length > 30) {
           prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
         }
@@ -94,7 +90,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
   }, []);
 
-  // Fetch session metadata
+  // Fetch session metadata (for memes)
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -223,7 +219,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   };
 
   const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[]) => {
-    setStatus('verifying');
     try {
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
@@ -236,6 +231,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
+      } else if (result.status === 'flagged' || response.status === 403) {
+        setErrorMessage(result.message || "Verification failed.");
+        setStatus('failed');
       } else {
         setErrorMessage(result.message || "Verification failed.");
         setStatus('failed');
@@ -259,7 +257,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('locating');
     setLiveAccuracy(null);
 
-    // Biometric auth first
+    // Biometric auth
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
@@ -293,13 +291,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
       return;
     }
 
-    // Take whatever pre-warm gave us — it's already warm
     const pings: Telemetry[] = [...prewarmBufferRef.current];
     let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
     if (pings.length > 0) setLiveAccuracy(Math.round(bestAcc));
 
     let watchId = 0;
     let didFinish = false;
+    let sentAny = false;
 
     const finishWith = (finalPings: Telemetry[]) => {
       if (didFinish) return;
@@ -313,16 +311,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     };
 
-    // If pre-warm already gave us good enough data, send immediately
-    if (pings.length >= 3 && bestAcc <= GPS_GOOD_ACCURACY) {
-      finishWith(pings);
-      return;
+    // If pre-warm gave us anything, fire immediately — do not wait for accuracy.
+    if (pings.length >= 1) {
+      sentAny = true;
+      sendPayloadToVercel(pings);
     }
 
-    // Otherwise, keep watching
+    // Keep watching for better data. Resend every SEND_INTERVAL_MS if still not done.
     const overallTimeoutId = setTimeout(() => {
-      finishWith(pings);
+      if (!sentAny && pings.length === 0) {
+        finishWith(pings);
+      } else {
+        didFinish = true;
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+      }
     }, GPS_OVERALL_TIMEOUT_MS);
+
+    let lastSendTs = Date.now();
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -338,14 +343,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
           timestamp: position.timestamp
         });
 
-        if (pings.length >= 3 && bestAcc <= GPS_GOOD_ACCURACY) {
-          clearTimeout(overallTimeoutId);
-          finishWith(pings);
+        const now = Date.now();
+        if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
+          lastSendTs = now;
+          sentAny = true;
+          sendPayloadToVercel(pings);
         }
       },
       (error) => {
         clearTimeout(overallTimeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
+        if (didFinish || sentAny) return;
         didFinish = true;
 
         if (error.code === 1) {
@@ -494,11 +502,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold text-center">
               {status === 'checking' ? "Verifying ledger..."
-                : status === 'locating' ? "Locking onto your position..."
+                : status === 'locating' ? "Sending your location..."
                 : status === 'syncing' ? "Syncing offline data..."
                 : "Verifying coordinates..."}
             </p>
-            {liveAccuracy !== null && status === 'locating' && (
+            {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
               <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
                 <Signal size={14} className="text-[#2563EB]" />
                 <span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span>
@@ -630,7 +638,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
                   onClick={executeFinalCheckIn}
                   className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"
                 >
-                  <RefreshCw size={18} /> Try Again (Reset GPS)
+                  <RefreshCw size={18} /> Try Again
                 </button>
               )}
 
