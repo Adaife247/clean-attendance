@@ -47,7 +47,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
     }
 
-    // Per-session check-in window
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
 
     if (opensAfter > 0 && session.created_at) {
@@ -97,25 +96,36 @@ export async function POST(request: Request) {
       }
     }
 
+    // ─── Anomaly detection ───
+    // We only flag two things that are physically impossible / highly suspicious:
+    //   1. Movement faster than 200 m/s (720 km/h) between consecutive pings
+    //   2. Reported accuracy < 3m — real GPS never reports sub-3m indoors/outdoors
+    // Everything else (standing still, no altitude, weird accuracy) is normal
+    // Android behaviour indoors and must NOT be flagged.
     let isSpoofed = false;
-    let totalDrift = 0;
     let bestPing = telemetry[0];
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
-      if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
-      if (ping.alt === 0) isSpoofed = true;
-
-      if (i > 0) {
-        const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
-        totalDrift += drift;
-      }
-      if (ping.acc < bestPing.acc) {
-        bestPing = ping;
-      }
+      if (ping.acc < bestPing.acc) bestPing = ping;
     }
 
-    if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
+    // Suspiciously perfect accuracy
+    if (bestPing.acc < 3) {
+      isSpoofed = true;
+    }
+
+    // Impossible movement between consecutive pings
+    for (let i = 1; i < telemetry.length; i++) {
+      const prev = telemetry[i - 1];
+      const curr = telemetry[i];
+      const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
+
+      if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) {
+        isSpoofed = true;
+      }
+    }
 
     const distanceToLecturer = getDistanceInMeters(
       session.anchor_latitude,
@@ -152,7 +162,8 @@ export async function POST(request: Request) {
       device_info: JSON.stringify({
         telemetry,
         evaluatedAccuracy: bestPing.acc,
-        distanceMeters: Math.round(distanceToLecturer)
+        distanceMeters: Math.round(distanceToLecturer),
+        spoofReasons: isSpoofed ? ['see_server_logs'] : []
       }),
       device_hash: hardwareFingerprint || 'unknown-hardware'
     }]);
