@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // ── Layer 1: hardware fingerprint proxy check ──
+    // Layer 1: hardware fingerprint proxy check
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -132,7 +132,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Layer 2: cross-browser device fingerprint check ──
+    // Layer 2: cross-browser device fingerprint check
+    console.log('[CampusCheck] Received fingerprint:', deviceFingerprint);
     if (deviceFingerprint && deviceFingerprint !== 'unknown') {
       const { data: existingFingerprints } = await supabase
         .from('attendance_logs')
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Anomaly detection ──
+    // Anomaly detection
     let isSpoofed = false;
     let bestPing = telemetry[0];
 

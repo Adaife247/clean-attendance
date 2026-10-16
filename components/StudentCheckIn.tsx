@@ -28,6 +28,7 @@ const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
 const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
+const FINGERPRINT_WAIT_MS = 6000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
@@ -54,8 +55,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
-
-  // Cache device fingerprint per session — it's expensive, generate once
   const fingerprintRef = useRef<string | null>(null);
 
   const triggerSuccessVibration = () => {
@@ -99,10 +98,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     let cancelled = false;
     const id = setTimeout(async () => {
       try {
+        console.log('[CampusCheck] Generating device fingerprint...');
         const fp = await generateDeviceFingerprint();
+        console.log('[CampusCheck] Fingerprint generated:', fp);
         if (!cancelled) fingerprintRef.current = fp.hash;
-      } catch {
-        // Non-fatal — fingerprint is best-effort
+      } catch (err) {
+        console.error('[CampusCheck] Fingerprint generation failed:', err);
       }
     }, 0);
     return () => {
@@ -246,15 +247,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[]) => {
     try {
-      // Fingerprint may not be ready yet — wait for it (max 2s)
+      // Fingerprint may not be ready yet — wait for it (max 6s)
       let fingerprint = fingerprintRef.current;
       if (!fingerprint) {
         const start = Date.now();
-        while (!fingerprint && Date.now() - start < 2000) {
+        while (!fingerprint && Date.now() - start < FINGERPRINT_WAIT_MS) {
           await new Promise(r => setTimeout(r, 100));
           fingerprint = fingerprintRef.current;
         }
       }
+      console.log('[CampusCheck] Fingerprint being sent:', fingerprint);
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
