@@ -1,17 +1,13 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { 
-  CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, 
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
-
-interface SessionMeta {
-  created_at: string | null;
-}
 
 type Status =
   | 'idle' | 'checking' | 'needs_setup' | 'ready'
@@ -26,6 +22,10 @@ const RATING_TAGS = [
   'Great Examples',
   'Confusing',
 ];
+
+const GPS_BROWSER_TIMEOUT_MS = 20000;
+const GPS_OVERALL_TIMEOUT_MS = 25000;
+const GPS_MIN_PINGS_TO_SEND = 1;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
   if (minutesLate <= 2) {
@@ -49,13 +49,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
 
-  // Session metadata (for memes)
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
 
-  // Rating state
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
+  // Captured once when we successfully verify, so the meme uses a stable "now"
+  // and we don't call Date.now() during render.
+  const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -73,11 +75,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
           setSessionCreatedAt(data.createdAt);
         }
       } catch {
-        // Non-fatal — meme just won't be time-accurate
+        // Non-fatal
       }
     };
-    fetchMeta();
-    return () => { cancelled = true; };
+    // Defer to next tick so setState doesn't fire synchronously inside the effect
+    const id = setTimeout(() => { fetchMeta(); }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
   }, [sessionId]);
 
   const syncOfflineQueue = useCallback(async () => {
@@ -111,9 +117,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
-    syncOfflineQueue();
-    return () => window.removeEventListener('online', syncOfflineQueue);
+    // Defer initial sync so it doesn't run setState synchronously
+    const id = setTimeout(() => { syncOfflineQueue(); }, 0);
+    return () => {
+      window.removeEventListener('online', syncOfflineQueue);
+      clearTimeout(id);
+    };
   }, [syncOfflineQueue]);
+
+  // Auto-advance from 'success' to 'rating' after showing the celebration briefly
+  useEffect(() => {
+    if (status !== 'success') return;
+    const t = setTimeout(() => setStatus('rating'), 2500);
+    return () => clearTimeout(t);
+  }, [status]);
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
@@ -191,6 +208,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       if ((response.ok && result.status === 'verified') || response.status === 409) {
         triggerSuccessVibration();
+        setVerifiedAt(Date.now());
         setStatus('success');
       } else if (result.status === 'flagged' || response.status === 403) {
         setErrorMessage(result.message || "Verification failed.");
@@ -255,15 +273,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const pings: Telemetry[] = [];
     let watchId = 0;
     let bestAcc = 9999;
+    let didFinish = false;
 
-    const timeoutId = setTimeout(() => {
+    const finishWith = (finalPings: Telemetry[]) => {
+      if (didFinish) return;
+      didFinish = true;
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (pings.length > 0) sendPayloadToVercel(pings);
-      else {
-        setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS.");
+      if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
+        sendPayloadToVercel(finalPings);
+      } else {
+        setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS, then try again.");
         setStatus('failed');
       }
-    }, 8000);
+    };
+
+    const overallTimeoutId = setTimeout(() => {
+      finishWith(pings);
+    }, GPS_OVERALL_TIMEOUT_MS);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -279,21 +305,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
         });
 
         if (pings.length >= 3 && bestAcc <= 100) {
-          clearTimeout(timeoutId);
-          navigator.geolocation.clearWatch(watchId);
-          sendPayloadToVercel(pings);
+          clearTimeout(overallTimeoutId);
+          finishWith(pings);
         }
       },
       (error) => {
-        clearTimeout(timeoutId);
+        clearTimeout(overallTimeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        if (error.code === 1) setStatus('denied');
-        else {
-          setErrorMessage(`GPS Blocked (Code ${error.code}). Pull down your menu and turn on Location.`);
+        didFinish = true;
+
+        if (error.code === 1) {
+          setStatus('denied');
+        } else {
+          setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`);
           setStatus('failed');
         }
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
     );
   };
 
@@ -318,13 +346,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  // Auto-advance from 'success' to 'rating' after showing the celebration briefly
-  useEffect(() => {
-    if (status !== 'success') return;
-    const t = setTimeout(() => setStatus('rating'), 2500);
-    return () => clearTimeout(t);
-  }, [status]);
-
   const toggleTag = (tag: string) => {
     setRatingTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
@@ -346,19 +367,22 @@ export default function StudentCheckIn({ sessionId }: Props) {
         });
       }
     } catch {
-      // Silent fail — rating is a nice-to-have
+      // Silent fail
     } finally {
       setIsSubmittingRating(false);
       setStatus('rated');
     }
   };
 
-  const calculateMinutesLate = (): number => {
-    if (!sessionCreatedAt) return 0;
+  // Compute the meme object via useMemo — no impure calls during render.
+  const memeData = useMemo(() => {
+    if (!sessionCreatedAt || verifiedAt === null) {
+      return { minutesLate: 0, meme: getMeme(0) };
+    }
     const start = new Date(sessionCreatedAt).getTime();
-    const now = Date.now();
-    return Math.max(0, Math.floor((now - start) / 60000));
-  };
+    const minutesLate = Math.max(0, Math.floor((verifiedAt - start) / 60000));
+    return { minutesLate, meme: getMeme(minutesLate) };
+  }, [sessionCreatedAt, verifiedAt]);
 
   return (
     <div className="w-full">
@@ -443,7 +467,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold animate-pulse text-center">
               {status === 'checking' ? "Verifying ledger..."
-                : status === 'locating' ? "Acquiring hardware lock..."
+                : status === 'locating' ? "Acquiring GPS lock... stay still, this can take up to 20 seconds..."
                 : status === 'syncing' ? "Syncing offline data..."
                 : "Verifying coordinates..."}
             </p>
@@ -461,88 +485,80 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {status === 'rating' && (() => {
-          const minutesLate = calculateMinutesLate();
-          const meme = getMeme(minutesLate);
-          return (
-            <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {/* Meme card */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-5 text-center mb-6">
-                <p className="text-4xl mb-2">{meme.emoji}</p>
-                <h3 className="text-xl font-extrabold text-blue-900">{meme.title}</h3>
-                <p className="text-sm text-blue-700 font-medium mt-1">{meme.sub}</p>
-                {sessionCreatedAt && (
-                  <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">
-                    {minutesLate === 0 ? "Right on time" : `${minutesLate} min after start`}
-                  </p>
-                )}
+        {status === 'rating' && (
+          <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-5 text-center mb-6">
+              <p className="text-4xl mb-2">{memeData.meme.emoji}</p>
+              <h3 className="text-xl font-extrabold text-blue-900">{memeData.meme.title}</h3>
+              <p className="text-sm text-blue-700 font-medium mt-1">{memeData.meme.sub}</p>
+              {sessionCreatedAt && (
+                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">
+                  {memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}
+                </p>
+              )}
+            </div>
+
+            <div className="text-center">
+              <h4 className="font-extrabold text-gray-900 text-lg">How was this lecture?</h4>
+              <p className="text-xs text-gray-500 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
+
+              <div className="flex justify-center gap-2 mt-5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRatingStars(star)}
+                    className="transition-transform active:scale-90"
+                    aria-label={`Rate ${star} stars`}
+                  >
+                    <Star
+                      size={36}
+                      className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
+                      strokeWidth={1.5}
+                    />
+                  </button>
+                ))}
               </div>
 
-              {/* Rating card */}
-              <div className="text-center">
-                <h4 className="font-extrabold text-gray-900 text-lg">How was this lecture?</h4>
-                <p className="text-xs text-gray-500 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
-
-                {/* Stars */}
-                <div className="flex justify-center gap-2 mt-5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => setRatingStars(star)}
-                      className="transition-transform active:scale-90"
-                      aria-label={`Rate ${star} stars`}
-                    >
-                      <Star
-                        size={36}
-                        className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
-                        strokeWidth={1.5}
-                      />
-                    </button>
-                  ))}
+              {ratingStars > 0 && (
+                <div className="flex flex-wrap justify-center gap-2 mt-5 animate-in fade-in duration-300">
+                  {RATING_TAGS.map((tag) => {
+                    const active = ratingTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                          active
+                            ? 'bg-[#2563EB] text-white border-[#2563EB]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
                 </div>
+              )}
 
-                {/* Tags */}
-                {ratingStars > 0 && (
-                  <div className="flex flex-wrap justify-center gap-2 mt-5 animate-in fade-in duration-300">
-                    {RATING_TAGS.map((tag) => {
-                      const active = ratingTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          onClick={() => toggleTag(tag)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                            active
-                              ? 'bg-[#2563EB] text-white border-[#2563EB]'
-                              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="flex gap-2 mt-6">
-                  <button
-                    onClick={() => submitRating(true)}
-                    disabled={isSubmittingRating}
-                    className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50"
-                  >
-                    Skip
-                  </button>
-                  <button
-                    onClick={() => submitRating(false)}
-                    disabled={isSubmittingRating || ratingStars === 0}
-                    className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
-                  </button>
-                </div>
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => submitRating(true)}
+                  disabled={isSubmittingRating}
+                  className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => submitRating(false)}
+                  disabled={isSubmittingRating || ratingStars === 0}
+                  className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
+                </button>
               </div>
             </div>
-          );
-        })()}
+          </div>
+        )}
 
         {status === 'rated' && (
           <div className="py-8 text-center">
