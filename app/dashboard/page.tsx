@@ -45,7 +45,6 @@ export default function LecturerDashboard() {
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
 
-  // Helper to kill stale sessions
   const clearStaleSession = () => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setActiveSessionId(null);
@@ -53,13 +52,11 @@ export default function LecturerDashboard() {
     setSetupError('');
   };
 
-  // Moved this up so it's defined before the useEffect uses it
   const checkSessionValidity = async (sessionId: string) => {
     const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', sessionId).single();
     if (data && data.is_active) {
       setActiveSessionId(sessionId);
     } else {
-      // The session was ended on the backend, so clear it locally
       localStorage.removeItem(ACTIVE_SESSION_KEY);
     }
   };
@@ -188,8 +185,18 @@ export default function LecturerDashboard() {
     );
   };
 
-  const endSession = () => {
+  const endSession = async () => {
+    if (!activeSessionId) return;
     if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
+      try {
+        await fetch('/api/end-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: activeSessionId })
+        });
+      } catch (e) {
+        console.error("Failed to notify server", e);
+      }
       clearStaleSession();
     }
   };
@@ -285,7 +292,11 @@ export default function LecturerDashboard() {
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    const clipboardText = `📌 CampusCheck Attendance Link:\n${link}\n\nOpen this link on your phone to check in.`;
+    const courseName = data?.course || 'Active Class';
+    
+    // THE FIX: Includes the class name and session details in the copied text
+    const clipboardText = `📌 *CampusCheck Attendance Link*\n\n📚 Class: ${courseName}\n⏱ Opens: ${checkinOpensAfter === 0 ? 'Immediately' : `In ${checkinOpensAfter} minutes`}\n\n🔗 ${link}\n\n_Open this link on your phone to check in. You must be inside the lecture hall._`;
+    
     navigator.clipboard.writeText(clipboardText);
     alert("Attendance link copied! Share it with your students.");
   };
@@ -295,7 +306,6 @@ export default function LecturerDashboard() {
     return (
       <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">

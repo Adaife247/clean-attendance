@@ -28,6 +28,7 @@ interface SessionRow {
   course_code: string;
   created_at: string;
   is_active: boolean;
+  expires_at: string | null;
 }
 
 interface HistoryRow extends SessionRow {
@@ -52,7 +53,6 @@ export default function StudentPortal() {
   const [error, setError] = useState('');
   const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
 
-  // Profile & Feed State
   const [nickname, setNickname] = useState('');
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -72,12 +72,12 @@ export default function StudentPortal() {
     setError('');
     setRecords(null);
     setHistory(null);
+    setActiveLiveClass(null);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
-      // 1. REQUIRE WEBAUTHN AUTHENTICATION
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,7 +104,6 @@ export default function StudentPortal() {
         throw new Error("Biometric verification failed. Access denied.");
       }
 
-      // 2. FETCH NICKNAME
       const { data: profile } = await supabase
         .from('student_profiles')
         .select('nickname')
@@ -116,7 +115,6 @@ export default function StudentPortal() {
         setSavedNickname(profile.nickname);
       }
 
-      // 3. FETCH FEED
       const { data: feedData } = await supabase
         .from('campus_updates')
         .select('*')
@@ -124,7 +122,6 @@ export default function StudentPortal() {
         .limit(5);
       if (feedData) setFeed(feedData);
 
-      // 4. FETCH RECORDS
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -149,14 +146,23 @@ export default function StudentPortal() {
 
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
-        .select('session_id, course_code, created_at, is_active')
+        .select('session_id, course_code, created_at, is_active, expires_at')
         .in('course_code', courseCodes)
         .order('created_at', { ascending: false });
 
       if (sessionError) throw sessionError;
 
-      const liveSession = sessionRows?.find(s => s.is_active === true);
-      if (liveSession) setActiveLiveClass(liveSession.course_code);
+      // THE FIX: Properly check active and expired
+      const now = new Date().getTime();
+      const liveSession = sessionRows?.find(s => {
+        if (!s.is_active) return false;
+        const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
+        return !isExpired;
+      });
+      
+      if (liveSession) {
+        setActiveLiveClass(liveSession.course_code);
+      }
 
       const sessionIds = (sessionRows || []).map(s => s.session_id);
       let studentLogs: LogRow[] = [];
@@ -175,14 +181,12 @@ export default function StudentPortal() {
       const logStatusMap = new Map<string, string>();
       studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
 
-      // Build History
       const historyData: HistoryRow[] = (sessionRows || []).map(session => {
         const status = logStatusMap.get(session.session_id) || 'absent';
         return { ...session, status };
       });
       setHistory(historyData);
 
-      // Build Aggregate Records
       const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
 
       (sessionRows as SessionRow[] || []).forEach(session => {
@@ -256,7 +260,6 @@ export default function StudentPortal() {
 
       <div className="w-full max-w-md relative z-10 pt-4">
         
-        {/* Header */}
         <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
           <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
@@ -268,7 +271,6 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
-        {/* Live Class Alert */}
         {activeLiveClass && (
           <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
             <div className="flex items-center gap-3">
@@ -282,10 +284,8 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {/* Main Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
           
-          {/* If not logged in yet */}
           {!records && (
             <>
               <div className="relative mb-4">
@@ -316,21 +316,17 @@ export default function StudentPortal() {
             </>
           )}
 
-          {/* If logged in */}
           {records && (
             <>
-              {/* Tabs */}
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
                 <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
                 <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
               </div>
 
-              {/* TAB 1: DASHBOARD (SHIELD + NICKNAME) */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   
-                  {/* Nickname Editor */}
                   <div className="flex items-center justify-between bg-blue-50 border border-blue-100 p-3 rounded-xl">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Nickname:</span>
@@ -377,7 +373,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* TAB 2: RECORDS (VAULT ARCHIVE) */}
               {activeTab === 'records' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
@@ -404,7 +399,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* TAB 3: CAMPUS FEED */}
               {activeTab === 'feed' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
@@ -426,7 +420,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* Lock Button */}
               <button
                 onClick={() => { setRecords(null); setHistory(null); }}
                 className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
