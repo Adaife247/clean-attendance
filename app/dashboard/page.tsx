@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import {
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, X
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, Send
 } from 'lucide-react';
 
 interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
@@ -42,11 +42,10 @@ export default function LecturerDashboard() {
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Feed Modal State
-  const [isFeedModalOpen, setIsFeedModalOpen] = useState(false);
+  // Broadcast State
   const [feedTitle, setFeedTitle] = useState('');
   const [feedContent, setFeedContent] = useState('');
-  const [feedCourseCode, setFeedCourseCode] = useState(''); // NEW
+  const [feedCourseCode, setFeedCourseCode] = useState('');
   const [isPosting, setIsPosting] = useState(false);
 
   const prewarmWatchRef = useRef<number | null>(null);
@@ -269,12 +268,11 @@ export default function LecturerDashboard() {
           title: feedTitle,
           content: feedContent,
           author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode // SENDING THE TARGET COURSE
+          course_code: feedCourseCode
         })
       });
       if (response.ok) {
         alert(`Announcement posted to ${feedCourseCode} students!`);
-        setIsFeedModalOpen(false);
         setFeedTitle('');
         setFeedContent('');
         setFeedCourseCode('');
@@ -356,11 +354,6 @@ export default function LecturerDashboard() {
             <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto items-center">
               <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
               <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
-              
-              <div className="h-6 w-px bg-gray-300 mx-1"></div>
-              <button onClick={() => setIsFeedModalOpen(true)} className="flex-1 md:flex-none px-3 py-2 rounded-lg text-sm font-bold text-[#2563EB] hover:bg-blue-50 transition-all flex items-center gap-1.5">
-                <Megaphone size={16} /> Broadcast
-              </button>
             </div>
           </div>
 
@@ -492,41 +485,6 @@ export default function LecturerDashboard() {
             </div>
           )}
         </div>
-
-        {/* FEED MODAL */}
-        {isFeedModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-              <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Megaphone size={18} className="text-[#2563EB]"/> Broadcast Announcement</h3>
-                <button onClick={() => setIsFeedModalOpen(false)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={20} /></button>
-              </div>
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Target Class</label>
-                  <select value={feedCourseCode} onChange={e => setFeedCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer">
-                    <option value="">-- Select a Course --</option>
-                    {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
-                  <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="e.g., Venue Change for GET 301" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Message</label>
-                  <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement here..." rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-medium text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] resize-none" />
-                </div>
-              </div>
-              <div className="p-4 border-t border-gray-100 flex gap-3">
-                <button onClick={() => setIsFeedModalOpen(false)} className="flex-1 font-bold text-gray-600 py-3 rounded-xl hover:bg-gray-100 transition-all">Cancel</button>
-                <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} className="flex-1 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-                  {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Megaphone size={16} />} Publish
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -559,16 +517,39 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Student Management</h3>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
-            <div className="flex gap-2">
-              <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
-                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
-              </button>
-              <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
-                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Students & Courses Management */}
+          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
+            <div className="flex flex-col gap-3">
+              <select className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer">
+                <option>Manage Course Rosters</option>
+                {courses.map(c => <option key={c.id}>{c.course_code}</option>)}
+              </select>
+              <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
+              <div className="flex gap-2">
+                <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="flex-1 bg-gray-900 text-white px-4 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
+                  {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
+                </button>
+                <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
+                  {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Campus Broadcast */}
+          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Megaphone size={16} className="text-[#2563EB]"/> Campus Broadcast</h3>
+            <div className="flex flex-col gap-3">
+              <select value={feedCourseCode} onChange={e => setFeedCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer">
+                <option value="">-- Target Class --</option>
+                {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+              </select>
+              <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="Announcement Title" className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" />
+              <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement..." rows={2} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-medium focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" />
+              <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} className="w-full bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
+                {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />} Send Broadcast
               </button>
             </div>
           </div>
