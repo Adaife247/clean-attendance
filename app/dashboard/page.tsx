@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import {
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, Send
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, Send, Link as LinkIcon
 } from 'lucide-react';
 
 interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
@@ -46,6 +46,8 @@ export default function LecturerDashboard() {
   const [feedTitle, setFeedTitle] = useState('');
   const [feedContent, setFeedContent] = useState('');
   const [feedCourseCode, setFeedCourseCode] = useState('');
+  const [feedLink, setFeedLink] = useState('');
+  const [feedExpiry, setFeedExpiry] = useState('');
   const [isPosting, setIsPosting] = useState(false);
 
   const prewarmWatchRef = useRef<number | null>(null);
@@ -268,7 +270,9 @@ export default function LecturerDashboard() {
           title: feedTitle,
           content: feedContent,
           author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode
+          course_code: feedCourseCode,
+          link_url: feedLink.trim() || null,
+          expires_at: feedExpiry || null
         })
       });
       if (response.ok) {
@@ -276,6 +280,8 @@ export default function LecturerDashboard() {
         setFeedTitle('');
         setFeedContent('');
         setFeedCourseCode('');
+        setFeedLink('');
+        setFeedExpiry('');
       } else {
         alert("Failed to post announcement.");
       }
@@ -548,6 +554,17 @@ export default function LecturerDashboard() {
               </select>
               <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="Announcement Title" className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" />
               <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement..." rows={2} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-medium focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" />
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LinkIcon size={14} className="text-gray-400" /></div>
+                  <input type="url" value={feedLink} onChange={e => setFeedLink(e.target.value)} placeholder="Link (Optional)" className="w-full bg-gray-50 border border-gray-200 p-3 pl-9 rounded-xl outline-none font-medium text-sm focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <input type="datetime-local" value={feedExpiry} onChange={e => setFeedExpiry(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 text-sm rounded-xl outline-none font-medium focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all text-gray-500" title="Expiry Date" />
+                </div>
+              </div>
+
               <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} className="w-full bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
                 {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />} Send Broadcast
               </button>

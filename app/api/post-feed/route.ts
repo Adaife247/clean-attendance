@@ -3,7 +3,7 @@ import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 export async function POST(request: Request) {
   try {
-    const { title, content, author, course_code } = await request.json();
+    const { title, content, author, course_code, link_url, expires_at } = await request.json();
     
     if (!title || !content || !course_code) {
       return NextResponse.json({ error: 'Title, content, and course_code are required' }, { status: 400 });
@@ -13,7 +13,9 @@ export async function POST(request: Request) {
       title, 
       content, 
       author: author || 'Lecturer',
-      course_code // Now saves the target class!
+      course_code,
+      link_url: link_url || null,
+      expires_at: expires_at || null
     }]);
 
     if (error) throw error;

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
@@ -7,13 +8,32 @@ import {
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 
-interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
-interface Props { sessionId: string; }
+interface Telemetry { 
+  lat: number; 
+  lng: number; 
+  alt: number | null; 
+  acc: number; 
+  timestamp: number; 
+}
+
+interface Props { 
+  sessionId: string; 
+}
 
 type Status =
-  | 'idle' | 'checking' | 'needs_setup' | 'ready'
-  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'
-  | 'offline-queued' | 'syncing' | 'rating' | 'rated';
+  | 'idle' 
+  | 'checking' 
+  | 'needs_setup' 
+  | 'ready'
+  | 'locating' 
+  | 'verifying' 
+  | 'success' 
+  | 'denied' 
+  | 'failed'
+  | 'offline-queued' 
+  | 'syncing' 
+  | 'rating' 
+  | 'rated';
 
 const RATING_TAGS = [
   'Clear Audio',
@@ -31,28 +51,43 @@ const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
-  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
-  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
-  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
-  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
+  if (minutesLate <= 2) {
+    return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
+  }
+  if (minutesLate <= 10) {
+    return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
+  }
+  if (minutesLate <= 25) {
+    return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
+  }
+  if (minutesLate <= 45) {
+    return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
+  }
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
 export default function StudentCheckIn({ sessionId }: Props) {
+  const router = useRouter();
+  
+  // Core State
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
 
+  // Session Metadata
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
 
+  // Rating State
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
+  // Verification Metadata
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
 
+  // Refs
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
@@ -61,7 +96,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // Pre-warm GPS on page load
+  // Pre-warm GPS
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
 
@@ -78,9 +113,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
         }
       },
-      () => {
-        // Silent — best-effort
-      },
+      () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
 
@@ -93,7 +126,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
   }, []);
 
-  // Pre-warm device fingerprint (generate once, cache in ref)
+  // Pre-warm Fingerprint
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -110,7 +143,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
   }, []);
 
-  // Fetch session metadata (for memes)
+  // Fetch Session Metadata
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -130,50 +163,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
   }, [sessionId]);
 
-  const syncOfflineQueue = useCallback(async () => {
-    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-    if (queue.length === 0) return;
-    setStatus('syncing');
-    const remainingQueue: typeof queue = [];
-    let successCount = 0;
-
-    for (const item of queue) {
-      try {
-        const res = await fetch('/api/verify-attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: item.session,
-            matricNumber: item.matric,
-            telemetry: item.telemetry,
-            deviceFingerprint: item.fingerprint,
-            verificationMethod: item.verificationMethod,
-          })
-        });
-        if (res.ok || res.status === 409) successCount++;
-        else remainingQueue.push(item);
-      } catch {
-        remainingQueue.push(item);
-      }
-    }
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
-    if (successCount > 0 && remainingQueue.length === 0) {
-      triggerSuccessVibration();
-      setStatus('success');
-    } else if (remainingQueue.length > 0) {
-      setStatus('offline-queued');
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('online', syncOfflineQueue);
-    const id = setTimeout(() => { syncOfflineQueue(); }, 0);
-    return () => {
-      window.removeEventListener('online', syncOfflineQueue);
-      clearTimeout(id);
-    };
-  }, [syncOfflineQueue]);
-
+  // Auto-advance from 'success' to 'rating'
   useEffect(() => {
     if (status !== 'success') return;
     const t = setTimeout(() => setStatus('rating'), 2500);
@@ -246,7 +236,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
-      // Fingerprint may not be ready yet — wait for it (max 6s)
       let fingerprint = fingerprintRef.current;
       if (!fingerprint) {
         const start = Date.now();
@@ -305,10 +294,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     setLiveAccuracy(null);
-
     let verificationMethod = 'skipped';
 
-    // 1. Try WebAuthn (But don't block the user if it fails)
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
@@ -461,7 +448,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       // Silent fail
     } finally {
       setIsSubmittingRating(false);
-      setStatus('rated');
+      router.push('/portal'); // <-- REDIRECT TO PORTAL
     }
   };
 
@@ -649,7 +636,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
                   disabled={isSubmittingRating || ratingStars === 0}
                   className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
+                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
                 </button>
               </div>
             </div>
