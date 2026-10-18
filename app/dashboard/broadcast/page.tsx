@@ -1,10 +1,17 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
-import { Megaphone, Send, Link as LinkIcon, Loader2 } from 'lucide-react';
+import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
 
 interface Course { id: string; course_code: string; }
 interface LecturerProfile { full_name: string; }
+interface BroadcastPost {
+  id: string;
+  title: string;
+  content: string;
+  course_code: string;
+  created_at: string;
+}
 
 export default function BroadcastPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -18,31 +25,50 @@ export default function BroadcastPage() {
   
   const [isPosting, setIsPosting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState<BroadcastPost[]>([]);
+
+  const fetchData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profileData } = await supabase
+      .from('lecturers')
+      .select('full_name')
+      .eq('id', session.user.id)
+      .single();
+    if (profileData) setProfile(profileData);
+
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('id, course_code')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+    if (courseData) {
+      setCourses(courseData);
+      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
+    }
+
+    // Fetch their previous broadcasts
+    if (profileData) {
+      const courseCodes = courseData?.map(c => c.course_code) || [];
+      if (courseCodes.length > 0) {
+        const { data: posts } = await supabase
+          .from('campus_updates')
+          .select('id, title, content, course_code, created_at')
+          .in('course_code', courseCodes)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (posts) setHistory(posts);
+      }
+    }
+    
+    setIsLoading(false);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data: profileData } = await supabase
-        .from('lecturers')
-        .select('full_name')
-        .eq('id', session.user.id)
-        .single();
-      if (profileData) setProfile(profileData);
-
-      const { data: courseData } = await supabase
-        .from('courses')
-        .select('id, course_code')
-        .eq('lecturer_id', session.user.id)
-        .order('created_at', { ascending: false });
-      if (courseData) {
-        setCourses(courseData);
-        if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
-      }
-      setIsLoading(false);
-    };
-    fetchData();
+    // Defer to next tick to fix React 19 setState warning
+    const id = setTimeout(() => { fetchData(); }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   const handlePostFeed = async () => {
@@ -70,6 +96,7 @@ export default function BroadcastPage() {
         setFeedContent('');
         setFeedLink('');
         setFeedExpiry('');
+        fetchData(); // Refresh the history list
       } else {
         alert("Failed to post announcement.");
       }
@@ -83,7 +110,7 @@ export default function BroadcastPage() {
   if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans space-y-6">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
         <div className="bg-[#2563EB] p-6 text-white">
           <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
@@ -120,7 +147,7 @@ export default function BroadcastPage() {
               value={feedContent} 
               onChange={e => setFeedContent(e.target.value)} 
               placeholder="Type your announcement here..." 
-              rows={4} 
+              rows={3} 
               className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" 
             />
           </div>
@@ -157,6 +184,32 @@ export default function BroadcastPage() {
           >
             {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
           </button>
+        </div>
+      </div>
+
+      {/* RECENT BROADCASTS HISTORY */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {history.length === 0 ? (
+            /* Fixed the apostrophe escape here */
+            <div className="p-8 text-center text-gray-500 font-medium">You haven&apos;t posted any announcements yet.</div>
+          ) : (
+            history.map((post) => (
+              <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className="font-extrabold text-gray-900">{post.title}</h4>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{post.course_code}</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1 mb-2">{post.content}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Sent {new Date(post.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

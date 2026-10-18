@@ -480,7 +480,7 @@ export default function LecturerDashboard() {
         </div>
 
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Student Management</h3>
+          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
             <div className="flex gap-2">
