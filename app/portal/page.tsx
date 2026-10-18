@@ -2,10 +2,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
-  Search, ShieldCheck, User, CheckCircle, AlertTriangle, 
-  Clock, ArrowLeft, Target, TrendingUp, Zap, Flame, Radio
+  ShieldCheck, User, CheckCircle, AlertTriangle, 
+  Clock, ArrowLeft, Target, TrendingUp, Zap, Flame, Radio, Lock
 } from 'lucide-react';
 import Link from 'next/link';
+import { startAuthentication } from '@simplewebauthn/browser';
 
 interface CourseRecord {
   course_code: string;
@@ -17,20 +18,21 @@ interface CourseRecord {
   streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
 }
 
-interface SessionRow {
-  session_id: string;
-  course_code: string;
-  created_at: string;
-}
-
 interface LogRow {
   session_id: string;
   status: string;
 }
 
+interface SessionRow {
+  session_id: string;
+  course_code: string;
+  created_at: string;
+  is_active: boolean;
+}
+
 export default function StudentPortal() {
   const [matricNumber, setMatricNumber] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [error, setError] = useState('');
   const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
@@ -44,20 +46,44 @@ export default function StudentPortal() {
     }
   }, []);
 
-  const fetchRecords = async (targetMatric?: string) => {
-    const matToUse = targetMatric || matricNumber;
-    if (matToUse.length < 5) return;
-    
-    setIsSearching(true);
+  const handleVerifyAndFetch = async () => {
+    if (matricNumber.length < 5) return;
+    setIsVerifying(true);
     setError('');
     setRecords(null);
-    setActiveLiveClass(null);
 
-    const cleanMatric = matToUse.toUpperCase().trim();
+    const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
-      // 1. Find every course this student is enrolled in
+      // 1. REQUIRE WEBAUTHN AUTHENTICATION FIRST
+      const genRes = await fetch('/api/webauthn/auth/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric })
+      });
+
+      if (genRes.status === 404) {
+        throw new Error("You haven't linked your biometrics yet. You must check into a lecture first.");
+      }
+
+      const options = await genRes.json();
+      if (options.error) throw new Error(options.error);
+
+      const asseResp = await startAuthentication(options);
+
+      const verifyRes = await fetch('/api/webauthn/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric, authResponse: asseResp })
+      });
+
+      const verifyResult = await verifyRes.json();
+      if (!verifyResult.verified) {
+        throw new Error("Biometric verification failed. Access denied.");
+      }
+
+      // 2. FETCH RECORDS (Only if biometrics passed)
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -71,24 +97,15 @@ export default function StudentPortal() {
       }
 
       const courseIds = enrollmentRows.map(e => e.course_id);
-
-      // 2. Get the course codes for those course IDs
       const { data: courseRows, error: courseError } = await supabase
         .from('courses')
         .select('id, course_code')
         .in('id', courseIds);
 
       if (courseError) throw courseError;
-      if (!courseRows || courseRows.length === 0) {
-        setError("No course details found.");
-        return;
-      }
+      
+      const courseCodes = courseRows?.map(c => c.course_code) || [];
 
-      const courseCodeMap = new Map<string, string>();
-      courseRows.forEach(c => courseCodeMap.set(c.id, c.course_code));
-      const courseCodes = courseRows.map(c => c.course_code);
-
-      // 3. Get ALL sessions held for each of these courses (the denominator)
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
         .select('session_id, course_code, created_at, is_active')
@@ -97,13 +114,9 @@ export default function StudentPortal() {
 
       if (sessionError) throw sessionError;
 
-      // Check for active live class
       const liveSession = sessionRows?.find(s => s.is_active === true);
-      if (liveSession) {
-        setActiveLiveClass(liveSession.course_code);
-      }
+      if (liveSession) setActiveLiveClass(liveSession.course_code);
 
-      // 4. Get this student's logs for those sessions
       const sessionIds = (sessionRows || []).map(s => s.session_id);
       let studentLogs: LogRow[] = [];
 
@@ -112,32 +125,28 @@ export default function StudentPortal() {
           .from('attendance_logs')
           .select('session_id, status')
           .eq('matric_number', cleanMatric)
-          .in('session_id', sessionIds);
+          .in('session_id', sessionIds)
+          .eq('status', 'verified'); // ONLY COUNT VERIFIED AS ATTENDED
 
         if (logError) throw logError;
         studentLogs = logRows || [];
       }
 
-      // 5. Build a lookup: session_id → status
       const logStatusMap = new Map<string, string>();
       studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
 
-      // 6. Compute per-course stats
       const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
 
-      (sessionRows || []).forEach(session => {
+      (sessionRows as SessionRow[] || []).forEach(session => {
         const course = session.course_code;
         const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
         stats.total += 1;
         stats.sessions.push(session);
 
-        const status = logStatusMap.get(session.session_id);
-        if (status === 'verified') stats.attended += 1;
-
+        if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
         courseStats.set(course, stats);
       });
 
-      // 7. Compute streaks per course (most recent consecutive verified)
       const finalRecords: CourseRecord[] = [];
 
       courseStats.forEach((stats, course) => {
@@ -151,8 +160,7 @@ export default function StudentPortal() {
 
         let streak = 0;
         for (const session of stats.sessions) {
-          const status = logStatusMap.get(session.session_id);
-          if (status === 'verified') streak += 1;
+          if (logStatusMap.get(session.session_id) === 'verified') streak += 1;
           else break;
         }
 
@@ -174,11 +182,14 @@ export default function StudentPortal() {
 
       finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
       setRecords(finalRecords);
+
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to fetch records.";
+      // Fixed: Properly handling unknown error type
+      const msg = err instanceof Error ? err.message : "Verification failed.";
+      setRecords(null);
       setError(msg);
     } finally {
-      setIsSearching(false);
+      setIsVerifying(false);
     }
   };
 
@@ -214,13 +225,9 @@ export default function StudentPortal() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      
-      {/* Background decoration */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="w-full max-w-md relative z-10 pt-8">
-
-        {/* Header */}
         <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
           <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
             <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
@@ -230,7 +237,6 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-2 font-medium">Track your NUC clearance status</p>
         </div>
 
-        {/* Live Alert Banner */}
         {activeLiveClass && (
           <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
             <div className="flex items-center gap-3">
@@ -248,7 +254,6 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {/* Search / Input Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
           
           {!records && (
@@ -261,7 +266,7 @@ export default function StudentPortal() {
                 placeholder="Matric Number (e.g. CSC/2021/001)"
                 value={matricNumber}
                 onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()}
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
               />
             </div>
@@ -269,19 +274,19 @@ export default function StudentPortal() {
 
           {!records ? (
             <button
-              onClick={() => fetchRecords()}
-              disabled={matricNumber.length < 5 || isSearching}
+              onClick={handleVerifyAndFetch}
+              disabled={matricNumber.length < 5 || isVerifying}
               className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
             >
-              {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />}
-              {isSearching ? "Loading Shield..." : "Load My Records"}
+              {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
+              {isVerifying ? "Verifying Biometrics..." : "Unlock My Records"}
             </button>
           ) : (
             <button
               onClick={() => { setRecords(null); }}
               className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all"
             >
-              <Search size={16} /> Search Another Student
+              <Lock size={16} /> Lock & Search Another
             </button>
           )}
 
@@ -291,7 +296,6 @@ export default function StudentPortal() {
             </div>
           )}
 
-          {/* Clearance Shield Results */}
           {records && records.length > 0 && (
             <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
@@ -304,10 +308,7 @@ export default function StudentPortal() {
                 const isCleared = record.percentage >= 70;
 
                 return (
-                  <div
-                    key={record.course_code}
-                    className={`relative overflow-hidden ${colors.bg} p-5 rounded-2xl border ${colors.border} transition-colors`}
-                  >
+                  <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-5 rounded-2xl border ${colors.border} transition-colors`}>
                     <div className="flex justify-between items-start mb-4 relative z-10">
                       <div>
                         <p className="font-black text-gray-900 text-xl leading-tight tracking-tight">{record.course_code}</p>
@@ -332,17 +333,11 @@ export default function StudentPortal() {
                       </div>
                     </div>
 
-                    {/* Clearance Shield Progress Bar */}
                     <div className="relative w-full h-4 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50 shadow-inner">
-                      <div
-                        className={`h-full ${colors.bar} transition-all duration-1000 ease-out`}
-                        style={{ width: `${Math.min(record.percentage, 100)}%` }}
-                      />
-                      {/* 70% Threshold marker */}
+                      <div className={`h-full ${colors.bar} transition-all duration-1000 ease-out`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
                       <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
                     </div>
 
-                    {/* Safe Skips */}
                     <div className="mt-4 flex items-center justify-between text-xs relative z-10">
                       <div className="flex items-center gap-1.5 text-gray-700 font-bold bg-white/60 px-2.5 py-1.5 rounded-lg">
                         <Target size={14} className="text-gray-500" />
@@ -358,10 +353,6 @@ export default function StudentPortal() {
                   </div>
                 );
               })}
-
-              <p className="text-[10px] text-gray-400 font-bold text-center pt-2 uppercase tracking-wider">
-                NUC 70% Threshold Enforced
-              </p>
             </div>
           )}
         </div>
@@ -371,7 +362,6 @@ export default function StudentPortal() {
             <ArrowLeft size={16} /> Back to Hub
           </Link>
         </div>
-
       </div>
     </div>
   );

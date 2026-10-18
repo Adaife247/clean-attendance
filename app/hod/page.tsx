@@ -37,21 +37,26 @@ export default function HODPortal() {
       return;
     }
 
-    // Get HOD Department
     const { data: profile } = await supabase
       .from('lecturers')
       .select('department')
       .eq('id', session.user.id)
       .single();
 
-    if (!profile?.department) return;
+    // --- SECLUSION CHECK ---
+    // If the user has no department, they are not authorized to view this page.
+    if (!profile?.department) {
+      router.push('/dashboard');
+      return;
+    }
 
-    // Fetch from our new aggregated API
     const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`);
     if (res.ok) {
       const data = await res.json();
       setStats(data.lecturers);
       setCompliance(data.compliance);
+    } else {
+      router.push('/dashboard');
     }
     
     setLoading(false);
@@ -67,7 +72,7 @@ export default function HODPortal() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="animate-spin text-[#2563EB] mx-auto mb-4" size={32} />
-          <p className="text-gray-500 font-bold animate-pulse">Aggregating Department Data...</p>
+          <p className="text-gray-500 font-bold animate-pulse">Authenticating HOD Clearance...</p>
         </div>
       </div>
     );
@@ -81,7 +86,6 @@ export default function HODPortal() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* Header */}
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -97,7 +101,6 @@ export default function HODPortal() {
           </Link>
         </div>
 
-        {/* Global Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
             <div className="bg-blue-50 text-[#2563EB] p-4 rounded-xl">
@@ -132,7 +135,6 @@ export default function HODPortal() {
           </div>
         </div>
 
-        {/* NUC Compliance Bar */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -148,12 +150,10 @@ export default function HODPortal() {
           </div>
           
           <div className="relative w-full h-6 bg-gray-100 rounded-full overflow-hidden border border-gray-200 shadow-inner">
-            {/* Cleared (Green) */}
             <div 
               className="absolute top-0 left-0 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-1000"
               style={{ width: `${complianceRate}%` }}
             />
-            {/* Threshold Marker */}
             <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
           </div>
           
@@ -164,7 +164,6 @@ export default function HODPortal() {
           </div>
         </div>
 
-        {/* Lecturer Table */}
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
             <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
