@@ -46,6 +46,7 @@ export default function LecturerDashboard() {
   const [isFeedModalOpen, setIsFeedModalOpen] = useState(false);
   const [feedTitle, setFeedTitle] = useState('');
   const [feedContent, setFeedContent] = useState('');
+  const [feedCourseCode, setFeedCourseCode] = useState(''); // NEW
   const [isPosting, setIsPosting] = useState(false);
 
   const prewarmWatchRef = useRef<number | null>(null);
@@ -255,7 +256,10 @@ export default function LecturerDashboard() {
   };
 
   const handlePostFeed = async () => {
-    if (!feedTitle.trim() || !feedContent.trim()) return;
+    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
+      alert("Please fill all fields and select a course.");
+      return;
+    }
     setIsPosting(true);
     try {
       const response = await fetch('/api/post-feed', {
@@ -264,14 +268,16 @@ export default function LecturerDashboard() {
         body: JSON.stringify({
           title: feedTitle,
           content: feedContent,
-          author: profile?.full_name || 'Lecturer'
+          author: profile?.full_name || 'Lecturer',
+          course_code: feedCourseCode // SENDING THE TARGET COURSE
         })
       });
       if (response.ok) {
-        alert("Announcement posted successfully!");
+        alert(`Announcement posted to ${feedCourseCode} students!`);
         setIsFeedModalOpen(false);
         setFeedTitle('');
         setFeedContent('');
+        setFeedCourseCode('');
       } else {
         alert("Failed to post announcement.");
       }
@@ -351,7 +357,6 @@ export default function LecturerDashboard() {
               <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
               <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
               
-              {/* NEW: Announcement Button */}
               <div className="h-6 w-px bg-gray-300 mx-1"></div>
               <button onClick={() => setIsFeedModalOpen(true)} className="flex-1 md:flex-none px-3 py-2 rounded-lg text-sm font-bold text-[#2563EB] hover:bg-blue-50 transition-all flex items-center gap-1.5">
                 <Megaphone size={16} /> Broadcast
@@ -498,17 +503,24 @@ export default function LecturerDashboard() {
               </div>
               <div className="p-4 space-y-4">
                 <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Target Class</label>
+                  <select value={feedCourseCode} onChange={e => setFeedCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] cursor-pointer">
+                    <option value="">-- Select a Course --</option>
+                    {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
                   <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="e.g., Venue Change for GET 301" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Message</label>
-                  <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement here..." rows={4} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-medium text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] resize-none" />
+                  <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement here..." rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-medium text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] resize-none" />
                 </div>
               </div>
               <div className="p-4 border-t border-gray-100 flex gap-3">
                 <button onClick={() => setIsFeedModalOpen(false)} className="flex-1 font-bold text-gray-600 py-3 rounded-xl hover:bg-gray-100 transition-all">Cancel</button>
-                <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim()} className="flex-1 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} className="flex-1 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                   {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Megaphone size={16} />} Publish
                 </button>
               </div>

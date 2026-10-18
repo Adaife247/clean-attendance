@@ -40,6 +40,7 @@ interface CampusUpdate {
   title: string;
   content: string;
   author: string;
+  course_code: string | null;
   created_at: string;
 }
 
@@ -78,6 +79,7 @@ export default function StudentPortal() {
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
+      // 1. REQUIRE WEBAUTHN AUTHENTICATION
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,6 +106,7 @@ export default function StudentPortal() {
         throw new Error("Biometric verification failed. Access denied.");
       }
 
+      // 2. FETCH NICKNAME
       const { data: profile } = await supabase
         .from('student_profiles')
         .select('nickname')
@@ -115,13 +118,7 @@ export default function StudentPortal() {
         setSavedNickname(profile.nickname);
       }
 
-      const { data: feedData } = await supabase
-        .from('campus_updates')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (feedData) setFeed(feedData);
-
+      // 3. FETCH ENROLLMENTS
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -144,7 +141,17 @@ export default function StudentPortal() {
       
       const courseCodes = courseRows?.map(c => c.course_code) || [];
 
-      // THE FIX IS HERE: We must select 'expires_at'
+      // 4. FETCH FEED (Only for their courses)
+      // Supabase doesn't have a native OR condition for null easily, so we fetch matching course or global
+      const { data: feedData } = await supabase
+        .from('campus_updates')
+        .select('*')
+        .or(`course_code.is.null,course_code.in.(${courseCodes.join(',')})`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (feedData) setFeed(feedData);
+
+      // 5. FETCH SESSIONS
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
         .select('session_id, course_code, created_at, is_active, expires_at')
@@ -408,7 +415,12 @@ export default function StudentPortal() {
                   <div className="space-y-4">
                     {feed.map((post) => (
                       <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                        <h4 className="font-extrabold text-gray-900 text-sm mb-1">{post.title}</h4>
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                          {post.course_code && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-600 leading-relaxed mb-2">{post.content}</p>
                         <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                           <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
