@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import {
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, X
 } from 'lucide-react';
 
 interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
@@ -41,6 +41,12 @@ export default function LecturerDashboard() {
   const [viewingPastSession, setViewingPastSession] = useState<PastSession | null>(null);
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Feed Modal State
+  const [isFeedModalOpen, setIsFeedModalOpen] = useState(false);
+  const [feedTitle, setFeedTitle] = useState('');
+  const [feedContent, setFeedContent] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
@@ -248,6 +254,34 @@ export default function LecturerDashboard() {
     finally { setIsResetting(false); }
   };
 
+  const handlePostFeed = async () => {
+    if (!feedTitle.trim() || !feedContent.trim()) return;
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/post-feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: feedTitle,
+          content: feedContent,
+          author: profile?.full_name || 'Lecturer'
+        })
+      });
+      if (response.ok) {
+        alert("Announcement posted successfully!");
+        setIsFeedModalOpen(false);
+        setFeedTitle('');
+        setFeedContent('');
+      } else {
+        alert("Failed to post announcement.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
     if (!logsToExport || logsToExport.length === 0) { alert("No check-ins recorded."); return; }
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
@@ -293,10 +327,7 @@ export default function LecturerDashboard() {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
     const courseName = data?.course || 'Active Class';
-    
-    // THE FIX: Includes the class name and session details in the copied text
     const clipboardText = `📌 *CampusCheck Attendance Link*\n\n📚 Class: ${courseName}\n⏱ Opens: ${checkinOpensAfter === 0 ? 'Immediately' : `In ${checkinOpensAfter} minutes`}\n\n🔗 ${link}\n\n_Open this link on your phone to check in. You must be inside the lecture hall._`;
-    
     navigator.clipboard.writeText(clipboardText);
     alert("Attendance link copied! Share it with your students.");
   };
@@ -316,9 +347,15 @@ export default function LecturerDashboard() {
                 {viewMode === 'history' ? 'Review past session ledgers and download reports.' : `Welcome, ${profile?.full_name || 'Lecturer'}`}
               </p>
             </div>
-            <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto">
+            <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto items-center">
               <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
               <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
+              
+              {/* NEW: Announcement Button */}
+              <div className="h-6 w-px bg-gray-300 mx-1"></div>
+              <button onClick={() => setIsFeedModalOpen(true)} className="flex-1 md:flex-none px-3 py-2 rounded-lg text-sm font-bold text-[#2563EB] hover:bg-blue-50 transition-all flex items-center gap-1.5">
+                <Megaphone size={16} /> Broadcast
+              </button>
             </div>
           </div>
 
@@ -450,6 +487,34 @@ export default function LecturerDashboard() {
             </div>
           )}
         </div>
+
+        {/* FEED MODAL */}
+        {isFeedModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+              <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Megaphone size={18} className="text-[#2563EB]"/> Broadcast Announcement</h3>
+                <button onClick={() => setIsFeedModalOpen(false)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={20} /></button>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
+                  <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="e.g., Venue Change for GET 301" className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Message</label>
+                  <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement here..." rows={4} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 font-medium text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB] resize-none" />
+                </div>
+              </div>
+              <div className="p-4 border-t border-gray-100 flex gap-3">
+                <button onClick={() => setIsFeedModalOpen(false)} className="flex-1 font-bold text-gray-600 py-3 rounded-xl hover:bg-gray-100 transition-all">Cancel</button>
+                <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim()} className="flex-1 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+                  {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Megaphone size={16} />} Publish
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
