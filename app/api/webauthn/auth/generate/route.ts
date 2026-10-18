@@ -22,16 +22,19 @@ export async function POST(request: Request) {
 
     let safeTransports = device.transports;
     if (typeof safeTransports === 'string') {
-      try { safeTransports = JSON.parse(safeTransports); } catch(e) { safeTransports = []; }
+      try { safeTransports = JSON.parse(safeTransports); } catch { safeTransports = []; }
+    }
+
+    if (!Array.isArray(safeTransports)) {
+      safeTransports = ['internal'];
     }
 
     const options = await generateAuthenticationOptions({
       rpID,
       allowCredentials: [{
         id: String(device.credential_id),
-        type: 'public-key',
-        transports: safeTransports || [],
-      }] as any[],
+        transports: safeTransports,
+      }],
       userVerification: 'preferred',
     });
 
@@ -44,7 +47,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

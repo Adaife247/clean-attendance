@@ -42,7 +42,7 @@ export async function POST(request: Request) {
           id: device.credential_id,
           publicKey: pkBytes,
           counter: Number(device.counter),
-        } as any,
+        },
       });
 
       if (verification.verified) {
@@ -54,12 +54,14 @@ export async function POST(request: Request) {
         cookieStore.delete('webauthn_challenge');
         return NextResponse.json({ verified: true });
       }
-    } catch (cryptoError: any) {
-      return NextResponse.json({ error: `Crypto Crash! Key length: ${pkBytes.length}. Error: ${cryptoError.message}` }, { status: 500 });
+    } catch (cryptoError) {
+      const msg = cryptoError instanceof Error ? cryptoError.message : "Unknown crypto error";
+      return NextResponse.json({ error: `Crypto Crash! Key length: ${pkBytes.length}. Error: ${msg}` }, { status: 500 });
     }
 
     return NextResponse.json({ verified: false }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
