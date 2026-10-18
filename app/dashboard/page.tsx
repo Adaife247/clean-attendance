@@ -15,6 +15,7 @@ interface PastSession { session_id: string; created_at: string; course_code: str
 
 const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
 const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+const ACTIVE_SESSION_KEY = 'active_attendance_session';
 
 export default function LecturerDashboard() {
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
@@ -44,6 +45,25 @@ export default function LecturerDashboard() {
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
 
+  // Helper to kill stale sessions
+  const clearStaleSession = () => {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    setActiveSessionId(null);
+    setData(null);
+    setSetupError('');
+  };
+
+  // Moved this up so it's defined before the useEffect uses it
+  const checkSessionValidity = async (sessionId: string) => {
+    const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', sessionId).single();
+    if (data && data.is_active) {
+      setActiveSessionId(sessionId);
+    } else {
+      // The session was ended on the backend, so clear it locally
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+    }
+  };
+
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -65,8 +85,10 @@ export default function LecturerDashboard() {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      const savedSession = localStorage.getItem('active_attendance_session');
-      if (savedSession) setActiveSessionId(savedSession);
+      const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
+      if (savedSession) {
+        checkSessionValidity(savedSession);
+      }
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
@@ -114,7 +136,7 @@ export default function LecturerDashboard() {
         });
         if (response.ok) {
           const result = await response.json();
-          localStorage.setItem('active_attendance_session', result.sessionId);
+          localStorage.setItem(ACTIVE_SESSION_KEY, result.sessionId);
           try { localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
           setActiveSessionId(result.sessionId);
           setViewMode('live');
@@ -168,8 +190,7 @@ export default function LecturerDashboard() {
 
   const endSession = () => {
     if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
-      localStorage.removeItem('active_attendance_session');
-      setActiveSessionId(null); setData(null);
+      clearStaleSession();
     }
   };
 
@@ -286,7 +307,7 @@ export default function LecturerDashboard() {
               </p>
             </div>
             <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto">
-              <button onClick={() => setViewMode('live')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
+              <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
               <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
             </div>
           </div>
