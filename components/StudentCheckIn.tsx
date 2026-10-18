@@ -98,9 +98,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     let cancelled = false;
     const id = setTimeout(async () => {
       try {
-        console.log('[CampusCheck] Generating device fingerprint...');
         const fp = await generateDeviceFingerprint();
-        console.log('[CampusCheck] Fingerprint generated:', fp);
         if (!cancelled) fingerprintRef.current = fp.hash;
       } catch (err) {
         console.error('[CampusCheck] Fingerprint generation failed:', err);
@@ -149,6 +147,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             matricNumber: item.matric,
             telemetry: item.telemetry,
             deviceFingerprint: item.fingerprint,
+            verificationMethod: item.verificationMethod,
           })
         });
         if (res.ok || res.status === 409) successCount++;
@@ -245,7 +244,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };
 
-  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[]) => {
+  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
       // Fingerprint may not be ready yet — wait for it (max 6s)
       let fingerprint = fingerprintRef.current;
@@ -256,7 +255,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           fingerprint = fingerprintRef.current;
         }
       }
-      console.log('[CampusCheck] Fingerprint being sent:', fingerprint);
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST',
@@ -266,6 +264,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           matricNumber,
           telemetry: gpsTelemetry,
           deviceFingerprint: fingerprint || 'unknown',
+          verificationMethod
         })
       });
       const result = await response.json();
@@ -291,6 +290,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           matric: matricNumber,
           telemetry: gpsTelemetry,
           fingerprint: fingerprintRef.current,
+          verificationMethod,
           timestamp: Date.now(),
         });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
@@ -306,31 +306,40 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setStatus('locating');
     setLiveAccuracy(null);
 
+    let verificationMethod = 'skipped';
+
+    // 1. Try WebAuthn (But don't block the user if it fails)
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      const options = await genRes.json();
-      if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
-      const asseResp = await startAuthentication(options);
+      if (genRes.status === 404) {
+        verificationMethod = 'skipped';
+      } else {
+        const options = await genRes.json();
+        if (options.error) throw new Error(options.error);
 
-      const verifyRes = await fetch('/api/webauthn/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: asseResp })
-      });
-      const verifyResult = await verifyRes.json();
+        const asseResp = await startAuthentication(options);
 
-      if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
-      if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
+        const verifyRes = await fetch('/api/webauthn/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matricNumber, authResponse: asseResp })
+        });
+        const verifyResult = await verifyRes.json();
+
+        if (verifyResult.verified) {
+          verificationMethod = 'biometric';
+        } else {
+          throw new Error("Biometric mismatch");
+        }
+      }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Unknown Auth Error occurred.";
-      setErrorMessage(msg);
-      setStatus('failed');
-      return;
+      console.warn("Biometric failed, falling back to flagged mode:", error);
+      verificationMethod = 'skipped';
     }
 
     if (!navigator.geolocation) {
@@ -352,7 +361,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       didFinish = true;
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
-        sendPayloadToVercel(finalPings);
+        sendPayloadToVercel(finalPings, verificationMethod);
       } else {
         setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS, then try again.");
         setStatus('failed');
@@ -361,7 +370,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     if (pings.length >= 1) {
       sentAny = true;
-      sendPayloadToVercel(pings);
+      sendPayloadToVercel(pings, verificationMethod);
     }
 
     const overallTimeoutId = setTimeout(() => {
@@ -393,7 +402,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
           lastSendTs = now;
           sentAny = true;
-          sendPayloadToVercel(pings);
+          sendPayloadToVercel(pings, verificationMethod);
         }
       },
       (error) => {

@@ -665,7 +665,7 @@ export default function LecturerDashboard() {
                             onClick={() => handleManualOverride(log.matricNumber)}
                             className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
                           >
-                            <ShieldCheck size={14} /> Accept
+                            <ShieldCheck size={14} /> Approve
                           </button>
                         )}
                       </td>

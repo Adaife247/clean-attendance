@@ -54,13 +54,13 @@ app/
       route.ts
     override-attendance/
       route.ts
+    rate-session/
+      route.ts
     request-override/
       route.ts
     reset-device/
       route.ts
     verify-attendance/
-      route.ts
-    verify-rep/
       route.ts
     webauthn/
       auth/
@@ -86,8 +86,6 @@ app/
     page.tsx
   portal/
     page.tsx
-  rep/
-    page.tsx
   globals.css
   icon.png
   layout.tsx
@@ -106,6 +104,7 @@ public/
   vercel.svg
   window.svg
 utils/
+  deviceFingerprint.ts
   supabase-admin.ts
   supabase.ts
   webauthn.ts
@@ -125,6 +124,47 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="app/api/rate-session/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+interface RateBody {
+  sessionId: string;
+  rating: number;
+  tags: string[];
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = (await request.json()) as RateBody;
+    const { sessionId, rating, tags } = body;
+
+    if (!sessionId || typeof rating !== 'number' || rating < 1 || rating > 5) {
+      return NextResponse.json({ error: 'Invalid rating payload' }, { status: 400 });
+    }
+
+    const cleanTags = Array.isArray(tags)
+      ? tags.filter(t => typeof t === 'string').slice(0, 10)
+      : [];
+
+    const { error } = await supabase
+      .from('session_ratings')
+      .insert([{
+        session_id: sessionId,
+        rating,
+        tags: cleanTags,
+      }]);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to record rating';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+</file>
 
 <file path="app/globals.css">
 @import "tailwindcss";
@@ -173,25 +213,6 @@ body {
 
 <file path="public/window.svg">
 <svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
-</file>
-
-<file path="utils/supabase-admin.ts">
-import { createClient } from '@supabase/supabase-js';
-
-// This client bypasses RLS. ONLY use this inside the /app/api/ folders.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-</file>
-
-<file path="utils/supabase.ts">
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 </file>
 
 <file path="AGENTS.md">
@@ -279,27 +300,6 @@ if __name__ == "__main__":
 
 <file path="CLAUDE.md">
 @AGENTS.md
-</file>
-
-<file path="eslint.config.mjs">
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
-
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-]);
-
-export default eslintConfig;
 </file>
 
 <file path="et --hard beaef43">
@@ -836,35 +836,6 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/api/verify-rep/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-export async function POST(request: Request) {
-  try {
-    const { sessionId, passcode } = await request.json();
-
-    if (!sessionId || !passcode) {
-      return NextResponse.json({ message: "Missing credentials" }, { status: 400 });
-    }
-
-    const { data: session } = await supabase
-      .from('lecture_sessions')
-      .select('rep_passcode')
-      .eq('session_id', sessionId)
-      .single();
-
-    if (session && session.rep_passcode === passcode) {
-      return NextResponse.json({ success: true }, { status: 200 });
-    }
-
-    return NextResponse.json({ message: "Invalid passcode" }, { status: 401 });
-  } catch (error: any) {
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/webauthn/verify-hardware/route.ts">
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -1088,6 +1059,83 @@ self.addEventListener('fetch', (event) => {
 });
 </file>
 
+<file path="utils/supabase-admin.ts">
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+let _client: SupabaseClient | null = null;
+
+function getClient(): SupabaseClient {
+  if (_client) return _client;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+  }
+  if (!supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
+  }
+
+  _client = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  return _client;
+}
+
+// Proxy defers client creation until first property access, so importing this
+// module during `next build` (before env vars are loaded) does not throw.
+// The `any` cast is required because TypeScript cannot express the forwarding
+// behavior of a Proxy over a generic class instance.
+export const supabaseAdmin = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (client as any)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
+</file>
+
+<file path="utils/supabase.ts">
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+let _client: SupabaseClient | null = null;
+
+function getClient(): SupabaseClient {
+  if (_client) return _client;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable');
+  }
+  if (!supabaseAnonKey) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
+  }
+
+  _client = createClient(supabaseUrl, supabaseAnonKey);
+  return _client;
+}
+
+// Proxy defers client creation until first property access, so importing this
+// module during `next build` (before env vars are loaded) does not throw.
+// The `any` cast is required because TypeScript cannot express the forwarding
+// behavior of a Proxy over a generic class instance.
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (client as any)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
+</file>
+
 <file path="utils/webauthn.ts">
 // This is the name that shows up natively on FaceID / Fingerprint prompts
 export const rpName = 'CampusCheck';
@@ -1141,6 +1189,36 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+</file>
+
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+  {
+    rules: {
+      // Tailwind v4's "suggestCanonicalClasses" rule flags older but perfectly
+      // valid class names (e.g., min-w-[200px] vs min-w-50, bg-gradient-to-br
+      // vs bg-linear-to-br). These are cosmetic preferences, not bugs.
+      // We'll do a dedicated Tailwind modernization pass later if desired.
+      "tailwindcss/suggestCanonicalClasses": "off",
+    },
+  },
+]);
+
+export default eslintConfig;
 </file>
 
 <file path="app/api/master-export/route.ts">
@@ -1229,68 +1307,545 @@ export async function GET(request: Request) {
 }
 </file>
 
+<file path="utils/deviceFingerprint.ts">
+// utils/deviceFingerprint.ts
+
+/**
+ * Device Fingerprint Utility — Cross-Browser Edition
+ * 
+ * Combines signals that remain stable across Chrome, Firefox, Brave, and Incognito:
+ * 1. GPU timing (DrawnApart method) — measures hardware execution, not browser strings [citation:1]
+ * 2. WebGL driver parameters (without debug_renderer_info, which Firefox blocks) [citation:6][citation:17]
+ * 3. Hardware signals (screen, CPU, touch, timezone) — OS-level, browser-agnostic [citation:4]
+ * 4. Canvas rendering hash — adds entropy from font/GPU rasterization
+ * 5. AudioContext processing hash — hardware audio characteristics [citation:7]
+ */
+
+interface NavigatorWithMemory extends Navigator {
+  deviceMemory?: number;
+}
+
+interface WebkitWindow extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+export interface DeviceFingerprintResult {
+  hash: string;
+  components: {
+    gpuTiming: string;
+    webglParams: string;
+    hardware: string;
+    canvas: string;
+    audio: string;
+  };
+  duration: number;
+}
+
+/**
+ * GPU Timing Fingerprint (DrawnApart)
+ * Renders fixed WebGL workload and measures execution time.
+ * Even identical GPUs have microscopic timing differences from manufacturing variance [citation:1][citation:20].
+ */
+async function getGpuTimingFingerprint(): Promise<string> {
+  if (typeof document === 'undefined') return 'no-document';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const gl = canvas.getContext('webgl', {
+    antialias: false,
+    depth: false,
+    stencil: false,
+    powerPreference: 'high-performance',
+  }) as WebGLRenderingContext | null;
+
+  if (!gl) return 'no-webgl';
+
+  const vsSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fsSource = `
+    precision highp float;
+    void main() {
+      float x = gl_FragCoord.x * 0.001;
+      float y = gl_FragCoord.y * 0.001;
+      gl_FragColor = vec4(x, y, x * y, 1.0);
+    }
+  `;
+
+  function compileShader(context: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
+    const shader = context.createShader(type);
+    if (!shader) return null;
+    context.shaderSource(shader, source);
+    context.compileShader(shader);
+    return shader;
+  }
+
+  const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
+  const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
+  if (!vs || !fs) return 'shader-compile-failed';
+
+  const program = gl.createProgram();
+  if (!program) return 'program-create-failed';
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  const vertices = new Float32Array(200 * 2);
+  for (let i = 0; i < 200; i++) {
+    vertices[i * 2] = Math.sin(i) * 0.5;
+    vertices[i * 2 + 1] = Math.cos(i) * 0.5;
+  }
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+  const positionLoc = gl.getAttribLocation(program, 'a_position');
+  gl.enableVertexAttribArray(positionLoc);
+  gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+  for (let i = 0; i < 10; i++) {
+    gl.drawArrays(gl.TRIANGLES, 0, 200);
+  }
+  gl.finish();
+
+  const iterations = 200;
+  const start = performance.now();
+  for (let i = 0; i < iterations; i++) {
+    gl.drawArrays(gl.TRIANGLES, 0, 200);
+  }
+  gl.finish();
+  const duration = performance.now() - start;
+
+  gl.deleteBuffer(buffer);
+  gl.deleteProgram(program);
+
+  return duration.toFixed(3);
+}
+
+/**
+ * WebGL Driver Parameters (WITHOUT debug_renderer_info)
+ * Firefox blocks WEBGL_debug_renderer_info when resistFingerprinting is enabled [citation:6].
+ * But these parameters are driver-level and remain accessible [citation:17].
+ */
+function getWebglParams(): string {
+  if (typeof document === 'undefined') return 'no-document';
+
+  const canvas = document.createElement('canvas');
+  const gl = (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+
+  if (!gl) return 'no-webgl';
+
+  const params: Array<string | number> = [];
+
+  // These are stable across browsers (driver-level)
+  params.push(`ver:${gl.getParameter(gl.VERSION)}`);
+  params.push(`sl:${gl.getParameter(gl.SHADING_LANGUAGE_VERSION)}`);
+  params.push(`maxtex:${gl.getParameter(gl.MAX_TEXTURE_SIZE)}`);
+  params.push(`maxvtx:${gl.getParameter(gl.MAX_VERTEX_ATTRIBS)}`);
+  params.push(`maxvary:${gl.getParameter(gl.MAX_VARYING_VECTORS)}`);
+  params.push(`maxview:${gl.getParameter(gl.MAX_VIEWPORT_DIMS)?.toString()}`);
+
+  // Extensions list (differs between browsers but combined with timing adds entropy)
+  const extensions = gl.getSupportedExtensions() || [];
+  params.push(`ext:${extensions.sort().join(',')}`);
+
+  return params.join('|');
+}
+
+/**
+ * Canvas Rendering Fingerprint
+ * Draws fixed text and shapes, then hashes pixel output.
+ * Font anti-aliasing and GPU rasterization differences add entropy [citation:2].
+ */
+function getCanvasFingerprint(): string {
+  if (typeof document === 'undefined') return 'no-document';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 300;
+  canvas.height = 60;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) return 'no-2d-context';
+
+  // Draw text with mixed fonts
+  ctx.textBaseline = 'top';
+  ctx.font = '14px "Arial"';
+  ctx.fillStyle = '#f60';
+  ctx.fillRect(125, 1, 62, 20);
+  ctx.fillStyle = '#069';
+  ctx.fillText('CampusCheck🛡️', 2, 15);
+  ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+  ctx.fillText('DeviceFingerprint', 4, 17);
+
+  // Draw some shapes with gradients
+  const gradient = ctx.createLinearGradient(0, 0, 300, 0);
+  gradient.addColorStop(0, 'red');
+  gradient.addColorStop(0.5, 'green');
+  gradient.addColorStop(1, 'blue');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 40, 300, 20);
+
+  // Draw an arc
+  ctx.beginPath();
+  ctx.arc(50, 50, 15, 0, Math.PI * 2);
+  ctx.strokeStyle = '#333';
+  ctx.stroke();
+
+  const dataUrl = canvas.toDataURL();
+  let h = 0;
+  for (let i = 0; i < dataUrl.length; i++) {
+    h = (h << 5) - h + dataUrl.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h).toString(16);
+}
+
+/**
+ * AudioContext Fingerprint
+ * Processes inaudible signal and hashes output.
+ * Different hardware produces different audio processing artifacts [citation:7].
+ */
+async function getAudioFingerprint(): Promise<string> {
+  if (typeof window === 'undefined') return 'no-window';
+
+  const w = window as WebkitWindow;
+  const AudioCtx = window.AudioContext || w.webkitAudioContext;
+  if (!AudioCtx) return 'no-audio';
+
+  try {
+    const ctx = new AudioCtx();
+
+    const oscillator = ctx.createOscillator();
+    oscillator.type = 'triangle';
+    oscillator.frequency.value = 10000;
+
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -50;
+    compressor.knee.value = 40;
+    compressor.ratio.value = 12;
+    compressor.attack.value = 0;
+    compressor.release.value = 0.25;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+
+    oscillator.connect(compressor);
+    compressor.connect(analyser);
+
+    oscillator.start(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const dataArray = new Float32Array(analyser.frequencyBinCount);
+    analyser.getFloatFrequencyData(dataArray);
+
+    oscillator.stop();
+    await ctx.close();
+
+    const slice = Array.from(dataArray.slice(0, 100));
+    const sum = slice.reduce((a, b) => a + b, 0);
+    const hash = slice.map((v) => v.toFixed(4)).join('|');
+
+    let h = 0;
+    for (let i = 0; i < hash.length; i++) {
+      h = (h << 5) - h + hash.charCodeAt(i);
+      h |= 0;
+    }
+
+    return `${h.toString(16)}_${sum.toFixed(2)}`;
+  } catch {
+    return 'audio-error';
+  }
+}
+
+/**
+ * Hardware Signals (OS-level, browser-agnostic) [citation:4]
+ */
+function getHardwareFingerprint(): string {
+  if (typeof window === 'undefined') return 'no-window';
+
+  const nav = navigator as NavigatorWithMemory;
+  const screen = window.screen;
+
+  const signals: Array<string | number> = [
+    screen.width,
+    screen.height,
+    screen.availWidth,
+    screen.availHeight,
+    screen.colorDepth,
+    screen.pixelDepth,
+    window.devicePixelRatio || 1,
+    nav.hardwareConcurrency || 0,
+    nav.maxTouchPoints || 0,
+    nav.platform || 'unknown',
+    Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
+    // Accessibility preferences (OS-level, browser-agnostic)
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? '1' : '0',
+    window.matchMedia('(prefers-contrast: more)').matches ? '1' : '0',
+    window.matchMedia('(forced-colors: active)').matches ? '1' : '0',
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0',
+  ];
+
+  return signals.join(':');
+}
+
+/**
+ * Dual 32-bit hash for 64-bit output (low collision)
+ */
+function hashString(str: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    h1 ^= char;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= char;
+    h2 = Math.imul(h2, 0x85ebca6b);
+  }
+
+  const p1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const p2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return p1 + p2;
+}
+
+export async function generateDeviceFingerprint(): Promise<DeviceFingerprintResult> {
+  const start = performance.now();
+
+  // Run async operations in parallel
+  const [gpuTiming, audioHash] = await Promise.all([
+    getGpuTimingFingerprint(),
+    getAudioFingerprint(),
+  ]);
+
+  const webglParams = getWebglParams();
+  const canvasHash = getCanvasFingerprint();
+  const hardware = getHardwareFingerprint();
+
+  const combined = `${gpuTiming}||${webglParams}||${canvasHash}||${audioHash}||${hardware}`;
+  const hash = hashString(combined);
+  const duration = performance.now() - start;
+
+  return {
+    hash,
+    components: {
+      gpuTiming,
+      webglParams,
+      hardware,
+      canvas: canvasHash,
+      audio: audioHash,
+    },
+    duration,
+  };
+}
+</file>
+
 <file path="app/portal/page.tsx">
 'use client';
 import { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { Search, ShieldCheck, User, CheckCircle, AlertTriangle, Clock, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/utils/supabase';
+import { 
+  Search, ShieldCheck, User, CheckCircle, AlertTriangle, 
+  Clock, ArrowLeft, Target, TrendingUp, Zap, Award
+} from 'lucide-react';
 import Link from 'next/link';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+interface CourseRecord {
+  course_code: string;
+  total_classes: number;
+  attended_classes: number;
+  percentage: number;
+  skips_left: number;
+  streak: number;
+  streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
+}
 
-interface Record { course_code: string; total_classes: number; attended_classes: number; percentage: number; }
+interface SessionRow {
+  session_id: string;
+  course_code: string;
+  created_at: string;
+}
+
+interface LogRow {
+  session_id: string;
+  status: string;
+}
 
 export default function StudentPortal() {
   const [matricNumber, setMatricNumber] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [records, setRecords] = useState<Record[] | null>(null);
+  const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [error, setError] = useState('');
 
   const fetchRecords = async () => {
     if (matricNumber.length < 5) return;
     setIsSearching(true);
     setError('');
-    
-    try {
-      const cleanMatric = matricNumber.toUpperCase().trim();
-      const { data: studentLogs, error: logError } = await supabase.from('attendance_logs').select('session_id, status').eq('matric_number', cleanMatric);
+    setRecords(null);
 
-      if (logError || !studentLogs || studentLogs.length === 0) {
-        setError("No records found for this matric number.");
-        setRecords([]);
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    try {
+      // 1. Find every course this student is enrolled in
+      const { data: enrollmentRows, error: enrollError } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('matric_number', cleanMatric);
+
+      if (enrollError) throw enrollError;
+
+      if (!enrollmentRows || enrollmentRows.length === 0) {
+        setError("You are not enrolled in any course yet. Please contact your lecturer.");
         return;
       }
 
-      const sessionIds = studentLogs.map(log => log.session_id);
-      const { data: sessions } = await supabase.from('lecture_sessions').select('session_id, course_code').in('session_id', sessionIds);
+      const courseIds = enrollmentRows.map(e => e.course_id);
 
-      if (!sessions) return;
+      // 2. Get the course codes for those course IDs
+      const { data: courseRows, error: courseError } = await supabase
+        .from('courses')
+        .select('id, course_code')
+        .in('id', courseIds);
 
-      const courseStats = new Map<string, { total: number; attended: number }>();
-      
-      studentLogs.forEach(log => {
-        const session = sessions.find(s => s.session_id === log.session_id);
-        if (session && session.course_code) {
-          const course = session.course_code;
-          const currentStats = courseStats.get(course) || { total: 0, attended: 0 };
-          courseStats.set(course, { total: currentStats.total + 1, attended: currentStats.attended + (log.status === 'verified' ? 1 : 0) });
-        }
+      if (courseError) throw courseError;
+      if (!courseRows || courseRows.length === 0) {
+        setError("No course details found.");
+        return;
+      }
+
+      const courseCodeMap = new Map<string, string>();
+      courseRows.forEach(c => courseCodeMap.set(c.id, c.course_code));
+      const courseCodes = courseRows.map(c => c.course_code);
+
+      // 3. Get ALL sessions held for each of these courses (the denominator)
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from('lecture_sessions')
+        .select('session_id, course_code, created_at')
+        .in('course_code', courseCodes)
+        .order('created_at', { ascending: false });
+
+      if (sessionError) throw sessionError;
+
+      // 4. Get this student's logs for those sessions
+      const sessionIds = (sessionRows || []).map(s => s.session_id);
+      let studentLogs: LogRow[] = [];
+
+      if (sessionIds.length > 0) {
+        const { data: logRows, error: logError } = await supabase
+          .from('attendance_logs')
+          .select('session_id, status')
+          .eq('matric_number', cleanMatric)
+          .in('session_id', sessionIds);
+
+        if (logError) throw logError;
+        studentLogs = logRows || [];
+      }
+
+      // 5. Build a lookup: session_id → status
+      const logStatusMap = new Map<string, string>();
+      studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
+
+      // 6. Compute per-course stats
+      const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
+
+      (sessionRows || []).forEach(session => {
+        const course = session.course_code;
+        const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
+        stats.total += 1;
+        stats.sessions.push(session);
+
+        const status = logStatusMap.get(session.session_id);
+        if (status === 'verified') stats.attended += 1;
+
+        courseStats.set(course, stats);
       });
 
-      const finalRecords = Array.from(courseStats.entries()).map(([course, stats]) => ({
-        course_code: course, total_classes: stats.total, attended_classes: stats.attended, percentage: Math.round((stats.attended / stats.total) * 100)
-      }));
+      // 7. Compute streaks per course (most recent consecutive verified)
+      const finalRecords: CourseRecord[] = [];
 
+      courseStats.forEach((stats, course) => {
+        const total = stats.total;
+        const attended = stats.attended;
+        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
+
+        // Skips left = how many more absences before dropping below 70%
+        // Formula: we need attended / total >= 0.70.
+        // If current percentage already < 70, skips_left = 0.
+        // Otherwise: max absences allowed = floor(total * 0.30). Current absences = total - attended.
+        const maxAbsences = Math.floor(total * 0.30);
+        const currentAbsences = total - attended;
+        const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
+
+        // Streak: sessions are ordered newest first, so walk through until non-verified
+        let streak = 0;
+        for (const session of stats.sessions) {
+          const status = logStatusMap.get(session.session_id);
+          if (status === 'verified') streak += 1;
+          else break;
+        }
+
+        let tier: CourseRecord['streak_tier'] = 'None';
+        if (streak >= 10) tier = 'Odogwu';
+        else if (streak >= 5) tier = 'Consistent';
+        else if (streak >= 1) tier = 'JJC';
+
+        finalRecords.push({
+          course_code: course,
+          total_classes: total,
+          attended_classes: attended,
+          percentage,
+          skips_left: skipsLeft,
+          streak,
+          streak_tier: tier,
+        });
+      });
+
+      finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
       setRecords(finalRecords);
-    } catch (err) { setError("Failed to fetch records. Please try again."); } 
-    finally { setIsSearching(false); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch records.";
+      setError(msg);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const getShieldColor = (pct: number) => {
+    if (pct >= 70) return { bar: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' };
+    if (pct >= 50) return { bar: 'bg-yellow-500', text: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200' };
+    return { bar: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' };
+  };
+
+  const getTierBadge = (tier: CourseRecord['streak_tier'], streak: number) => {
+    if (tier === 'None') return null;
+    const styles: Record<string, string> = {
+      JJC: 'bg-blue-100 text-blue-700 border-blue-200',
+      Consistent: 'bg-purple-100 text-purple-700 border-purple-200',
+      Odogwu: 'bg-amber-100 text-amber-700 border-amber-200',
+    };
+    const icons: Record<string, React.ReactNode> = {
+      JJC: <Zap size={12} />,
+      Consistent: <TrendingUp size={12} />,
+      Odogwu: <Award size={12} />,
+    };
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${styles[tier]}`}>
+        {icons[tier]} {tier} • {streak}
+      </span>
+    );
   };
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
       <div className="w-full max-w-md">
-        
-        {/* PREMIUM BRANDING HEADER */}
+
         <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
           <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
             <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
@@ -1302,475 +1857,123 @@ export default function StudentPortal() {
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 animate-in fade-in slide-in-from-bottom-6">
           <div className="relative mb-4">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-            <input 
-              type="text" 
-              placeholder="Matric Number (e.g. CSC/2021/001)" 
-              value={matricNumber} 
-              onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
-              onKeyDown={(e) => e.key === 'Enter' && fetchRecords()} 
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <User size={18} className="text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Matric Number (e.g. CSC/2021/001)"
+              value={matricNumber}
+              onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
+              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
             />
           </div>
-          
-          <button 
-            onClick={fetchRecords} 
-            disabled={matricNumber.length < 5 || isSearching} 
+
+          <button
+            onClick={fetchRecords}
+            disabled={matricNumber.length < 5 || isSearching}
             className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
           >
-            {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />} 
-            {isSearching ? "Searching Ledger..." : "Check Records"}
+            {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />}
+            {isSearching ? "Loading Your Shield..." : "Check Records"}
           </button>
 
-          {error && <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center"><p className="text-red-700 font-bold text-sm">{error}</p></div>}
+          {error && (
+            <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center">
+              <p className="text-red-700 font-bold text-sm">{error}</p>
+            </div>
+          )}
 
           {records && records.length > 0 && (
-            <div className="mt-8 space-y-4 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="font-bold text-gray-900 border-b border-gray-100 pb-2">Your Attendance</h3>
-              {records.map((record) => (
-                <div key={record.course_code} className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center hover:border-blue-200 transition-colors">
-                  <div>
-                    <p className="font-extrabold text-gray-900">{record.course_code}</p>
-                    <p className="text-xs text-gray-500 font-medium mt-1">Attended {record.attended_classes} of {record.total_classes} classes</p>
+            <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <h3 className="font-bold text-gray-900">Your Clearance Shield</h3>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">NUC 70% Threshold</span>
+              </div>
+
+              {records.map((record) => {
+                const colors = getShieldColor(record.percentage);
+                const isCleared = record.percentage >= 70;
+
+                return (
+                  <div
+                    key={record.course_code}
+                    className={`${colors.bg} p-4 rounded-2xl border ${colors.border} transition-colors`}
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-extrabold text-gray-900 text-lg leading-tight">{record.course_code}</p>
+                        <p className="text-xs text-gray-500 font-medium mt-1">
+                          Attended {record.attended_classes} of {record.total_classes} classes
+                        </p>
+                        {getTierBadge(record.streak_tier, record.streak) && (
+                          <div className="mt-2">{getTierBadge(record.streak_tier, record.streak)}</div>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                        {isCleared ? (
+                          <span className="text-[10px] uppercase font-bold text-green-600 flex items-center justify-end gap-1 mt-0.5">
+                            <CheckCircle size={10} /> Cleared
+                          </span>
+                        ) : (
+                          <span className="text-[10px] uppercase font-bold text-red-600 flex items-center justify-end gap-1 mt-0.5">
+                            <AlertTriangle size={10} /> At Risk
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Clearance Shield progress bar */}
+                    <div className="relative w-full h-3 bg-white rounded-full overflow-hidden border border-gray-200">
+                      <div
+                        className={`h-full ${colors.bar} transition-all duration-700 ease-out`}
+                        style={{ width: `${Math.min(record.percentage, 100)}%` }}
+                      />
+                      {/* 70% threshold marker */}
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-gray-900/40"
+                        style={{ left: '70%' }}
+                        title="NUC 70% Threshold"
+                      />
+                    </div>
+
+                    {/* Safe Skips indicator */}
+                    <div className="mt-3 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 text-gray-600 font-bold">
+                        <Target size={14} className="text-gray-400" />
+                        {record.skips_left > 0 ? (
+                          <span>
+                            Safe Skips: <span className="text-gray-900 font-black">{record.skips_left}</span>
+                          </span>
+                        ) : isCleared ? (
+                          <span className="text-yellow-700">No more skips — on the edge</span>
+                        ) : (
+                          <span className="text-red-700">Below threshold — attend everything</span>
+                        )}
+                      </div>
+                      {isCleared && record.skips_left > 0 && (
+                        <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">
+                          Exam Pass Unlocked
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-black text-xl ${record.percentage >= 70 ? 'text-green-600' : 'text-red-600'}`}>{record.percentage}%</p>
-                    {record.percentage >= 70 ? (
-                      <span className="text-[10px] uppercase font-bold text-green-600 flex items-center gap-1"><CheckCircle size={10}/> Eligible</span>
-                    ) : (
-                      <span className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1"><AlertTriangle size={10}/> At Risk</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+
+              <p className="text-[11px] text-gray-400 font-medium text-center pt-2">
+                The 70% threshold is set by the Nigerian Universities Commission (NUC).
+              </p>
             </div>
           )}
         </div>
 
-        {/* Back to Hub Navigation */}
         <div className="mt-6 text-center animate-in fade-in">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
             <ArrowLeft size={16} /> Back to Hub
           </Link>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="app/rep/page.tsx">
-'use client';
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Hand, CheckCircle, Loader2, KeyRound } from 'lucide-react';
-
-interface Log { id: string; matricNumber: string; status: string; time: string; }
-
-function RepPortalContent() {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sessionId');
-
-  const [passcode, setPasscode] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [error, setError] = useState('');
-  
-  const [pendingLogs, setPendingLogs] = useState<Log[]>([]);
-  const [courseName, setCourseName] = useState('');
-  const [isProcessing, setIsProcessing] = useState<string | null>(null);
-
-  const verifyPasscode = async () => {
-    // --- UPDATED: Expect 6 characters ---
-    if (passcode.length !== 6) { setError("Passcode must be 6 characters."); return; }
-    setIsVerifying(true);
-    setError('');
-
-    try {
-      const response = await fetch('/api/verify-rep', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, passcode })
-      });
-      if (response.ok) setIsAuthenticated(true);
-      else setError("Invalid passcode.");
-    } catch (err) { setError("Network error."); }
-    finally { setIsVerifying(false); }
-  };
-
-  const fetchPendingRequests = async () => {
-    if (!sessionId || !isAuthenticated) return;
-    try {
-      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCourseName(data.course);
-        setPendingLogs(data.logs.filter((l: Log) => l.status === 'pending_override'));
-      }
-    } catch (error) { console.error("Failed to fetch data"); }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchPendingRequests();
-      const interval = setInterval(fetchPendingRequests, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated, sessionId]);
-
-  const handleApprove = async (matricNumber: string) => {
-    setIsProcessing(matricNumber);
-    try {
-      await fetch('/api/override-attendance', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber })
-      });
-      fetchPendingRequests();
-    } catch (err) { alert("Failed to approve."); } 
-    finally { setIsProcessing(null); }
-  };
-
-  if (!sessionId) {
-    return <div className="p-8 text-center text-red-500 font-bold">Invalid Link. Missing Session ID.</div>;
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 font-sans">
-        <div className="max-w-sm w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-8 text-center">
-          <div className="bg-[#2563EB] text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-md">
-            <KeyRound size={32} />
-          </div>
-          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Class Rep Access</h2>
-          {/* --- UPDATED: UI Text --- */}
-          <p className="text-gray-500 mt-2 text-sm font-medium mb-6">Enter the 6-character session PIN provided by the lecturer.</p>
-          
-          {/* --- UPDATED: Allows A-Z and 0-9, Max Length 6 --- */}
-          <input 
-            type="text" 
-            maxLength={6}
-            placeholder="• • • • • •" 
-            value={passcode} 
-            onChange={(e) => setPasscode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
-            onKeyDown={(e) => e.key === 'Enter' && verifyPasscode()}
-            className="w-full bg-gray-50 border border-gray-200 text-center text-gray-900 font-black text-3xl py-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all tracking-[0.3em]" 
-          />
-          {error && <p className="text-red-500 text-sm font-bold mt-3">{error}</p>}
-          
-          <button onClick={verifyPasscode} disabled={isVerifying || passcode.length < 6} className="w-full mt-6 flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 disabled:opacity-50 transition-all">
-            {isVerifying ? <Loader2 className="animate-spin" size={20} /> : "Unlock Portal"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-6 font-sans">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="bg-[#2563EB] rounded-2xl p-6 text-white shadow-md flex justify-between items-center">
-          <div>
-            <div className="flex items-center gap-2 mb-1"><ShieldCheck size={20} className="text-blue-200" /><span className="text-xs font-bold text-blue-200 uppercase tracking-wider">Class Rep Terminal</span></div>
-            <h1 className="text-2xl font-extrabold tracking-tight">{courseName}</h1>
-          </div>
-          <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm text-center">
-            <p className="text-2xl font-black">{pendingLogs.length}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-200">Pending</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100 bg-gray-50">
-            <Hand size={18} className="text-orange-500" />
-            <h3 className="font-bold text-gray-700">Raised Hands</h3>
-          </div>
-
-          <div className="divide-y divide-gray-50">
-            {pendingLogs.length === 0 ? (
-              <div className="p-12 text-center">
-                <CheckCircle size={40} className="mx-auto text-gray-300 mb-3" />
-                <p className="text-gray-500 font-bold">No pending appeals.</p>
-                <p className="text-xs text-gray-400 mt-1">Class is running smoothly.</p>
-              </div>
-            ) : (
-              pendingLogs.map((log) => (
-                <div key={log.id} className="p-4 sm:px-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                  <div>
-                    <p className="font-extrabold text-gray-900 text-lg">{log.matricNumber}</p>
-                    <p className="text-xs text-gray-500 font-medium mt-0.5">{log.time}</p>
-                  </div>
-                  <button 
-                    onClick={() => handleApprove(log.matricNumber)} 
-                    disabled={isProcessing === log.matricNumber}
-                    className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm hover:bg-green-100 transition-all disabled:opacity-50"
-                  >
-                    {isProcessing === log.matricNumber ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
-                    Accept
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ClassRepPortal() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center"><Loader2 className="animate-spin text-[#2563EB]" size={32}/></div>}>
-      <RepPortalContent />
-    </Suspense>
-  );
-}
-</file>
-
-<file path="package.json">
-{
-  "name": "clean-attendance",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.0",
-    "@supabase/supabase-js": "^2.106.1",
-    "lucide-react": "^1.16.0",
-    "next": "16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.43",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
-}
-</file>
-
-<file path="app/dashboard/analytics/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { 
-  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
-} from 'lucide-react';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export default function AnalyticsPage() {
-  const [courses, setCourses] = useState<any[]>([]);
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
-  
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showWatchlist, setShowWatchlist] = useState(false);
-  
-  const [reportData, setReportData] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchCourses = async () => {
-      const { data } = await supabase.from('courses').select('id, course_code');
-      if (data && data.length > 0) {
-        setCourses(data);
-        setSelectedCourseCode(data[0].course_code); 
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedCourseCode) return;
-    fetchReportData(false);
-  }, [selectedCourseCode]);
-
-  const fetchReportData = async (useFilters: boolean = false) => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
-      if (useFilters) {
-        if (startDate) url += `&startDate=${startDate}`;
-        if (endDate) url += `&endDate=${endDate}`;
-      }
-      const response = await fetch(url);
-      
-      if (response.status === 404) {
-        setReportData(null);
-        setErrorMessage("No classes found for this timeframe.");
-        setIsLoading(false);
-        return;
-      }
-      
-      if (!response.ok) throw new Error("Failed to load analytics.");
-      
-      const data = await response.json();
-      setReportData(data);
-    } catch (err: any) {
-      setErrorMessage(err.message);
-      setReportData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // --- THE SENATE-GRADE CSV EXPORT ---
-  const handleDownload = (isFullSemester: boolean) => {
-    if (!reportData || !reportData.report) return;
-    setIsDownloading(true);
-    
-    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
-    const datePrinted = new Date().toLocaleDateString();
-    
-    // Formal Senate/Exam Board Header Structure
-    const header = [
-      [`OFFICIAL ATTENDANCE REPORT`],
-      [`Course Code:`, selectedCourseCode],
-      [`Reporting Period:`, timeLabel],
-      [`Total Classes Held:`, reportData.totalClasses],
-      [`Date Generated:`, datePrinted],
-      [], // Empty row for visual spacing
-      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", "REMARK"]
-    ];
-
-    // Alphabetical Sorting & Serial Number Injection
-    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
-    
-    const rows = sortedReport.map((s: any, index: number) => [
-      index + 1, // S/N
-      s.matricNumber, 
-      s.totalClasses,
-      s.attended, 
-      s.percentage, 
-      s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE" // Formal remarks
-    ]);
-    
-    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setIsDownloading(false);
-  };
-
-  const applyCustomDates = () => { fetchReportData(true); };
-
-  const atRiskStudents = reportData?.report?.filter((s: any) => s.eligible === 'NO') || [];
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
-        
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-          <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
-              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
-            </h1>
-            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
-          </div>
-          <select value={selectedCourseCode} onChange={(e) => setSelectedCourseCode(e.target.value)} disabled={courses.length === 0} className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] cursor-pointer">
-            {courses.length === 0 ? <option>No Courses Found</option> : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-          </select>
-        </div>
-
-        {/* PRIMARY EXPORT WIDGET */}
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="bg-green-100 p-4 rounded-xl text-green-700">
-              <FileSpreadsheet size={28} />
-            </div>
-            <div>
-              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
-              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
-            </div>
-          </div>
-
-          <button onClick={() => handleDownload(true)} disabled={isDownloading || !reportData} className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6">
-            {isDownloading ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />} Download Full Semester CSV
-          </button>
-
-          <div className="border-t border-gray-100 pt-6">
-            <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200">
-              <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
-              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {showAdvanced && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate} className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]" /></div>
-                <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
-                  <button onClick={applyCustomDates} className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm">Apply Filters</button>
-                  <button onClick={() => handleDownload(false)} disabled={isDownloading || !reportData} className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"><Download size={16} /> Export Range</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* WATCHLIST WIDGET */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <button onClick={() => setShowWatchlist(!showWatchlist)} className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
-              </div>
-              <div>
-                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
-                <p className="text-xs text-gray-500 font-medium mt-0.5">{atRiskStudents.length > 0 ? `${atRiskStudents.length} students currently below 70%` : "All students are eligible for the exam."}</p>
-              </div>
-            </div>
-            <div className="text-gray-400">{showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}</div>
-          </button>
-
-          {showWatchlist && (
-            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center h-32"><Loader2 className="animate-spin text-[#2563EB]" size={24}/></div>
-              ) : atRiskStudents.length === 0 ? (
-                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left whitespace-nowrap">
-                    <thead><tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400"><th className="px-6 py-3 font-bold">Matric Number</th><th className="px-6 py-3 font-bold text-center">Attendance</th><th className="px-6 py-3 font-bold text-right">Standing</th></tr></thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {atRiskStudents.map((student: any, i: number) => (
-                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
-                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
-                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
-                          <td className="px-6 py-3 text-right"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">{student.percentage}%</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
       </div>
@@ -1838,100 +2041,35 @@ export default function RootLayout({
 }
 </file>
 
-<file path="app/api/create-session/route.ts">
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const courseCodeToSave = body.courseCode || body.course_code;
-    
-    // Extract duration in minutes from the frontend (default to 60 minutes if missing)
-    const durationMinutes = parseInt(body.duration) || 60;
-
-    if (!courseCodeToSave) {
-      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
-    }
-
-    // Generate a random 4-digit passcode for the Class Rep
-    const repPasscode = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // Calculate expiration timestamp
-    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
-
-    const { data, error } = await supabase
-      .from('lecture_sessions')
-      .insert([{
-        course_code: courseCodeToSave, 
-        anchor_latitude: body.latitude || body.lat, 
-        anchor_longitude: body.longitude || body.lng, 
-        is_active: true,
-        rep_passcode: repPasscode,
-        expires_at: expiresAt // Storing the strict countdown timer
-      }])
-      .select('session_id') 
-      .single();
-
-    if (error) throw error;
-
-    return NextResponse.json({ 
-      sessionId: data.session_id,
-      expiresAt: expiresAt 
-    });
-    
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/dashboard-data/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-
-    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
-
-    const { data: session, error: sessionError } = await supabase
-      .from('lecture_sessions')
-      .select('is_active, course_code, rep_passcode')
-      .eq('session_id', sessionId)
-      .single();
-    
-    if (sessionError) console.error("Session Error:", sessionError.message);
-
-    const courseName = session?.course_code || "Unknown Course";
-
-    const { data: logs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('check_in_time', { ascending: false });
-
-    return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true,
-      repPasscode: session?.rep_passcode || 'N/A', // Send passcode to frontend
-      logs: (logs || []).map((l: any) => ({
-        id: l.id,
-        matricNumber: l.matric_number,
-        status: l.status,
-        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }))
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+<file path="package.json">
+{
+  "name": "clean-attendance",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.0",
+    "@supabase/supabase-js": "^2.106.1",
+    "lucide-react": "^1.16.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
 </file>
@@ -2046,6 +2184,307 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/dashboard/analytics/page.tsx">
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import { 
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
+} from 'lucide-react';
+import { supabase } from '@/utils/supabase';
+
+interface CourseRow {
+  id: string;
+  course_code: string;
+}
+
+interface StudentReportRow {
+  matricNumber: string;
+  totalClasses: number;
+  attended: number;
+  percentage: number;
+  eligible: 'YES' | 'NO';
+}
+
+interface ReportData {
+  course: string;
+  totalClasses: number;
+  report: StudentReportRow[];
+}
+
+export default function AnalyticsPage() {
+  const [courses, setCourses] = useState<CourseRow[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(false);
+
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      const { data } = await supabase.from('courses').select('id, course_code');
+      if (data && data.length > 0) {
+        setCourses(data);
+        setSelectedCourseCode(data[0].course_code);
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  const fetchReportData = useCallback(async (useFilters: boolean = false) => {
+    if (!selectedCourseCode) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
+      if (useFilters) {
+        if (startDate) url += `&startDate=${startDate}`;
+        if (endDate) url += `&endDate=${endDate}`;
+      }
+      const response = await fetch(url);
+
+      if (response.status === 404) {
+        setReportData(null);
+        setErrorMessage("No classes found for this timeframe.");
+        return;
+      }
+
+      if (!response.ok) throw new Error("Failed to load analytics.");
+
+      const data = await response.json();
+      setReportData(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load analytics.";
+      setErrorMessage(message);
+      setReportData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCourseCode, startDate, endDate]);
+
+  useEffect(() => {
+    if (!selectedCourseCode) return;
+    fetchReportData(false);
+  }, [selectedCourseCode, fetchReportData]);
+
+  const handleDownload = (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report) return;
+    setIsDownloading(true);
+
+    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
+    const datePrinted = new Date().toLocaleDateString();
+
+    const header = [
+      [`OFFICIAL ATTENDANCE REPORT`],
+      [`Course Code:`, selectedCourseCode],
+      [`Reporting Period:`, timeLabel],
+      [`Total Classes Held:`, reportData.totalClasses],
+      [`Date Generated:`, datePrinted],
+      [],
+      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", "REMARK"]
+    ];
+
+    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+
+    const rows = sortedReport.map((s, index) => [
+      index + 1,
+      s.matricNumber,
+      s.totalClasses,
+      s.attended,
+      s.percentage,
+      s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
+    ]);
+
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setIsDownloading(false);
+  };
+
+  const applyCustomDates = () => { fetchReportData(true); };
+
+  const atRiskStudents: StudentReportRow[] = reportData?.report?.filter(s => s.eligible === 'NO') || [];
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
+            </h1>
+            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
+          </div>
+          <select
+            value={selectedCourseCode}
+            onChange={(e) => setSelectedCourseCode(e.target.value)}
+            disabled={courses.length === 0}
+            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] cursor-pointer"
+          >
+            {courses.length === 0
+              ? <option>No Courses Found</option>
+              : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
+            }
+          </select>
+        </div>
+
+        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-green-100 p-4 rounded-xl text-green-700">
+              <FileSpreadsheet size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
+              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleDownload(true)}
+            disabled={isDownloading || !reportData}
+            className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6"
+          >
+            {isDownloading ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
+            Download Full Semester CSV
+          </button>
+
+          <div className="border-t border-gray-100 pt-6">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200"
+            >
+              <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
+              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showAdvanced && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    min={startDate}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
+                  <button
+                    onClick={applyCustomDates}
+                    className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm"
+                  >
+                    Apply Filters
+                  </button>
+                  <button
+                    onClick={() => handleDownload(false)}
+                    disabled={isDownloading || !reportData}
+                    className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"
+                  >
+                    <Download size={16} /> Export Range
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setShowWatchlist(!showWatchlist)}
+            className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  {atRiskStudents.length > 0
+                    ? `${atRiskStudents.length} students currently below 70%`
+                    : "All students are eligible for the exam."}
+                </p>
+              </div>
+            </div>
+            <div className="text-gray-400">
+              {showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+            </div>
+          </button>
+
+          {showWatchlist && (
+            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center h-32">
+                  <Loader2 className="animate-spin text-[#2563EB]" size={24}/>
+                </div>
+              ) : atRiskStudents.length === 0 ? (
+                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                        <th className="px-6 py-3 font-bold">Matric Number</th>
+                        <th className="px-6 py-3 font-bold text-center">Attendance</th>
+                        <th className="px-6 py-3 font-bold text-right">Standing</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {atRiskStudents.map((student, i) => (
+                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
+                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
+                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
+                          <td className="px-6 py-3 text-right">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">
+                              {student.percentage}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
+            <p className="text-red-700 font-bold text-sm">{errorMessage}</p>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/page.tsx">
 'use client';
 import { Suspense } from 'react';
@@ -2156,6 +2595,58 @@ export default function Page() {
 }
 </file>
 
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+interface AttendanceLogRow {
+  id: string;
+  matric_number: string;
+  status: string;
+  check_in_time: string;
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
+
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code, created_at')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (sessionError) console.error("Session Error:", sessionError.message);
+
+    const courseName = session?.course_code || "Unknown Course";
+
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
+
+    return NextResponse.json({
+      course: courseName,
+      isActive: session?.is_active === true,
+      createdAt: session?.created_at || null,
+      logs: (logs as AttendanceLogRow[] | null || []).map((l) => ({
+        id: l.id,
+        matricNumber: l.matric_number,
+        status: l.status,
+        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }))
+    });
+  } catch {
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/webauthn/auth/generate/route.ts">
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
@@ -2209,21 +2700,104 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/api/create-session/route.ts">
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const body = await request.json();
+    const courseCodeToSave = body.courseCode || body.course_code;
+
+    const durationMinutes = parseInt(body.duration) || 60;
+
+    // Per-session check-in window. Defaults to 10 if missing.
+    const checkinOpensAfterMinutes = Number.isFinite(parseInt(body.checkinOpensAfter))
+      ? Math.max(0, parseInt(body.checkinOpensAfter))
+      : 10;
+
+    if (!courseCodeToSave) {
+      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
+    }
+
+    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
+
+    const { data, error } = await supabase
+      .from('lecture_sessions')
+      .insert([{
+        course_code: courseCodeToSave,
+        anchor_latitude: body.latitude || body.lat,
+        anchor_longitude: body.longitude || body.lng,
+        is_active: true,
+        expires_at: expiresAt,
+        checkin_opens_after_minutes: checkinOpensAfterMinutes
+      }])
+      .select('session_id')
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      sessionId: data.session_id,
+      expiresAt,
+      checkinOpensAfterMinutes
+    });
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/dashboard/courses/page.tsx">
 'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '../../../utils/supabase';
-import { 
-  BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2, Fingerprint, RefreshCw, UserPlus, Search, FileText, CheckCircle, AlertTriangle, ShieldCheck
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/utils/supabase';
+import {
+  BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
+  Fingerprint, RefreshCw, UserPlus, Search, FileText,
+  CheckCircle, AlertTriangle, ShieldCheck
 } from 'lucide-react';
 
-interface Course { id: string; course_code: string; roster: string[]; }
-interface AuditRecord { sessionId: string; date: string; status: string; logId: string | null; }
+interface Course {
+  id: string;
+  course_code: string;
+  roster: string[] | null;
+}
+
+interface AuditRecord {
+  sessionId: string;
+  date: string;
+  status: string;
+  logId: string | null;
+}
+
+interface EnrollmentRow {
+  course_id: string;
+}
+
+interface SessionRow {
+  session_id: string;
+  created_at: string;
+}
+
+interface LogRow {
+  id: string;
+  session_id: string;
+  status: string;
+}
 
 export default function CourseManagement() {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [newCourseCode, setNewCourseCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
@@ -2243,55 +2817,118 @@ export default function CourseManagement() {
   const [wipeMatric, setWipeMatric] = useState('');
   const [isWiping, setIsWiping] = useState(false);
 
-  useEffect(() => { fetchCourses(); }, []);
+  const fetchEnrollmentCounts = useCallback(async (courseIds: string[]) => {
+    if (courseIds.length === 0) {
+      setCourseCounts({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from('enrollments')
+      .select('course_id')
+      .in('course_id', courseIds);
 
-  const fetchCourses = async () => {
-    setIsLoading(true);
+    if (error || !data) return;
+
+    const counts: Record<string, number> = {};
+    (data as EnrollmentRow[]).forEach(row => {
+      counts[row.course_id] = (counts[row.course_id] || 0) + 1;
+    });
+    setCourseCounts(counts);
+  }, []);
+
+  const fetchCourses = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-    
+    if (!session) {
+      setIsLoading(false);
+      return;
+    }
+
     const { data } = await supabase
       .from('courses')
       .select('*')
       .eq('lecturer_id', session.user.id)
       .order('created_at', { ascending: false });
-      
+
     if (data) {
       setCourses(data);
       if (data.length > 0) {
         setTargetCourseId(data[0].id);
         setAuditCourseCode(data[0].course_code);
+        await fetchEnrollmentCounts(data.map(c => c.id));
       }
     }
     setIsLoading(false);
-  };
+  }, [fetchEnrollmentCounts]);
+
+  useEffect(() => {
+    // Defer to next tick so setState inside fetchCourses doesn't run synchronously
+    // within the effect. Satisfies React 19's set-state-in-effect rule.
+    const id = setTimeout(() => { fetchCourses(); }, 0);
+    return () => clearTimeout(id);
+  }, [fetchCourses]);
 
   const createCourse = async () => {
     if (!newCourseCode.trim()) return;
     setIsCreating(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      const { error } = await supabase.from('courses').insert([{ 
-        lecturer_id: session.user.id, course_code: newCourseCode.toUpperCase(), roster: [] 
+      const { error } = await supabase.from('courses').insert([{
+        lecturer_id: session.user.id,
+        course_code: newCourseCode.toUpperCase(),
+        roster: [],
       }]);
-      if (!error) { setNewCourseCode(''); fetchCourses(); } else alert("Failed to create course.");
+      if (!error) {
+        setNewCourseCode('');
+        await fetchCourses();
+      } else {
+        alert("Failed to create course.");
+      }
     }
     setIsCreating(false);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string, existingRoster: string[]) => {
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    courseId: string
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingId(courseId);
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const csvText = event.target?.result as string;
-      const cleanMatrics = csvText.split(/[\n,]+/).map(m => m.trim().toUpperCase()).filter(m => m.length > 5 && !m.includes('MATRIC'));
-      const uniqueMatrics = Array.from(new Set([...(existingRoster || []), ...cleanMatrics]));
-      
-      const { error } = await supabase.from('courses').update({ roster: uniqueMatrics }).eq('id', courseId);
-      if (!error) { alert(`Success! Roster synced.`); fetchCourses(); } else alert("Upload failed.");
-      setUploadingId(null); e.target.value = '';
+      const cleanMatrics = csvText
+        .split(/[\n,]+/)
+        .map(m => m.trim().toUpperCase())
+        .filter(m => m.length > 5 && !m.includes('MATRIC'));
+
+      const uniqueMatrics = Array.from(new Set(cleanMatrics));
+
+      if (uniqueMatrics.length === 0) {
+        alert("No valid matric numbers found in the file.");
+        setUploadingId(null);
+        e.target.value = '';
+        return;
+      }
+
+      const rows = uniqueMatrics.map(matric => ({
+        course_id: courseId,
+        matric_number: matric,
+      }));
+
+      const { error } = await supabase
+        .from('enrollments')
+        .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
+
+      if (!error) {
+        alert(`Success! ${uniqueMatrics.length} students synced.`);
+        await fetchCourses();
+      } else {
+        alert(`Upload failed: ${error.message}`);
+      }
+      setUploadingId(null);
+      e.target.value = '';
     };
     reader.readAsText(file);
   };
@@ -2301,48 +2938,68 @@ export default function CourseManagement() {
     if (!cleanMatric || !targetCourseId) return;
     setIsAddingSingle(true);
 
-    const course = courses.find(c => c.id === targetCourseId);
-    if (course) {
-      const uniqueMatrics = Array.from(new Set([...(course.roster || []), cleanMatric]));
-      const { error } = await supabase.from('courses').update({ roster: uniqueMatrics }).eq('id', targetCourseId);
-      if (!error) { alert(`${cleanMatric} added successfully!`); setSingleMatric(''); fetchCourses(); } 
-      else alert("Failed to add student.");
+    const { error } = await supabase
+      .from('enrollments')
+      .upsert(
+        { course_id: targetCourseId, matric_number: cleanMatric },
+        { onConflict: 'course_id,matric_number', ignoreDuplicates: true }
+      );
+
+    if (!error) {
+      alert(`${cleanMatric} added successfully!`);
+      setSingleMatric('');
+      await fetchCourses();
+    } else {
+      alert(`Failed to add student: ${error.message}`);
     }
     setIsAddingSingle(false);
   };
 
-  const handleStudentAudit = async () => {
+  const handleStudentAudit = useCallback(async () => {
     const cleanMatric = auditMatric.trim().toUpperCase();
     if (!cleanMatric || !auditCourseCode) return;
     setIsAuditing(true);
     setAuditRecords(null);
 
     try {
-      // 1. Get all sessions for this course
-      const { data: sessions } = await supabase.from('lecture_sessions').select('session_id, created_at').ilike('course_code', auditCourseCode).order('created_at', { ascending: false });
+      const { data: sessions } = await supabase
+        .from('lecture_sessions')
+        .select('session_id, created_at')
+        .ilike('course_code', auditCourseCode)
+        .order('created_at', { ascending: false });
+
       if (!sessions || sessions.length === 0) throw new Error("No classes held yet.");
 
-      const sessionIds = sessions.map(s => s.session_id);
+      const sessionIds = (sessions as SessionRow[]).map(s => s.session_id);
 
-      // 2. Get the student's logs for these sessions
-      const { data: logs } = await supabase.from('attendance_logs').select('id, session_id, status').eq('matric_number', cleanMatric).in('session_id', sessionIds);
-      const logMap = new Map(logs?.map(l => [l.session_id, l]) || []);
+      const { data: logs } = await supabase
+        .from('attendance_logs')
+        .select('id, session_id, status')
+        .eq('matric_number', cleanMatric)
+        .in('session_id', sessionIds);
 
-      // 3. Compile the audit trail
-      const trail = sessions.map(session => {
+      const logMap = new Map<string, LogRow>(
+        ((logs as LogRow[] | null) || []).map(l => [l.session_id, l])
+      );
+
+      const trail: AuditRecord[] = (sessions as SessionRow[]).map(session => {
         const log = logMap.get(session.session_id);
         return {
           sessionId: session.session_id,
-          date: new Date(session.created_at).toLocaleDateString() + ' ' + new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          date: new Date(session.created_at).toLocaleDateString() + ' ' +
+                new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           status: log ? log.status : 'absent',
-          logId: log ? log.id : null
+          logId: log ? log.id : null,
         };
       });
 
       setAuditRecords(trail);
-    } catch (e: any) { alert(e.message || "Audit failed."); }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Audit failed.";
+      alert(msg);
+    }
     setIsAuditing(false);
-  };
+  }, [auditMatric, auditCourseCode]);
 
   const grantMedicalWaiver = async (record: AuditRecord) => {
     const cleanMatric = auditMatric.trim().toUpperCase();
@@ -2350,20 +3007,24 @@ export default function CourseManagement() {
 
     try {
       if (record.logId) {
-        // Update existing failed/absent log
-        await supabase.from('attendance_logs').update({ 
-          status: 'verified', device_info: JSON.stringify({ method: "Medical Waiver / Excused" }) 
+        await supabase.from('attendance_logs').update({
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
         }).eq('id', record.logId);
       } else {
-        // Create a new log because they never checked in
         await supabase.from('attendance_logs').insert([{
-          session_id: record.sessionId, matric_number: cleanMatric, status: 'verified', 
-          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }), device_hash: 'admin-waiver'
+          session_id: record.sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
+          device_hash: 'admin-waiver',
         }]);
       }
       alert("Waiver Granted successfully!");
-      handleStudentAudit(); // Refresh the list
-    } catch (e) { alert("Failed to grant waiver."); }
+      handleStudentAudit();
+    } catch {
+      alert("Failed to grant waiver.");
+    }
   };
 
   const handleDeviceReset = async () => {
@@ -2372,25 +3033,45 @@ export default function CourseManagement() {
     if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
     setIsWiping(true);
     try {
-      const response = await fetch('/api/reset-device', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matricNumber: safeMatric }) });
-      if (response.ok) { alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); setWipeMatric(''); } 
-      else alert("⚠️ Failed to wipe device.");
-    } catch (err) { alert("💥 Network Error."); } finally { setIsWiping(false); }
+      const response = await fetch('/api/reset-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: safeMatric }),
+      });
+      if (response.ok) {
+        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`);
+        setWipeMatric('');
+      } else {
+        alert("⚠️ Failed to wipe device.");
+      }
+    } catch {
+      alert("💥 Network Error.");
+    } finally {
+      setIsWiping(false);
+    }
   };
 
-  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 text-[#2563EB] animate-spin" /></div>;
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
-      
+
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
           <Users className="text-[#2563EB]" size={28} /> Student Management
         </h1>
-        <p className="text-gray-500 mt-1 font-medium">Manage course rosters, grant medical waivers, and wipe device locks.</p>
+        <p className="text-gray-500 mt-1 font-medium">
+          Manage course rosters, grant medical waivers, and wipe device locks.
+        </p>
       </div>
 
-      {/* ---------------- SECTION 1: COURSE REGISTRY ---------------- */}
+      {/* SECTION 1: COURSE REGISTRY */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
           <BookOpen className="text-gray-400" size={20}/>
@@ -2398,13 +3079,22 @@ export default function CourseManagement() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          
           {/* Create Course */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">1. Establish New Course</h3>
             <div className="flex gap-2">
-              <input type="text" placeholder="e.g., MTH 101" value={newCourseCode} onChange={(e) => setNewCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
-              <button onClick={createCourse} disabled={isCreating || !newCourseCode.trim()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md">
+              <input
+                type="text"
+                placeholder="e.g., MTH 101"
+                value={newCourseCode}
+                onChange={(e) => setNewCourseCode(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+              />
+              <button
+                onClick={createCourse}
+                disabled={isCreating || !newCourseCode.trim()}
+                className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md"
+              >
                 {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
               </button>
             </div>
@@ -2414,28 +3104,52 @@ export default function CourseManagement() {
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">2. Add Single Student (Late Reg)</h3>
             <div className="flex gap-2">
-              <select value={targetCourseId} onChange={(e) => setTargetCourseId(e.target.value)} className="w-1/3 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer">
+              <select
+                value={targetCourseId}
+                onChange={(e) => setTargetCourseId(e.target.value)}
+                className="w-1/3 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
+              >
                 {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
               </select>
-              <input type="text" placeholder="Matric Number" value={singleMatric} onChange={(e) => setSingleMatric(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
-              <button onClick={handleSingleStudentAdd} disabled={isAddingSingle || !singleMatric.trim()} className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md">
+              <input
+                type="text"
+                placeholder="Matric Number"
+                value={singleMatric}
+                onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
+                className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+              />
+              <button
+                onClick={handleSingleStudentAdd}
+                disabled={isAddingSingle || !singleMatric.trim()}
+                className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md"
+              >
                 {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Existing Courses List (CSV Uploads) */}
+        {/* Course Cards with CSV Upload */}
         {courses.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-gray-100">
             {courses.map(course => (
               <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
                 <h4 className="font-extrabold text-gray-900 mb-1">{course.course_code}</h4>
-                <p className="text-xs font-bold text-gray-500 mb-3">{course.roster?.length || 0} Students</p>
+                <p className="text-xs font-bold text-gray-500 mb-3">
+                  {courseCounts[course.id] || 0} Students
+                </p>
                 <label className="cursor-pointer flex items-center justify-center gap-1 w-full py-2 bg-white border border-gray-200 rounded-lg font-bold text-[10px] text-gray-700 hover:bg-gray-100 transition-all shadow-sm">
-                  {uploadingId === course.id ? <Loader2 size={12} className="animate-spin text-[#2563EB]" /> : <FileSpreadsheet size={12} className="text-[#2563EB]" />}
+                  {uploadingId === course.id
+                    ? <Loader2 size={12} className="animate-spin text-[#2563EB]" />
+                    : <FileSpreadsheet size={12} className="text-[#2563EB]" />}
                   {uploadingId === course.id ? "Syncing..." : "Upload CSV"}
-                  <input type="file" accept=".csv" className="hidden" onChange={(e) => handleFileUpload(e, course.id, course.roster)} disabled={uploadingId === course.id} />
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => handleFileUpload(e, course.id)}
+                    disabled={uploadingId === course.id}
+                  />
                 </label>
               </div>
             ))}
@@ -2443,7 +3157,7 @@ export default function CourseManagement() {
         )}
       </div>
 
-      {/* ---------------- SECTION 2: THE MICROSCOPE (WAIVERS) ---------------- */}
+      {/* SECTION 2: THE MICROSCOPE */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
           <Search className="text-[#2563EB]" size={20}/>
@@ -2451,13 +3165,28 @@ export default function CourseManagement() {
         </div>
 
         <div className="flex flex-col md:flex-row gap-3 mb-6">
-          <select value={auditCourseCode} onChange={(e) => setAuditCourseCode(e.target.value)} className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer">
+          <select
+            value={auditCourseCode}
+            onChange={(e) => setAuditCourseCode(e.target.value)}
+            className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
+          >
             {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
           </select>
           <div className="flex-1 flex gap-2">
-            <input type="text" placeholder="Search Matric Number (e.g., CSC/2021/001)" value={auditMatric} onChange={(e) => setAuditMatric(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all" />
-            <button onClick={handleStudentAudit} disabled={isAuditing || !auditMatric.trim()} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md">
-              {isAuditing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />} View Record
+            <input
+              type="text"
+              placeholder="Search Matric Number (e.g., CSC/2021/001)"
+              value={auditMatric}
+              onChange={(e) => setAuditMatric(e.target.value.toUpperCase())}
+              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+            />
+            <button
+              onClick={handleStudentAudit}
+              disabled={isAuditing || !auditMatric.trim()}
+              className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md"
+            >
+              {isAuditing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+              View Record
             </button>
           </div>
         </div>
@@ -2475,16 +3204,22 @@ export default function CourseManagement() {
                     <p className="font-bold text-gray-900 text-sm">{record.date}</p>
                     <div className="mt-1">
                       {record.status === 'verified' ? (
-                        <span className="text-[10px] uppercase font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit"><CheckCircle size={10}/> Attended / Excused</span>
+                        <span className="text-[10px] uppercase font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                          <CheckCircle size={10}/> Attended / Excused
+                        </span>
                       ) : record.status === 'absent' ? (
-                        <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">Absent</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                          Absent
+                        </span>
                       ) : (
-                        <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit"><AlertTriangle size={10}/> Flagged</span>
+                        <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                          <AlertTriangle size={10}/> Flagged
+                        </span>
                       )}
                     </div>
                   </div>
                   {record.status !== 'verified' && (
-                    <button 
+                    <button
                       onClick={() => grantMedicalWaiver(record)}
                       className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-100 transition-colors flex items-center gap-1.5 shadow-sm"
                     >
@@ -2498,18 +3233,31 @@ export default function CourseManagement() {
         )}
       </div>
 
-      {/* ---------------- SECTION 3: HARDWARE SECURITY ---------------- */}
+      {/* SECTION 3: HARDWARE SECURITY */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-200">
         <div className="flex items-center gap-2 mb-4 border-b border-red-100 pb-3">
           <Fingerprint className="text-red-500" size={20}/>
           <h2 className="text-lg font-bold text-red-700">Wipe Device Lock</h2>
         </div>
-        <p className="text-sm text-gray-500 mb-4">Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.</p>
-        
+        <p className="text-sm text-gray-500 mb-4">
+          Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.
+        </p>
+
         <div className="flex max-w-lg gap-2">
-          <input type="text" placeholder="Matric Number" value={wipeMatric} onChange={(e) => setWipeMatric(e.target.value.toUpperCase())} className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all" />
-          <button onClick={handleDeviceReset} disabled={isWiping || !wipeMatric.trim()} className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap">
-            {isWiping ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />} Wipe Device
+          <input
+            type="text"
+            placeholder="Matric Number"
+            value={wipeMatric}
+            onChange={(e) => setWipeMatric(e.target.value.toUpperCase())}
+            className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all"
+          />
+          <button
+            onClick={handleDeviceReset}
+            disabled={isWiping || !wipeMatric.trim()}
+            className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+          >
+            {isWiping ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+            Wipe Device
           </button>
         </div>
       </div>
@@ -2779,12 +3527,15 @@ export async function POST(request: Request) {
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const GEOFENCE_RADIUS_METERS = 250;
+const HARD_BLOCK_METERS = 500;
+
+interface AttendanceLogDeviceInfo {
+  deviceFingerprint?: string;
+}
 
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3; 
+  const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -2795,8 +3546,13 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 
 export async function POST(request: Request) {
   try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, hardwareFingerprint } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -2805,80 +3561,185 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    
-    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    if (sessionError || !session) {
+      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+    }
+
+    if (session.is_active !== true) {
+      return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    }
+
     if (session.expires_at && new Date() > new Date(session.expires_at)) {
       return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
     }
 
-    // Removed the unused 'roster' fetching logic here to satisfy ESLint
+    const opensAfter = session.checkin_opens_after_minutes ?? 10;
 
-    const { data: existingLog } = await supabase.from('attendance_logs').select('id').eq('session_id', sessionId).eq('matric_number', cleanMatric).single();
-    if (existingLog) return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    if (opensAfter > 0 && session.created_at) {
+      const sessionStart = new Date(session.created_at).getTime();
+      const now = Date.now();
+      const elapsedMinutes = (now - sessionStart) / 60000;
 
+      if (elapsedMinutes < opensAfter) {
+        const remaining = Math.ceil(opensAfter - elapsedMinutes);
+        return NextResponse.json({
+          message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}. Wait until the lecture has started.`
+        }, { status: 403 });
+      }
+    }
+
+    // Enrollment check
+    const { data: courseRow } = await supabase
+      .from('courses')
+      .select('id')
+      .ilike('course_code', session.course_code)
+      .limit(1)
+      .maybeSingle();
+
+    if (!courseRow) {
+      return NextResponse.json({
+        message: "Course configuration error. Please notify your lecturer."
+      }, { status: 500 });
+    }
+
+    const { data: enrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', courseRow.id)
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (!enrollment) {
+      return NextResponse.json({
+        message: `You are not registered for ${session.course_code}. Contact your lecturer to be added.`
+      }, { status: 403 });
+    }
+
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+    }
+
+    // Layer 1: hardware fingerprint proxy check
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
         .select('matric_number')
         .eq('session_id', sessionId)
         .eq('device_hash', hardwareFingerprint);
-        
+
       if (ghostLogs && ghostLogs.length > 0) {
         await supabase.from('attendance_logs').insert([{
           session_id: sessionId,
           matric_number: cleanMatric,
           status: 'flagged',
-          device_info: JSON.stringify({ telemetry, reason: `Proxy Match with ${ghostLogs[0].matric_number}` }),
-          device_hash: hardwareFingerprint 
+          device_info: JSON.stringify({
+            telemetry,
+            reason: `Hardware proxy match with ${ghostLogs[0].matric_number}`,
+            deviceFingerprint,
+          }),
+          device_hash: hardwareFingerprint
         }]);
-        return NextResponse.json({ status: 'flagged', distance: 0, message: "Security Block: Multiple check-ins detected from identical hardware specs." }, { status: 200 });
+        return NextResponse.json({
+          status: 'flagged',
+          distance: 0,
+          message: "Security Block: Multiple check-ins detected from identical hardware specs."
+        }, { status: 200 });
       }
     }
 
+    // Layer 2: cross-browser device fingerprint check
+    console.log('[CampusCheck] Received fingerprint:', deviceFingerprint);
+    if (deviceFingerprint && deviceFingerprint !== 'unknown') {
+      const { data: existingFingerprints } = await supabase
+        .from('attendance_logs')
+        .select('matric_number, device_info')
+        .eq('session_id', sessionId)
+        .neq('matric_number', cleanMatric);
+
+      if (existingFingerprints) {
+        for (const log of existingFingerprints) {
+          const info: AttendanceLogDeviceInfo =
+            typeof log.device_info === 'string'
+              ? JSON.parse(log.device_info)
+              : (log.device_info as AttendanceLogDeviceInfo);
+
+          if (info?.deviceFingerprint === deviceFingerprint) {
+            await supabase.from('attendance_logs').insert([{
+              session_id: sessionId,
+              matric_number: cleanMatric,
+              status: 'flagged',
+              device_info: JSON.stringify({
+                telemetry,
+                reason: `Cross-browser device match with ${log.matric_number}`,
+                deviceFingerprint,
+              }),
+              device_hash: deviceFingerprint,
+            }]);
+
+            return NextResponse.json({
+              status: 'flagged',
+              distance: 0,
+              message: 'Security Block: This device has already been used to check in for another student in this session.',
+            }, { status: 200 });
+          }
+        }
+      }
+    }
+
+    // Anomaly detection
     let isSpoofed = false;
-    let totalDrift = 0;
-    let bestPing = telemetry[0]; 
+    let bestPing = telemetry[0];
 
     for (let i = 0; i < telemetry.length; i++) {
       const ping = telemetry[i];
-      if (ping.acc === 1 || ping.acc === 5) isSpoofed = true;
-      if (ping.alt === 0) isSpoofed = true;
-      
-      if (i > 0) {
-        const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, ping.lat, ping.lng);
-        totalDrift += drift;
-      }
-      if (ping.acc < bestPing.acc) {
-        bestPing = ping;
-      }
+      if (ping.acc < bestPing.acc) bestPing = ping;
     }
 
-    if (telemetry.length >= 3 && totalDrift === 0) isSpoofed = true;
+    if (bestPing.acc < 3) isSpoofed = true;
 
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
-    
-    if (distanceToLecturer > 500) {
-      return NextResponse.json({ 
-        status: 'rejected', 
-        distance: Math.round(distanceToLecturer), 
-        message: "out of bounds" 
+    for (let i = 1; i < telemetry.length; i++) {
+      const prev = telemetry[i - 1];
+      const curr = telemetry[i];
+      const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
+      if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
+    }
+
+    const distanceToLecturer = getDistanceInMeters(
+      session.anchor_latitude,
+      session.anchor_longitude,
+      bestPing.lat,
+      bestPing.lng
+    );
+
+    if (distanceToLecturer > HARD_BLOCK_METERS) {
+      return NextResponse.json({
+        status: 'rejected',
+        distance: Math.round(distanceToLecturer),
+        message: "out of bounds"
       }, { status: 403 });
     }
 
     let finalStatus = 'absent';
-    let responseMessage = `Distance Failed: You are ${Math.round(distanceToLecturer)} meters away (Max: 150m).`;
+    let responseMessage = `You are ${Math.round(distanceToLecturer)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
 
-    if (distanceToLecturer <= 150) {
+    if (distanceToLecturer <= GEOFENCE_RADIUS_METERS) {
       if (isSpoofed) {
-        finalStatus = 'flagged'; 
+        finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
       } else {
-        finalStatus = 'verified'; 
+        finalStatus = 'verified';
         responseMessage = "Verified";
       }
     }
@@ -2887,11 +3748,20 @@ export async function POST(request: Request) {
       session_id: sessionId,
       matric_number: cleanMatric,
       status: finalStatus,
-      device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc }),
-      device_hash: hardwareFingerprint || 'unknown-hardware'
+      device_info: JSON.stringify({
+        telemetry,
+        evaluatedAccuracy: bestPing.acc,
+        distanceMeters: Math.round(distanceToLecturer),
+        deviceFingerprint: deviceFingerprint || 'unknown',
+      }),
+      device_hash: hardwareFingerprint || 'unknown-hardware',
     }]);
 
-    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
+    return NextResponse.json({
+      status: finalStatus,
+      distance: Math.round(distanceToLecturer),
+      message: responseMessage
+    }, { status: 200 });
 
   } catch (error) {
     console.error("Verification API Error:", error);
@@ -2902,35 +3772,38 @@ export async function POST(request: Request) {
 
 <file path="app/dashboard/page.tsx">
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { 
-  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck, 
-  RefreshCw, UserPlus, Download, MapPin, Copy, XCircle, 
-  User, ChevronDown, Archive, Hand, Trash2, Timer
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/utils/supabase';
+import {
+  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
+  RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock
 } from 'lucide-react';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-
 interface Log { id: string; matricNumber: string; status: string; time: string; }
-interface DashboardData { course: string; isActive: boolean; repPasscode: string; logs: Log[]; }
+interface DashboardData { course: string; isActive: boolean; logs: Log[]; }
 interface LecturerProfile { full_name: string; department: string; }
 interface Course { id: string; course_code: string; }
 interface PastSession { session_id: string; created_at: string; course_code: string; }
 
+const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
+const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+
 export default function LecturerDashboard() {
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
+  const [lecturerId, setLecturerId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
-  
+
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [setupError, setSetupError] = useState('');
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
-  
+
   const [sessionDuration, setSessionDuration] = useState<number>(60);
-  
+  const [checkinOpensAfter, setCheckinOpensAfter] = useState<number>(10);
+
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -2939,13 +3812,18 @@ export default function LecturerDashboard() {
   const [pastSessions, setPastSessions] = useState<PastSession[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  const prewarmWatchRef = useRef<number | null>(null);
+  const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { 
-        window.location.href = '/login'; 
-        return; 
+      if (!session) {
+        window.location.href = '/login';
+        return;
       }
+
+      setLecturerId(session.user.id);
 
       const { data: profileData } = await supabase
         .from('lecturers')
@@ -2968,7 +3846,9 @@ export default function LecturerDashboard() {
         if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
       }
     };
-    securePageAndFetchProfile();
+    // Defer so setState inside doesn't run synchronously in the effect
+    const id = setTimeout(() => { securePageAndFetchProfile(); }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   useEffect(() => {
@@ -2977,6 +3857,32 @@ export default function LecturerDashboard() {
       if (savedSession) setActiveSessionId(savedSession);
     }, 0);
     return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        prewarmPosRef.current = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          acc: position.coords.accuracy,
+          ts: Date.now()
+        };
+      },
+      () => {
+        // Silent — pre-warm is best-effort
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+    );
+    prewarmWatchRef.current = id;
+
+    return () => {
+      if (prewarmWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(prewarmWatchRef.current);
+      }
+    };
   }, []);
 
   const loadHistory = useCallback(async () => {
@@ -2992,82 +3898,113 @@ export default function LecturerDashboard() {
     }
   }, [courses, selectedCourseId]);
 
-  useEffect(() => { 
-    if (viewMode === 'history') loadHistory(); 
+  useEffect(() => {
+    if (viewMode !== 'history') return;
+    const id = setTimeout(() => { loadHistory(); }, 0);
+    return () => clearTimeout(id);
   }, [viewMode, loadHistory]);
 
   const startNewSession = () => {
-    if (!selectedCourseId) { 
-      setSetupError("Please register a course first."); 
-      return; 
+    if (!selectedCourseId) {
+      setSetupError("Please register a course first.");
+      return;
     }
     setIsStarting(true);
-    setSetupError("Waking up GPS hardware...");
-    
-    if (!navigator.geolocation) { 
-      setSetupError("Location services not supported by your browser."); 
-      setIsStarting(false); 
-      return; 
+    setSetupError("");
+
+    if (!navigator.geolocation) {
+      setSetupError("Location services not supported by your browser.");
+      setIsStarting(false);
+      return;
     }
-    
-    // eslint-disable-next-line prefer-const
-    let watchId: number = 0;
-    let bestLat = 0;
-    let bestLng = 0;
-    let bestAcc = 9999;
 
     const executeSessionCreation = async (lat: number, lng: number) => {
-      setSetupError("Coordinates secured. Creating session...");
+      setSetupError("Creating session...");
       try {
         const response = await fetch('/api/create-session', {
-          method: 'POST', 
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            courseId: selectedCourseId, 
+            courseId: selectedCourseId,
             courseCode: courses.find(c => c.id === selectedCourseId)?.course_code,
-            latitude: lat, 
+            latitude: lat,
             longitude: lng,
-            duration: sessionDuration
+            duration: sessionDuration,
+            checkinOpensAfter
           })
         });
         if (response.ok) {
           const result = await response.json();
           localStorage.setItem('active_attendance_session', result.sessionId);
-          setActiveSessionId(result.sessionId); 
-          setViewMode('live'); 
-        } else { 
-          setSetupError("Failed to create session on server."); 
+
+          try {
+            localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({
+              lat, lng, ts: Date.now()
+            }));
+          } catch {
+            // Non-fatal
+          }
+
+          setActiveSessionId(result.sessionId);
+          setViewMode('live');
+        } else {
+          setSetupError("Failed to create session on server.");
         }
-      } catch { 
-        setSetupError("Network error. Please try again."); 
-      } finally { 
-        setIsStarting(false); 
+      } catch {
+        setSetupError("Network error. Please try again.");
+      } finally {
+        setIsStarting(false);
       }
     };
-    
+
+    try {
+      const cached = localStorage.getItem(ANCHOR_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { lat: number; lng: number; ts: number };
+        if (Date.now() - parsed.ts < ANCHOR_CACHE_MAX_AGE_MS) {
+          setSetupError("Using cached location...");
+          executeSessionCreation(parsed.lat, parsed.lng);
+          return;
+        }
+      }
+    } catch {
+      // Cache read failed — fall through
+    }
+
+    if (prewarmPosRef.current && Date.now() - prewarmPosRef.current.ts < 15000) {
+      setSetupError(`Using recent fix (±${Math.round(prewarmPosRef.current.acc)}m)...`);
+      executeSessionCreation(prewarmPosRef.current.lat, prewarmPosRef.current.lng);
+      return;
+    }
+
+    let watchId = 0;
+    let bestLat = 0;
+    let bestLng = 0;
+    let bestAcc = 9999;
+
     const timeoutId = setTimeout(() => {
       if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
       if (bestAcc !== 9999) {
         executeSessionCreation(bestLat, bestLng);
-      } else { 
-        setSetupError("Hardware Timeout: Ensure your phone's global Location/GPS is turned ON."); 
-        setIsStarting(false); 
+      } else {
+        setSetupError("Couldn't get a location fix. Move near a window and try again.");
+        setIsStarting(false);
       }
-    }, 8000); 
+    }, 20000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         const currentAcc = position.coords.accuracy;
         if (currentAcc < bestAcc) {
-            bestAcc = currentAcc;
-            bestLat = position.coords.latitude;
-            bestLng = position.coords.longitude;
-            setSetupError(`Calibrating... Accuracy: ${Math.round(bestAcc)}m`);
+          bestAcc = currentAcc;
+          bestLat = position.coords.latitude;
+          bestLng = position.coords.longitude;
+          setSetupError(`Locking on... ±${Math.round(bestAcc)}m`);
         }
-        if (bestAcc <= 60) {
-            clearTimeout(timeoutId);
-            navigator.geolocation.clearWatch(watchId); 
-            executeSessionCreation(bestLat, bestLng);
+        if (bestAcc <= 100) {
+          clearTimeout(timeoutId);
+          navigator.geolocation.clearWatch(watchId);
+          executeSessionCreation(bestLat, bestLng);
         }
       },
       (error) => {
@@ -3075,11 +4012,11 @@ export default function LecturerDashboard() {
         if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
         if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
         else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
-        else if (error.code === 3) setSetupError("Timeout: GPS took too long indoors.");
+        else if (error.code === 3) setSetupError("Timeout: GPS took too long. Try moving near a window.");
         else setSetupError("Failed to grab GPS.");
         setIsStarting(false);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   };
 
@@ -3100,17 +4037,19 @@ export default function LecturerDashboard() {
         setData(result);
         setLastRefreshed(new Date().toLocaleTimeString());
       }
-    } catch { 
-      console.error("Failed to fetch data"); 
+    } catch {
+      console.error("Failed to fetch data");
     }
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (activeSessionId && viewMode === 'live') {
-      fetchDashboardData();
-      const interval = setInterval(fetchDashboardData, 3000);
-      return () => clearInterval(interval);
-    }
+    if (!activeSessionId || viewMode !== 'live') return;
+    const immediateId = setTimeout(() => { fetchDashboardData(); }, 0);
+    const interval = setInterval(fetchDashboardData, 3000);
+    return () => {
+      clearTimeout(immediateId);
+      clearInterval(interval);
+    };
   }, [activeSessionId, viewMode, fetchDashboardData]);
 
   const handleManualOverride = async (targetMatric: string) => {
@@ -3121,20 +4060,20 @@ export default function LecturerDashboard() {
 
       setIsOverriding(true);
       const response = await fetch('/api/override-attendance', {
-        method: 'POST', 
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric })
+        body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric, lecturerId })
       });
-      if (response.ok) { 
-        setManualMatric(''); 
-        fetchDashboardData(); 
-      } else { 
-        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`); 
+      if (response.ok) {
+        setManualMatric('');
+        fetchDashboardData();
+      } else {
+        alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`);
       }
-    } catch (err) { 
-      alert("💥 CRITICAL CRASH: " + (err as Error).message); 
-    } finally { 
-      setIsOverriding(false); 
+    } catch (err) {
+      alert("💥 CRITICAL CRASH: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setIsOverriding(false);
     }
   };
 
@@ -3146,56 +4085,56 @@ export default function LecturerDashboard() {
     setIsResetting(true);
     try {
       const response = await fetch('/api/reset-device', {
-        method: 'POST', 
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: safeMatric })
       });
-      if (response.ok) { 
-        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); 
-        setManualMatric(''); 
-      } else { 
-        const errorData = await response.json(); 
-        alert(`⚠️ Failed: ${errorData.message}`); 
+      if (response.ok) {
+        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`);
+        setManualMatric('');
+      } else {
+        const errorData = await response.json();
+        alert(`⚠️ Failed: ${errorData.message}`);
       }
-    } catch { 
-      alert("💥 Network Error."); 
-    } finally { 
-      setIsResetting(false); 
+    } catch {
+      alert("💥 Network Error.");
+    } finally {
+      setIsResetting(false);
     }
   };
 
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
-    if (!logsToExport || logsToExport.length === 0) { 
-      alert("No check-ins recorded."); 
-      return; 
+    if (!logsToExport || logsToExport.length === 0) {
+      alert("No check-ins recorded.");
+      return;
     }
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
     const header = [
-      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`], 
-      ["Course Code", courseName], 
-      ["Date Generated", dateStr], 
-      ["Total Present", verifiedCount], 
-      ["Total Records Logged", logsToExport.length], 
-      [], 
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
+      ["Course Code", courseName],
+      ["Date Generated", dateStr],
+      ["Total Present", verifiedCount],
+      ["Total Records Logged", logsToExport.length],
+      [],
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
     const rows = logsToExport
       .sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
       .map(log => [log.matricNumber, log.status.toUpperCase(), log.time, "Verified via Secure Platform"]);
-    
+
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a"); 
-    link.href = URL.createObjectURL(blob); 
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
     link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
-    document.body.appendChild(link); 
-    link.click(); 
+    document.body.appendChild(link);
+    link.click();
     document.body.removeChild(link);
   };
 
-  const exportLiveCSV = () => { 
-    if (!data) return; 
-    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false); 
+  const exportLiveCSV = () => {
+    if (!data) return;
+    generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false);
   };
 
   const downloadPastSession = async (sessionId: string, dateString: string) => {
@@ -3205,22 +4144,22 @@ export default function LecturerDashboard() {
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
       generateAndDownloadCSV(pastData.logs, pastData.course, dateString, true);
-    } catch { 
-      alert("Failed to download. Check network."); 
-    } finally { 
-      setDownloadingId(null); 
+    } catch {
+      alert("Failed to download. Check network.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    const passcode = data?.repPasscode || 'N/A';
-    
-    const clipboardText = `📌 Attendance Link:\n${link}\n\n🔑 Class Rep PIN: ${passcode}\n(If you are the Class Rep, open the link and click 'Class Rep Login' at the bottom)`;
-    
+    const opensAfterText = checkinOpensAfter === 0
+      ? "Attendance is open now."
+      : `Attendance opens ${checkinOpensAfter} minute${checkinOpensAfter === 1 ? '' : 's'} after the lecture starts.`;
+    const clipboardText = `📌 CampusCheck Attendance Link:\n${link}\n\n${opensAfterText}\n\nOpen this link on your phone. You must be inside the lecture hall.`;
     navigator.clipboard.writeText(clipboardText);
-    alert("Session info copied! Send this to the Class Rep.");
+    alert("Attendance link copied! Share it with your students.");
   };
 
   if (!activeSessionId || viewMode === 'history') {
@@ -3236,14 +4175,14 @@ export default function LecturerDashboard() {
           </p>
 
           <div className="flex bg-gray-50 p-1 rounded-xl mb-6">
-            <button 
-              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }} 
+            <button
+              onClick={() => { setViewMode('live'); setActiveSessionId(localStorage.getItem('active_attendance_session')); }}
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Start Class
             </button>
-            <button 
-              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} 
+            <button
+              onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }}
               className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Past Records
@@ -3257,10 +4196,10 @@ export default function LecturerDashboard() {
               <p className="text-xs text-yellow-700 mt-1">Please go to the Course Registry to create one first.</p>
             </div>
           ) : (
-            <div className="relative mb-6">
-              <select 
-                value={selectedCourseId} 
-                onChange={(e) => setSelectedCourseId(e.target.value)} 
+            <div className="relative mb-4">
+              <select
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer"
               >
                 {courses.map(course => (
@@ -3274,33 +4213,53 @@ export default function LecturerDashboard() {
           )}
 
           {viewMode === 'live' ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
                 <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
                   <Timer size={20} />
                 </div>
-                <select 
-                  value={sessionDuration} 
+                <select
+                  value={sessionDuration}
                   onChange={(e) => setSessionDuration(Number(e.target.value))}
                   className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none appearance-none cursor-pointer"
                 >
-                  <option value={15}>15 Minutes (Quiz Mode)</option>
-                  <option value={30}>30 Minutes</option>
-                  <option value={60}>1 Hour (Standard)</option>
-                  <option value={90}>1.5 Hours</option>
-                  <option value={120}>2 Hours (Lab/Extended)</option>
+                  <option value={15}>Duration: 15 Minutes (Quiz)</option>
+                  <option value={30}>Duration: 30 Minutes</option>
+                  <option value={60}>Duration: 1 Hour (Standard)</option>
+                  <option value={90}>Duration: 1.5 Hours</option>
+                  <option value={120}>Duration: 2 Hours (Lab/Extended)</option>
                 </select>
                 <div className="pr-4 pointer-events-none text-gray-400">
                   <ChevronDown size={20} />
                 </div>
               </div>
 
-              <button 
-                onClick={startNewSession} 
-                disabled={isStarting || courses.length === 0} 
-                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+              <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
+                <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
+                  <Lock size={20} />
+                </div>
+                <select
+                  value={checkinOpensAfter}
+                  onChange={(e) => setCheckinOpensAfter(Number(e.target.value))}
+                  className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none appearance-none cursor-pointer"
+                >
+                  <option value={0}>Opens: Immediately</option>
+                  <option value={5}>Opens: After 5 minutes</option>
+                  <option value={10}>Opens: After 10 minutes (Default)</option>
+                  <option value={15}>Opens: After 15 minutes</option>
+                  <option value={30}>Opens: After 30 minutes</option>
+                </select>
+                <div className="pr-4 pointer-events-none text-gray-400">
+                  <ChevronDown size={20} />
+                </div>
+              </div>
+
+              <button
+                onClick={startNewSession}
+                disabled={isStarting || courses.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 mt-2"
               >
-                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} 
+                {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />}
                 {isStarting ? "Anchoring Geofence..." : "Establish Dynamic Geofence"}
               </button>
               {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
@@ -3321,12 +4280,12 @@ export default function LecturerDashboard() {
                           <p className="font-bold text-gray-900">{new Date(session.created_at).toLocaleDateString()}</p>
                           <p className="text-xs text-gray-500 font-medium">{new Date(session.created_at).toLocaleTimeString()}</p>
                         </div>
-                        <button 
-                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())} 
-                          disabled={downloadingId === session.session_id} 
+                        <button
+                          onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString())}
+                          disabled={downloadingId === session.session_id}
                           className="flex items-center gap-1.5 text-xs font-bold text-[#2563EB] bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
                         >
-                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} 
+                          {downloadingId === session.session_id ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
                           {downloadingId === session.session_id ? 'Pulling...' : 'Download'}
                         </button>
                       </div>
@@ -3344,7 +4303,7 @@ export default function LecturerDashboard() {
   return (
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
-        
+
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -3358,15 +4317,15 @@ export default function LecturerDashboard() {
                 <span className="text-gray-500 font-bold text-lg">{data?.course || 'Loading...'}</span>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
               <div>
                 <p className="text-2xl font-extrabold text-gray-900">{data?.logs.length || 0}</p>
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Check-ins</p>
               </div>
-              <button 
-                onClick={exportLiveCSV} 
-                disabled={!data || data.logs.length === 0} 
+              <button
+                onClick={exportLiveCSV}
+                disabled={!data || data.logs.length === 0}
                 className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
               >
                 <Download size={16} /> Export
@@ -3375,14 +4334,14 @@ export default function LecturerDashboard() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
-            <button 
-              onClick={copySessionInfo} 
+            <button
+              onClick={copySessionInfo}
               className="flex justify-center items-center gap-2 text-sm font-bold bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all"
             >
-              <Copy size={16} /> Share Session Info
+              <Copy size={16} /> Share Attendance Link
             </button>
-            <button 
-              onClick={endSession} 
+            <button
+              onClick={endSession}
               className="flex justify-center items-center gap-2 text-sm font-bold bg-red-50 text-red-600 px-4 py-2.5 rounded-xl border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all"
             >
               <XCircle size={16} /> End Lecture
@@ -3395,30 +4354,30 @@ export default function LecturerDashboard() {
             <UserPlus size={16} className="text-[#2563EB]"/> Student Management
           </h3>
           <div className="flex flex-col sm:flex-row gap-3">
-            <input 
-              type="text" 
-              placeholder="Matric Number (e.g., CSC/2021/001)" 
-              value={manualMatric} 
-              onChange={(e) => setManualMatric(e.target.value.toUpperCase())} 
-              onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} 
-              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" 
+            <input
+              type="text"
+              placeholder="Matric Number (e.g., CSC/2021/001)"
+              value={manualMatric}
+              onChange={(e) => setManualMatric(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)}
+              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase"
             />
             <div className="flex gap-2">
-              <button 
-                onClick={() => handleManualOverride(manualMatric)} 
-                disabled={!manualMatric.trim() || isOverriding} 
+              <button
+                onClick={() => handleManualOverride(manualMatric)}
+                disabled={!manualMatric.trim() || isOverriding}
                 className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md"
               >
-                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} 
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
                 {isOverriding ? "Forcing..." : "Force Check-In"}
               </button>
-              <button 
-                onClick={() => handleDeviceReset(manualMatric)} 
-                disabled={!manualMatric.trim() || isResetting} 
-                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2" 
+              <button
+                onClick={() => handleDeviceReset(manualMatric)}
+                disabled={!manualMatric.trim() || isResetting}
+                className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2"
                 title="Wipe hardware lock if student bought a new phone"
               >
-                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} 
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
                 Wipe Biometrics
               </button>
             </div>
@@ -3475,8 +4434,8 @@ export default function LecturerDashboard() {
                       </td>
                       <td className="px-4 md:px-6 py-3 md:py-4 text-right">
                         {log.status !== 'verified' && (
-                          <button 
-                            onClick={() => handleManualOverride(log.matricNumber)} 
+                          <button
+                            onClick={() => handleManualOverride(log.matricNumber)}
                             className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all"
                           >
                             <ShieldCheck size={14} /> Accept
@@ -3498,65 +4457,203 @@ export default function LecturerDashboard() {
 
 <file path="components/StudentCheckIn.tsx">
 'use client';
-import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff, ShieldCheck, Hand, ArrowRight, RefreshCw, KeyRound } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
+} from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
 
+type Status =
+  | 'idle' | 'checking' | 'needs_setup' | 'ready'
+  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'
+  | 'offline-queued' | 'syncing' | 'rating' | 'rated';
+
+const RATING_TAGS = [
+  'Clear Audio',
+  'Well Explained',
+  'Too Fast',
+  'Too Slow',
+  'Great Examples',
+  'Confusing',
+];
+
+const GPS_BROWSER_TIMEOUT_MS = 20000;
+const GPS_OVERALL_TIMEOUT_MS = 25000;
+const GPS_MIN_PINGS_TO_SEND = 1;
+const SEND_INTERVAL_MS = 4000;
+const FINGERPRINT_WAIT_MS = 6000;
+
+function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
+  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
+  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
+  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
+  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
+  return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
+}
+
 export default function StudentCheckIn({ sessionId }: Props) {
-  const [status, setStatus] = useState<'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'offline-queued' | 'syncing'>('idle'); 
+  const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
+
+  const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
+
+  const [ratingStars, setRatingStars] = useState(0);
+  const [ratingTags, setRatingTags] = useState<string[]>([]);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
+  const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
+  const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
+
+  const prewarmBufferRef = useRef<Telemetry[]>([]);
+  const prewarmWatchIdRef = useRef<number | null>(null);
+  const fingerprintRef = useRef<string | null>(null);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  const syncOfflineQueue = async () => {
+  // Pre-warm GPS on page load
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        prewarmBufferRef.current.push({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          alt: position.coords.altitude,
+          acc: position.coords.accuracy,
+          timestamp: position.timestamp
+        });
+        if (prewarmBufferRef.current.length > 30) {
+          prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
+        }
+      },
+      () => {
+        // Silent — best-effort
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+    );
+
+    prewarmWatchIdRef.current = id;
+
+    return () => {
+      if (prewarmWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(prewarmWatchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Pre-warm device fingerprint (generate once, cache in ref)
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(async () => {
+      try {
+        console.log('[CampusCheck] Generating device fingerprint...');
+        const fp = await generateDeviceFingerprint();
+        console.log('[CampusCheck] Fingerprint generated:', fp);
+        if (!cancelled) fingerprintRef.current = fp.hash;
+      } catch (err) {
+        console.error('[CampusCheck] Fingerprint generation failed:', err);
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, []);
+
+  // Fetch session metadata (for memes)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchMeta = async () => {
+      try {
+        const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
+      } catch {
+        // Non-fatal
+      }
+    };
+    const id = setTimeout(() => { fetchMeta(); }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [sessionId]);
+
+  const syncOfflineQueue = useCallback(async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
     setStatus('syncing');
-    const remainingQueue = [];
+    const remainingQueue: typeof queue = [];
     let successCount = 0;
 
     for (const item of queue) {
       try {
         const res = await fetch('/api/verify-attendance', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: item.session,
+            matricNumber: item.matric,
+            telemetry: item.telemetry,
+            deviceFingerprint: item.fingerprint,
+          })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
-      } catch (e) { remainingQueue.push(item); }
+      } catch {
+        remainingQueue.push(item);
+      }
     }
     localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
-    if (successCount > 0 && remainingQueue.length === 0) { triggerSuccessVibration(); setStatus('success'); } 
-    else if (remainingQueue.length > 0) setStatus('offline-queued');
-  };
+    if (successCount > 0 && remainingQueue.length === 0) {
+      triggerSuccessVibration();
+      setStatus('success');
+    } else if (remainingQueue.length > 0) {
+      setStatus('offline-queued');
+    }
+  }, []);
 
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
-    syncOfflineQueue(); 
-    return () => window.removeEventListener('online', syncOfflineQueue);
-  }, []);
+    const id = setTimeout(() => { syncOfflineQueue(); }, 0);
+    return () => {
+      window.removeEventListener('online', syncOfflineQueue);
+      clearTimeout(id);
+    };
+  }, [syncOfflineQueue]);
+
+  useEffect(() => {
+    if (status !== 'success') return;
+    const t = setTimeout(() => setStatus('rating'), 2500);
+    return () => clearTimeout(t);
+  }, [status]);
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
     setStatus('checking');
-    
+
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      
-      if (res.status === 404) setStatus('needs_setup'); 
-      else if (res.ok) setStatus('ready'); 
+
+      if (res.status === 404) setStatus('needs_setup');
+      else if (res.ok) setStatus('ready');
       else throw new Error("Failed to verify ledger.");
-    } catch (error) {
+    } catch {
       setErrorMessage("Network error. Could not connect to database.");
       setStatus('failed');
     }
@@ -3574,155 +4671,270 @@ export default function StudentCheckIn({ sessionId }: Props) {
       setStatus('locating');
 
       const genRes = await fetch('/api/webauthn/register/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      
+
       const options = await genRes.json();
       if (!genRes.ok || options.error) {
-         throw new Error(options.error || "Server rejected registration.");
+        throw new Error(options.error || "Server rejected registration.");
       }
 
       const attResp = await startRegistration(options);
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
-      
+
       if (verifyResult.verified) {
         localStorage.setItem('campuscheck_device_anchor', matricNumber);
         setStatus('ready');
+      } else {
+        throw new Error("Hardware binding failed.");
       }
-      else throw new Error("Hardware binding failed.");
-    } catch (error: any) {
-      setErrorMessage(error.message || "Failed to register your biometric device.");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to register your biometric device.";
+      setErrorMessage(msg);
       setStatus('failed');
     }
   };
+
+  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[]) => {
+    try {
+      // Fingerprint may not be ready yet — wait for it (max 6s)
+      let fingerprint = fingerprintRef.current;
+      if (!fingerprint) {
+        const start = Date.now();
+        while (!fingerprint && Date.now() - start < FINGERPRINT_WAIT_MS) {
+          await new Promise(r => setTimeout(r, 100));
+          fingerprint = fingerprintRef.current;
+        }
+      }
+      console.log('[CampusCheck] Fingerprint being sent:', fingerprint);
+
+      const response = await fetch('/api/verify-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          matricNumber,
+          telemetry: gpsTelemetry,
+          deviceFingerprint: fingerprint || 'unknown',
+        })
+      });
+      const result = await response.json();
+
+      if ((response.ok && result.status === 'verified') || response.status === 409) {
+        triggerSuccessVibration();
+        setVerifiedAt(Date.now());
+        setStatus('success');
+      } else if (result.status === 'flagged' || response.status === 403) {
+        setErrorMessage(result.message || "Verification failed.");
+        setStatus('failed');
+      } else {
+        setErrorMessage(result.message || "Verification failed.");
+        setStatus('failed');
+      }
+    } catch (error) {
+      const isNetwork = !navigator.onLine ||
+        (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
+      if (isNetwork) {
+        const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+        existing.push({
+          session: sessionId,
+          matric: matricNumber,
+          telemetry: gpsTelemetry,
+          fingerprint: fingerprintRef.current,
+          timestamp: Date.now(),
+        });
+        localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+        setStatus('offline-queued');
+      } else {
+        setErrorMessage("Server connection lost.");
+        setStatus('failed');
+      }
+    }
+  }, [sessionId, matricNumber]);
 
   const executeFinalCheckIn = async () => {
     setStatus('locating');
-    
+    setLiveAccuracy(null);
+
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      
       if (options.error) throw new Error(`Generate Error: ${options.error}`);
 
       const asseResp = await startAuthentication(options);
-      
+
       const verifyRes = await fetch('/api/webauthn/auth/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: asseResp })
       });
       const verifyResult = await verifyRes.json();
-      
+
       if (verifyResult.error) throw new Error(`Verify Error: ${verifyResult.error}`);
       if (!verifyResult.verified) throw new Error("Biometric signature did not match.");
-
-    } catch (error: any) {
-      setErrorMessage(error.message || "Unknown Auth Error occurred.");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown Auth Error occurred.";
+      setErrorMessage(msg);
       setStatus('failed');
-      return; 
+      return;
     }
 
-    if (!navigator.geolocation) { setErrorMessage("Browser doesn't support location."); setStatus('failed'); return; }
+    if (!navigator.geolocation) {
+      setErrorMessage("Browser doesn't support location.");
+      setStatus('failed');
+      return;
+    }
 
-    let pings: Telemetry[] = [];
-    let watchId: number;
-    let bestAcc = 9999;
-    
-    const timeoutId = setTimeout(() => {
+    const pings: Telemetry[] = [...prewarmBufferRef.current];
+    let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
+    if (pings.length > 0) setLiveAccuracy(Math.round(bestAcc));
+
+    let watchId = 0;
+    let didFinish = false;
+    let sentAny = false;
+
+    const finishWith = (finalPings: Telemetry[]) => {
+      if (didFinish) return;
+      didFinish = true;
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (pings.length > 0) sendPayloadToVercel(pings);
-      else { setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS."); setStatus('failed'); }
-    }, 8000); 
+      if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
+        sendPayloadToVercel(finalPings);
+      } else {
+        setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS, then try again.");
+        setStatus('failed');
+      }
+    };
+
+    if (pings.length >= 1) {
+      sentAny = true;
+      sendPayloadToVercel(pings);
+    }
+
+    const overallTimeoutId = setTimeout(() => {
+      if (!sentAny && pings.length === 0) {
+        finishWith(pings);
+      } else {
+        didFinish = true;
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+      }
+    }, GPS_OVERALL_TIMEOUT_MS);
+
+    let lastSendTs = Date.now();
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const currentAcc = position.coords.accuracy;
-        if (currentAcc < bestAcc) bestAcc = currentAcc;
+        const acc = position.coords.accuracy;
+        if (acc < bestAcc) bestAcc = acc;
+        setLiveAccuracy(Math.round(bestAcc));
 
-        pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
-        
-        if (pings.length >= 3 && bestAcc <= 100) { 
-            clearTimeout(timeoutId); 
-            navigator.geolocation.clearWatch(watchId); 
-            sendPayloadToVercel(pings); 
+        pings.push({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          alt: position.coords.altitude,
+          acc: position.coords.accuracy,
+          timestamp: position.timestamp
+        });
+
+        const now = Date.now();
+        if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
+          lastSendTs = now;
+          sentAny = true;
+          sendPayloadToVercel(pings);
         }
       },
       (error) => {
-        clearTimeout(timeoutId);
+        clearTimeout(overallTimeoutId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
-        if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS Blocked (Code ${error.code}). Pull down your menu and turn on Location.`); setStatus('failed'); }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
-    );
-  };
+        if (didFinish || sentAny) return;
+        didFinish = true;
 
-  const sendPayloadToVercel = async (gpsTelemetry: Telemetry[]) => {
-    setStatus('verifying');
-    try {
-      const response = await fetch('/api/verify-attendance', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry })
-      });
-      const result = await response.json();
-      
-      if ((response.ok && result.status === 'verified') || response.status === 409) { 
-        triggerSuccessVibration(); 
-        setStatus('success'); 
-      } 
-      else if (result.status === 'flagged' || response.status === 403) { 
-        setErrorMessage(result.message || "Verification failed."); 
-        setStatus('failed'); 
-      } 
-      else { 
-        setErrorMessage(result.message || "Verification failed."); 
-        setStatus('failed'); 
-      }
-    } catch (error: any) {
-      if (!navigator.onLine || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, timestamp: Date.now() });
-        localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
-        setStatus('offline-queued');
-      }
-      else { setErrorMessage("Server connection lost."); setStatus('failed'); }
-    }
+        if (error.code === 1) {
+          setStatus('denied');
+        } else {
+          setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`);
+          setStatus('failed');
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
+    );
   };
 
   const requestAppeal = async () => {
     setIsAppealing(true);
     try {
       const response = await fetch('/api/request-override', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, matricNumber })
       });
-      if (response.ok) { alert("Appeal sent! Please look at the lecturer for visual confirmation."); setStatus('idle'); } 
-      else alert("Failed to send appeal. Check network.");
-    } catch (e) { alert("Network error."); } 
-    finally { setIsAppealing(false); }
+      if (response.ok) {
+        alert("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setStatus('idle');
+      } else {
+        alert("Failed to send appeal. Check network.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setIsAppealing(false);
+    }
   };
+
+  const toggleTag = (tag: string) => {
+    setRatingTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
+
+  const submitRating = async (skip: boolean) => {
+    setIsSubmittingRating(true);
+    try {
+      if (!skip) {
+        await fetch('/api/rate-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
+        });
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setIsSubmittingRating(false);
+      setStatus('rated');
+    }
+  };
+
+  const memeData = useMemo(() => {
+    if (!sessionCreatedAt || verifiedAt === null) {
+      return { minutesLate: 0, meme: getMeme(0) };
+    }
+    const start = new Date(sessionCreatedAt).getTime();
+    const minutesLate = Math.max(0, Math.floor((verifiedAt - start) / 60000));
+    return { minutesLate, meme: getMeme(minutesLate) };
+  }, [sessionCreatedAt, verifiedAt]);
 
   return (
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
-        
+
         {status === 'idle' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
               <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
                 <User size={18} />
               </div>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Matric Number (e.g., CSC/2021/001)"
                 value={matricNumber}
                 onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
@@ -3730,7 +4942,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
               />
             </div>
-            <button 
+            <button
               onClick={checkStudentStatus}
               disabled={matricNumber.length < 5}
               className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50"
@@ -3749,10 +4961,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">
               We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.
             </p>
-            <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+            <button
+              onClick={registerDevice}
+              className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
+            >
               Scan Biometrics
             </button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
+            <button
+              onClick={() => setStatus('idle')}
+              className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm"
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -3766,19 +4986,36 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">
               Your device is securely linked. Ensure you are inside the lecture hall.
             </p>
-            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+            <button
+              onClick={executeFinalCheckIn}
+              className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
+            >
               <Navigation size={20} /> Submit Attendance
             </button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
+            <button
+              onClick={() => setStatus('idle')}
+              className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm"
+            >
+              Not you? Switch account
+            </button>
           </div>
         )}
 
         {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-gray-700 font-bold animate-pulse text-center">
-              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Acquiring hardware lock..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
+            <p className="text-gray-700 font-bold text-center">
+              {status === 'checking' ? "Verifying ledger..."
+                : status === 'locating' ? "Sending your location..."
+                : status === 'syncing' ? "Syncing offline data..."
+                : "Verifying coordinates..."}
             </p>
+            {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
+              <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+                <Signal size={14} className="text-[#2563EB]" />
+                <span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -3786,8 +5023,93 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 text-center">
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
-            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
-            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. You may close this page.</p>
+            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">
+              {matricNumber}
+            </p>
+            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. Hang tight...</p>
+          </div>
+        )}
+
+        {status === 'rating' && (
+          <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-5 text-center mb-6">
+              <p className="text-4xl mb-2">{memeData.meme.emoji}</p>
+              <h3 className="text-xl font-extrabold text-blue-900">{memeData.meme.title}</h3>
+              <p className="text-sm text-blue-700 font-medium mt-1">{memeData.meme.sub}</p>
+              {sessionCreatedAt && (
+                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">
+                  {memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}
+                </p>
+              )}
+            </div>
+
+            <div className="text-center">
+              <h4 className="font-extrabold text-gray-900 text-lg">How was this lecture?</h4>
+              <p className="text-xs text-gray-500 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
+
+              <div className="flex justify-center gap-2 mt-5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRatingStars(star)}
+                    className="transition-transform active:scale-90"
+                    aria-label={`Rate ${star} stars`}
+                  >
+                    <Star
+                      size={36}
+                      className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
+                      strokeWidth={1.5}
+                    />
+                  </button>
+                ))}
+              </div>
+
+              {ratingStars > 0 && (
+                <div className="flex flex-wrap justify-center gap-2 mt-5 animate-in fade-in duration-300">
+                  {RATING_TAGS.map((tag) => {
+                    const active = ratingTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                          active
+                            ? 'bg-[#2563EB] text-white border-[#2563EB]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <button
+                  onClick={() => submitRating(true)}
+                  disabled={isSubmittingRating}
+                  className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => submitRating(false)}
+                  disabled={isSubmittingRating || ratingStars === 0}
+                  className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {status === 'rated' && (
+          <div className="py-8 text-center">
+            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900">Thanks for the feedback!</h3>
+            <p className="text-gray-500 mt-2 text-sm font-medium">You may close this page.</p>
           </div>
         )}
 
@@ -3795,7 +5117,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.</p>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
+              Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.
+            </p>
           </div>
         )}
 
@@ -3803,10 +5127,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            
+
             <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
-              {errorMessage.includes("out of bounds") 
-                ? "You are too far away. You must be inside the lecture hall to check in." 
+              {errorMessage.includes("out of bounds")
+                ? "You are too far away. You must be inside the lecture hall to check in."
                 : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down")
                 ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again."
                 : errorMessage}
@@ -3814,46 +5138,56 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
             <div className="mt-6 space-y-3">
               {!errorMessage.includes("out of bounds") && (
-                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md">
-                  <RefreshCw size={18} /> Try Again (Reset GPS)
+                <button
+                  onClick={executeFinalCheckIn}
+                  className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"
+                >
+                  <RefreshCw size={18} /> Try Again
                 </button>
               )}
-              
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+
+              <button
+                onClick={() => setStatus('idle')}
+                className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+              >
                 Start Over Completely
               </button>
 
               {!errorMessage.includes("out of bounds") && (
-                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} 
+                <button
+                  onClick={requestAppeal}
+                  disabled={isAppealing}
+                  className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4"
+                >
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
                   Raise Hand (I am in the hall)
                 </button>
               )}
             </div>
           </div>
         )}
-        
+
         {status === 'denied' && (
           <div className="py-4 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
-            <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
-            <button onClick={() => setStatus('idle')} className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
+            <p className="text-red-600 mt-2 text-sm font-medium">
+              Please allow location access in your browser settings to verify your presence.
+            </p>
+            <button
+              onClick={() => setStatus('idle')}
+              className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all"
+            >
+              Go Back
+            </button>
           </div>
         )}
       </div>
-      
+
       <div className="mt-8 text-center space-y-4">
         <p className="text-xs font-semibold text-gray-400">
           Make sure you are physically inside the lecture hall before checking in.
         </p>
-        
-        <a 
-          href={`/rep?sessionId=${sessionId}`} 
-          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-300 hover:text-[#2563EB] transition-colors"
-        >
-          <KeyRound size={12} /> Class Rep Login
-        </a>
       </div>
     </div>
   );

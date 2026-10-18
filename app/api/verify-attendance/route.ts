@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     );
 
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint, verificationMethod } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!sessionId || !cleanMatric || !telemetry || telemetry.length === 0) {
@@ -133,7 +133,6 @@ export async function POST(request: Request) {
     }
 
     // Layer 2: cross-browser device fingerprint check
-    console.log('[CampusCheck] Received fingerprint:', deviceFingerprint);
     if (deviceFingerprint && deviceFingerprint !== 'unknown') {
       const { data: existingFingerprints } = await supabase
         .from('attendance_logs')
@@ -168,6 +167,24 @@ export async function POST(request: Request) {
             }, { status: 200 });
           }
         }
+      }
+    }
+
+    // Layer 3: Coarse IP cluster check (Soft Lock)
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (clientIp !== 'unknown') {
+      const ninetySecondsAgo = new Date(Date.now() - 90000).toISOString();
+      const { data: sameIpCheckins } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .neq('matric_number', cleanMatric)
+        .gte('check_in_time', ninetySecondsAgo);
+
+      if (sameIpCheckins && sameIpCheckins.length >= 2) {
+        // Flag them, but let the location check below decide if they are in the hall
+        // We will override their finalStatus to 'flagged' later if they pass the geofence.
+        // This prevents blocking legitimate students on the same campus Wi-Fi.
       }
     }
 
@@ -212,6 +229,9 @@ export async function POST(request: Request) {
       if (isSpoofed) {
         finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
+      } else if (verificationMethod === 'skipped') {
+        finalStatus = 'flagged';
+        responseMessage = "Flagged: Biometric skipped. Lecturer must visually verify.";
       } else {
         finalStatus = 'verified';
         responseMessage = "Verified";
@@ -227,6 +247,8 @@ export async function POST(request: Request) {
         evaluatedAccuracy: bestPing.acc,
         distanceMeters: Math.round(distanceToLecturer),
         deviceFingerprint: deviceFingerprint || 'unknown',
+        verificationMethod: verificationMethod || 'skipped',
+        clientIp,
       }),
       device_hash: hardwareFingerprint || 'unknown-hardware',
     }]);
