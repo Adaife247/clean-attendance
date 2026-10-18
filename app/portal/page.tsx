@@ -37,7 +37,6 @@ export default function StudentPortal() {
   const [error, setError] = useState('');
   const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
 
-  // Load saved matric on mount
   useEffect(() => {
     const saved = localStorage.getItem('campuscheck_student_matric');
     if (saved) {
@@ -56,7 +55,6 @@ export default function StudentPortal() {
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
-      // 1. REQUIRE WEBAUTHN AUTHENTICATION FIRST
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,7 +81,6 @@ export default function StudentPortal() {
         throw new Error("Biometric verification failed. Access denied.");
       }
 
-      // 2. FETCH RECORDS (Only if biometrics passed)
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -126,7 +123,7 @@ export default function StudentPortal() {
           .select('session_id, status')
           .eq('matric_number', cleanMatric)
           .in('session_id', sessionIds)
-          .eq('status', 'verified'); // ONLY COUNT VERIFIED AS ATTENDED
+          .eq('status', 'verified');
 
         if (logError) throw logError;
         studentLogs = logRows || [];
@@ -184,7 +181,6 @@ export default function StudentPortal() {
       setRecords(finalRecords);
 
     } catch (err) {
-      // Fixed: Properly handling unknown error type
       const msg = err instanceof Error ? err.message : "Verification failed.";
       setRecords(null);
       setError(msg);
@@ -248,8 +244,9 @@ export default function StudentPortal() {
                 <p className="font-extrabold text-lg">{activeLiveClass}</p>
               </div>
             </div>
-            <span className="text-xs font-bold bg-white text-green-700 px-3 py-1.5 rounded-lg shadow-sm">
-              Check Link
+            {/* Fixed: This is now a clear instruction, not a dead button */}
+            <span className="text-xs font-bold text-white/80 text-right leading-tight max-w-[80px]">
+              Check your WhatsApp link
             </span>
           </div>
         )}
