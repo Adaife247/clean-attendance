@@ -1,26 +1,51 @@
 'use client';
-import { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
-import { Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users } from 'lucide-react';
+import { 
+  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award 
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHod, setIsHod] = useState(false);
+
+  // Check if the logged-in lecturer is an HOD
+  useEffect(() => {
+    const checkHodStatus = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data } = await supabase
+        .from('lecturers')
+        .select('department')
+        .eq('id', session.user.id)
+        .single();
+
+      // You can adjust this logic later (e.g., check an `is_hod` boolean column)
+      if (data?.department) {
+        setIsHod(true);
+      }
+    };
+    checkHodStatus();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
 
-  // --- UPDATED NAVIGATION TABS ---
   const navItems = [
     { name: 'Live Radar', href: '/dashboard', icon: Radio },
     { name: 'Student Management', href: '/dashboard/courses', icon: Users },
     { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
   ];
+
+  if (isHod) {
+    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
+  }
 
   return (
     <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">

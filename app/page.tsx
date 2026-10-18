@@ -1,7 +1,7 @@
 'use client';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Loader2, User, Search, MapPin, Zap, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Loader2, User, Search, Zap, ArrowRight } from 'lucide-react';
 import StudentCheckInComponent from '../components/StudentCheckIn'; 
 import Link from 'next/link';
 
@@ -31,11 +31,11 @@ function CheckInWrapper() {
             <p className="text-gray-500 mt-2 font-semibold text-lg">Your University Survival Companion</p>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+          <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
             <Link 
               href="/portal" 
-              className="group relative w-full flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-white hover:from-blue-50 hover:to-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-2xl transition-all duration-300 overflow-hidden"
+              className="group relative w-full flex items-center justify-between p-5 bg-linear-to-r from-gray-50 to-white hover:from-blue-50 hover:to-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-2xl transition-all duration-300 overflow-hidden"
             >
               <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-transparent group-hover:bg-[#2563EB] transition-colors"></div>
               <div className="flex items-center gap-4 relative z-10">
@@ -52,7 +52,7 @@ function CheckInWrapper() {
 
             <Link 
               href="/login" 
-              className="group relative w-full flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-white hover:from-gray-100 hover:to-gray-50 border border-gray-200 hover:border-gray-400 rounded-2xl transition-all duration-300 overflow-hidden"
+              className="group relative w-full flex items-center justify-between p-5 bg-linear-to-r from-gray-50 to-white hover:from-gray-100 hover:to-gray-50 border border-gray-200 hover:border-gray-400 rounded-2xl transition-all duration-300 overflow-hidden"
             >
               <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-transparent group-hover:bg-gray-900 transition-colors"></div>
               <div className="flex items-center gap-4 relative z-10">

@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   Search, ShieldCheck, User, CheckCircle, AlertTriangle, 
-  Clock, ArrowLeft, Target, TrendingUp, Zap, Award
+  Clock, ArrowLeft, Target, TrendingUp, Zap, Flame, Radio
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -33,14 +33,28 @@ export default function StudentPortal() {
   const [isSearching, setIsSearching] = useState(false);
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [error, setError] = useState('');
+  const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
 
-  const fetchRecords = async () => {
-    if (matricNumber.length < 5) return;
+  // Load saved matric on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('campuscheck_student_matric');
+    if (saved) {
+      const id = setTimeout(() => { setMatricNumber(saved); }, 0);
+      return () => clearTimeout(id);
+    }
+  }, []);
+
+  const fetchRecords = async (targetMatric?: string) => {
+    const matToUse = targetMatric || matricNumber;
+    if (matToUse.length < 5) return;
+    
     setIsSearching(true);
     setError('');
     setRecords(null);
+    setActiveLiveClass(null);
 
-    const cleanMatric = matricNumber.toUpperCase().trim();
+    const cleanMatric = matToUse.toUpperCase().trim();
+    localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
       // 1. Find every course this student is enrolled in
@@ -77,11 +91,17 @@ export default function StudentPortal() {
       // 3. Get ALL sessions held for each of these courses (the denominator)
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
-        .select('session_id, course_code, created_at')
+        .select('session_id, course_code, created_at, is_active')
         .in('course_code', courseCodes)
         .order('created_at', { ascending: false });
 
       if (sessionError) throw sessionError;
+
+      // Check for active live class
+      const liveSession = sessionRows?.find(s => s.is_active === true);
+      if (liveSession) {
+        setActiveLiveClass(liveSession.course_code);
+      }
 
       // 4. Get this student's logs for those sessions
       const sessionIds = (sessionRows || []).map(s => s.session_id);
@@ -125,15 +145,10 @@ export default function StudentPortal() {
         const attended = stats.attended;
         const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
 
-        // Skips left = how many more absences before dropping below 70%
-        // Formula: we need attended / total >= 0.70.
-        // If current percentage already < 70, skips_left = 0.
-        // Otherwise: max absences allowed = floor(total * 0.30). Current absences = total - attended.
         const maxAbsences = Math.floor(total * 0.30);
         const currentAbsences = total - attended;
         const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
 
-        // Streak: sessions are ordered newest first, so walk through until non-verified
         let streak = 0;
         for (const session of stats.sessions) {
           const status = logStatusMap.get(session.session_id);
@@ -168,78 +183,120 @@ export default function StudentPortal() {
   };
 
   const getShieldColor = (pct: number) => {
-    if (pct >= 70) return { bar: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' };
-    if (pct >= 50) return { bar: 'bg-yellow-500', text: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200' };
-    return { bar: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' };
+    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
+    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
+    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
   };
 
   const getTierBadge = (tier: CourseRecord['streak_tier'], streak: number) => {
     if (tier === 'None') return null;
-    const styles: Record<string, string> = {
-      JJC: 'bg-blue-100 text-blue-700 border-blue-200',
-      Consistent: 'bg-purple-100 text-purple-700 border-purple-200',
-      Odogwu: 'bg-amber-100 text-amber-700 border-amber-200',
-    };
-    const icons: Record<string, React.ReactNode> = {
-      JJC: <Zap size={12} />,
-      Consistent: <TrendingUp size={12} />,
-      Odogwu: <Award size={12} />,
-    };
+    
+    if (tier === 'Odogwu') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-linear-to-r from-amber-100 to-orange-100 text-orange-800 border border-orange-200 shadow-sm">
+          <Flame size={12} className="text-orange-500" /> Odogwu • {streak}
+        </span>
+      );
+    }
+    if (tier === 'Consistent') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-700 border border-purple-200">
+          <TrendingUp size={12} /> Consistent • {streak}
+        </span>
+      );
+    }
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${styles[tier]}`}>
-        {icons[tier]} {tier} • {streak}
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 border border-blue-200">
+        <Zap size={12} /> JJC • {streak}
       </span>
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      
+      {/* Background decoration */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+      <div className="w-full max-w-md relative z-10 pt-8">
+
+        {/* Header */}
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
           <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
             <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-2 font-medium">Student Records Portal</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Survival Companion</h1>
+          <p className="text-gray-500 mt-2 font-medium">Track your NUC clearance status</p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 animate-in fade-in slide-in-from-bottom-6">
-          <div className="relative mb-4">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <User size={18} className="text-gray-400" />
+        {/* Live Alert Banner */}
+        {activeLiveClass && (
+          <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full animate-pulse">
+                <Radio size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Lecture Live Now</p>
+                <p className="font-extrabold text-lg">{activeLiveClass}</p>
+              </div>
             </div>
-            <input
-              type="text"
-              placeholder="Matric Number (e.g. CSC/2021/001)"
-              value={matricNumber}
-              onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
-            />
+            <span className="text-xs font-bold bg-white text-green-700 px-3 py-1.5 rounded-lg shadow-sm">
+              Check Link
+            </span>
           </div>
+        )}
 
-          <button
-            onClick={fetchRecords}
-            disabled={matricNumber.length < 5 || isSearching}
-            className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
-          >
-            {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />}
-            {isSearching ? "Loading Your Shield..." : "Check Records"}
-          </button>
+        {/* Search / Input Card */}
+        <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+          
+          {!records && (
+            <div className="relative mb-4">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <User size={18} className="text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Matric Number (e.g. CSC/2021/001)"
+                value={matricNumber}
+                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && fetchRecords()}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
+              />
+            </div>
+          )}
+
+          {!records ? (
+            <button
+              onClick={() => fetchRecords()}
+              disabled={matricNumber.length < 5 || isSearching}
+              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
+            >
+              {isSearching ? <Clock className="animate-spin" size={20} /> : <Search size={20} />}
+              {isSearching ? "Loading Shield..." : "Load My Records"}
+            </button>
+          ) : (
+            <button
+              onClick={() => { setRecords(null); }}
+              className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all"
+            >
+              <Search size={16} /> Search Another Student
+            </button>
+          )}
 
           {error && (
-            <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center">
+            <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
               <p className="text-red-700 font-bold text-sm">{error}</p>
             </div>
           )}
 
+          {/* Clearance Shield Results */}
           {records && records.length > 0 && (
             <div className="mt-8 space-y-5 animate-in fade-in slide-in-from-bottom-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                <h3 className="font-bold text-gray-900">Your Clearance Shield</h3>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">NUC 70% Threshold</span>
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h3 className="font-extrabold text-gray-900 text-lg">Clearance Shield</h3>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-2 py-1 rounded-md">NUC 70%</span>
               </div>
 
               {records.map((record) => {
@@ -249,79 +306,68 @@ export default function StudentPortal() {
                 return (
                   <div
                     key={record.course_code}
-                    className={`${colors.bg} p-4 rounded-2xl border ${colors.border} transition-colors`}
+                    className={`relative overflow-hidden ${colors.bg} p-5 rounded-2xl border ${colors.border} transition-colors`}
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-start mb-4 relative z-10">
                       <div>
-                        <p className="font-extrabold text-gray-900 text-lg leading-tight">{record.course_code}</p>
-                        <p className="text-xs text-gray-500 font-medium mt-1">
-                          Attended {record.attended_classes} of {record.total_classes} classes
+                        <p className="font-black text-gray-900 text-xl leading-tight tracking-tight">{record.course_code}</p>
+                        <p className="text-xs text-gray-600 font-semibold mt-1 bg-white/50 inline-block px-2 py-0.5 rounded-md">
+                          {record.attended_classes} / {record.total_classes} Classes
                         </p>
-                        {getTierBadge(record.streak_tier, record.streak) && (
-                          <div className="mt-2">{getTierBadge(record.streak_tier, record.streak)}</div>
-                        )}
+                        <div className="mt-2.5">
+                          {getTierBadge(record.streak_tier, record.streak)}
+                        </div>
                       </div>
                       <div className="text-right">
-                        <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                        <p className={`font-black text-3xl tracking-tighter ${colors.text}`}>{record.percentage}<span className="text-lg">%</span></p>
                         {isCleared ? (
-                          <span className="text-[10px] uppercase font-bold text-green-600 flex items-center justify-end gap-1 mt-0.5">
-                            <CheckCircle size={10} /> Cleared
+                          <span className="text-[10px] uppercase font-black text-emerald-600 flex items-center justify-end gap-1 mt-1">
+                            <CheckCircle size={12} strokeWidth={3} /> Cleared
                           </span>
                         ) : (
-                          <span className="text-[10px] uppercase font-bold text-red-600 flex items-center justify-end gap-1 mt-0.5">
-                            <AlertTriangle size={10} /> At Risk
+                          <span className="text-[10px] uppercase font-black text-red-600 flex items-center justify-end gap-1 mt-1">
+                            <AlertTriangle size={12} strokeWidth={3} /> At Risk
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Clearance Shield progress bar */}
-                    <div className="relative w-full h-3 bg-white rounded-full overflow-hidden border border-gray-200">
+                    {/* Clearance Shield Progress Bar */}
+                    <div className="relative w-full h-4 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50 shadow-inner">
                       <div
-                        className={`h-full ${colors.bar} transition-all duration-700 ease-out`}
+                        className={`h-full ${colors.bar} transition-all duration-1000 ease-out`}
                         style={{ width: `${Math.min(record.percentage, 100)}%` }}
                       />
-                      {/* 70% threshold marker */}
-                      <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-gray-900/40"
-                        style={{ left: '70%' }}
-                        title="NUC 70% Threshold"
-                      />
+                      {/* 70% Threshold marker */}
+                      <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
                     </div>
 
-                    {/* Safe Skips indicator */}
-                    <div className="mt-3 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5 text-gray-600 font-bold">
-                        <Target size={14} className="text-gray-400" />
+                    {/* Safe Skips */}
+                    <div className="mt-4 flex items-center justify-between text-xs relative z-10">
+                      <div className="flex items-center gap-1.5 text-gray-700 font-bold bg-white/60 px-2.5 py-1.5 rounded-lg">
+                        <Target size={14} className="text-gray-500" />
                         {record.skips_left > 0 ? (
-                          <span>
-                            Safe Skips: <span className="text-gray-900 font-black">{record.skips_left}</span>
-                          </span>
+                          <span>Safe Skips: <strong className="text-gray-900">{record.skips_left}</strong></span>
                         ) : isCleared ? (
-                          <span className="text-yellow-700">No more skips — on the edge</span>
+                          <span className="text-amber-700">No more skips</span>
                         ) : (
-                          <span className="text-red-700">Below threshold — attend everything</span>
+                          <span className="text-red-700">Attend everything</span>
                         )}
                       </div>
-                      {isCleared && record.skips_left > 0 && (
-                        <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">
-                          Exam Pass Unlocked
-                        </span>
-                      )}
                     </div>
                   </div>
                 );
               })}
 
-              <p className="text-[11px] text-gray-400 font-medium text-center pt-2">
-                The 70% threshold is set by the Nigerian Universities Commission (NUC).
+              <p className="text-[10px] text-gray-400 font-bold text-center pt-2 uppercase tracking-wider">
+                NUC 70% Threshold Enforced
               </p>
             </div>
           )}
         </div>
 
-        <div className="mt-6 text-center animate-in fade-in">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+        <div className="mt-8 text-center animate-in fade-in pb-8">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <ArrowLeft size={16} /> Back to Hub
           </Link>
         </div>
