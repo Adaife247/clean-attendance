@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import {
   Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Megaphone, Send, Link as LinkIcon
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText
 } from 'lucide-react';
 
 interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
@@ -41,14 +41,6 @@ export default function LecturerDashboard() {
   const [viewingPastSession, setViewingPastSession] = useState<PastSession | null>(null);
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-  // Broadcast State
-  const [feedTitle, setFeedTitle] = useState('');
-  const [feedContent, setFeedContent] = useState('');
-  const [feedCourseCode, setFeedCourseCode] = useState('');
-  const [feedLink, setFeedLink] = useState('');
-  const [feedExpiry, setFeedExpiry] = useState('');
-  const [isPosting, setIsPosting] = useState(false);
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
@@ -254,42 +246,6 @@ export default function LecturerDashboard() {
       else { const errorData = await response.json(); alert(`⚠️ Failed: ${errorData.message}`); }
     } catch { alert("💥 Network Error."); }
     finally { setIsResetting(false); }
-  };
-
-  const handlePostFeed = async () => {
-    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
-      alert("Please fill all fields and select a course.");
-      return;
-    }
-    setIsPosting(true);
-    try {
-      const response = await fetch('/api/post-feed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: feedTitle,
-          content: feedContent,
-          author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode,
-          link_url: feedLink.trim() || null,
-          expires_at: feedExpiry || null
-        })
-      });
-      if (response.ok) {
-        alert(`Announcement posted to ${feedCourseCode} students!`);
-        setFeedTitle('');
-        setFeedContent('');
-        setFeedCourseCode('');
-        setFeedLink('');
-        setFeedExpiry('');
-      } else {
-        alert("Failed to post announcement.");
-      }
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIsPosting(false);
-    }
   };
 
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
@@ -523,50 +479,16 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Students & Courses Management */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
-            <div className="flex flex-col gap-3">
-              <select className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer">
-                <option>Manage Course Rosters</option>
-                {courses.map(c => <option key={c.id}>{c.course_code}</option>)}
-              </select>
-              <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
-              <div className="flex gap-2">
-                <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="flex-1 bg-gray-900 text-white px-4 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
-                  {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
-                </button>
-                <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
-                  {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Campus Broadcast */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Megaphone size={16} className="text-[#2563EB]"/> Campus Broadcast</h3>
-            <div className="flex flex-col gap-3">
-              <select value={feedCourseCode} onChange={e => setFeedCourseCode(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer">
-                <option value="">-- Target Class --</option>
-                {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-              </select>
-              <input type="text" value={feedTitle} onChange={e => setFeedTitle(e.target.value)} placeholder="Announcement Title" className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" />
-              <textarea value={feedContent} onChange={e => setFeedContent(e.target.value)} placeholder="Type the announcement..." rows={2} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-medium focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" />
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><LinkIcon size={14} className="text-gray-400" /></div>
-                  <input type="url" value={feedLink} onChange={e => setFeedLink(e.target.value)} placeholder="Link (Optional)" className="w-full bg-gray-50 border border-gray-200 p-3 pl-9 rounded-xl outline-none font-medium text-sm focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                </div>
-                <div className="relative">
-                  <input type="datetime-local" value={feedExpiry} onChange={e => setFeedExpiry(e.target.value)} className="w-full bg-gray-50 border border-gray-200 p-3 text-sm rounded-xl outline-none font-medium focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all text-gray-500" title="Expiry Date" />
-                </div>
-              </div>
-
-              <button onClick={handlePostFeed} disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} className="w-full bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
-                {isPosting ? <RefreshCw size={16} className="animate-spin" /> : <Send size={16} />} Send Broadcast
+        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Student Management</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
+            <div className="flex gap-2">
+              <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
+              </button>
+              <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
               </button>
             </div>
           </div>
