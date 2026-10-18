@@ -144,6 +144,7 @@ export default function StudentPortal() {
       
       const courseCodes = courseRows?.map(c => c.course_code) || [];
 
+      // THE FIX IS HERE: We must select 'expires_at'
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
         .select('session_id, course_code, created_at, is_active, expires_at')
@@ -152,7 +153,6 @@ export default function StudentPortal() {
 
       if (sessionError) throw sessionError;
 
-      // THE FIX: Properly check active and expired
       const now = new Date().getTime();
       const liveSession = sessionRows?.find(s => {
         if (!s.is_active) return false;
