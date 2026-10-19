@@ -7,6 +7,7 @@ interface AttendanceLogRow {
   matric_number: string;
   status: string;
   check_in_time: string;
+  device_info: string | null; // NEW
 }
 
 export async function GET(request: Request) {
@@ -32,16 +33,40 @@ export async function GET(request: Request) {
       .eq('session_id', sessionId)
       .order('check_in_time', { ascending: false });
 
+    // Fetch nicknames for the students who checked in
+    const matrics = (logs || []).map(l => l.matric_number);
+    const { data: profiles } = await supabase
+      .from('student_profiles')
+      .select('matric_number, nickname')
+      .in('matric_number', matrics);
+
+    const nicknameMap = new Map();
+    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
+
     return NextResponse.json({
       course: courseName,
       isActive: session?.is_active === true,
       createdAt: session?.created_at || null,
-      logs: (logs as AttendanceLogRow[] | null || []).map((l) => ({
-        id: l.id,
-        matricNumber: l.matric_number,
-        status: l.status,
-        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }))
+      logs: (logs as AttendanceLogRow[] | null || []).map((l) => {
+        let reason = null;
+        if (l.status !== 'verified' && l.device_info) {
+          try {
+            const info = JSON.parse(l.device_info);
+            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
+            else if (info.verificationMethod === 'skipped') reason = "Biometric skipped (iOS/Android)";
+            else if (info.reason) reason = info.reason;
+          } catch {}
+        }
+        
+        return {
+          id: l.id,
+          matricNumber: l.matric_number,
+          nickname: nicknameMap.get(l.matric_number) || null,
+          status: l.status,
+          time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reason
+        };
+      })
     });
   } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });

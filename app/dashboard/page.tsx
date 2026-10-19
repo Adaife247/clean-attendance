@@ -2,12 +2,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/utils/supabase';
 import {
-  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
+  Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
   User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText
 } from 'lucide-react';
 
-interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
+interface Log { 
+  id: string; 
+  matricNumber: string; 
+  nickname?: string; 
+  status: string; 
+  time: string; 
+  reason?: string; 
+}
 interface DashboardData { course: string; isActive: boolean; logs: Log[]; }
 interface LecturerProfile { full_name: string; department: string; }
 interface Course { id: string; course_code: string; }
@@ -452,9 +459,14 @@ export default function LecturerDashboard() {
   }
 
   // --- Live Radar View ---
+  const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
+  const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
+
   return (
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* Header Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -479,6 +491,46 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* REVIEW REQUIRED SECTION */}
+        {flaggedLogs.length > 0 && (
+          <div className="bg-red-50 rounded-2xl shadow-sm border border-red-200 overflow-hidden animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="px-4 md:px-6 py-4 border-b border-red-100 bg-red-100/50 flex items-center gap-2">
+              <AlertTriangle className="text-red-600" size={18} />
+              <h3 className="font-bold text-red-900">Review Required ({flaggedLogs.length})</h3>
+            </div>
+            <div className="divide-y divide-red-100">
+              {flaggedLogs.map((log) => (
+                <div key={log.id} className="p-4 md:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-red-100/30 transition-colors">
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">
+                      {log.matricNumber}
+                      {log.nickname && <span className="text-sm text-gray-500 font-medium ml-2">({log.nickname})</span>}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-[10px] uppercase font-bold text-red-700 bg-red-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        {log.status === 'pending_override' ? <Hand size={10} /> : <AlertTriangle size={10} />}
+                        {log.status === 'pending_override' ? 'Raised Hand' : 'Flagged'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                        <Clock size={12} /> {log.time}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium mt-2">
+                      <strong>Reason:</strong> {log.reason || 'Biometric skipped or location anomaly'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleManualOverride(log.matricNumber)}
+                    className="whitespace-nowrap bg-white border border-red-200 text-red-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck size={16} /> Approve
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -494,9 +546,10 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* CLEAN VERIFIED LEDGER */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex flex-row items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-gray-700 flex items-center gap-2"><Users size={18} /> Verified Ledger</h3>
+            <h3 className="font-bold text-gray-700 flex items-center gap-2"><CheckCircle className="text-green-500" size={18} /> Verified Ledger ({verifiedLogs.length})</h3>
             <span className="text-xs text-gray-400 font-bold">Updated: {lastRefreshed || 'Just now'}</span>
           </div>
           <div className="overflow-x-auto">
@@ -506,16 +559,15 @@ export default function LecturerDashboard() {
                   <th className="px-4 md:px-6 py-4 font-bold">Matric Number</th>
                   <th className="px-4 md:px-6 py-4 font-bold">Time</th>
                   <th className="px-4 md:px-6 py-4 font-bold">Status</th>
-                  <th className="px-4 md:px-6 py-4 font-bold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data?.logs.length === 0 ? (
+                {verifiedLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 md:px-6 py-12 text-center text-gray-400 font-bold">Waiting for students to check in...</td>
+                    <td colSpan={3} className="px-4 md:px-6 py-12 text-center text-gray-400 font-bold">No verified check-ins yet.</td>
                   </tr>
                 ) : (
-                  data?.logs.map((log) => (
+                  verifiedLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 md:px-6 py-3 md:py-4 font-bold text-gray-900">
                         {log.matricNumber}
@@ -523,20 +575,7 @@ export default function LecturerDashboard() {
                       </td>
                       <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm font-medium"><Clock size={14} /> {log.time}</td>
                       <td className="px-4 md:px-6 py-3 md:py-4">
-                        {log.status === 'verified' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Verified</span>
-                        ) : log.status === 'pending_override' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 animate-pulse"><Hand size={12} strokeWidth={2.5} /> Raised Hand</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200"><AlertTriangle size={12} strokeWidth={2.5} /> Flagged</span>
-                        )}
-                      </td>
-                      <td className="px-4 md:px-6 py-3 md:py-4 text-right">
-                        {log.status !== 'verified' && (
-                          <button onClick={() => handleManualOverride(log.matricNumber)} className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all">
-                            <ShieldCheck size={14} /> Approve
-                          </button>
-                        )}
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Verified</span>
                       </td>
                     </tr>
                   ))
