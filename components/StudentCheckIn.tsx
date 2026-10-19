@@ -8,32 +8,13 @@ import {
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 
-interface Telemetry { 
-  lat: number; 
-  lng: number; 
-  alt: number | null; 
-  acc: number; 
-  timestamp: number; 
-}
-
-interface Props { 
-  sessionId: string; 
-}
+interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
+interface Props { sessionId: string; }
 
 type Status =
-  | 'idle' 
-  | 'checking' 
-  | 'needs_setup' 
-  | 'ready'
-  | 'locating' 
-  | 'verifying' 
-  | 'success' 
-  | 'denied' 
-  | 'failed'
-  | 'offline-queued' 
-  | 'syncing' 
-  | 'rating' 
-  | 'rated';
+  | 'idle' | 'checking' | 'needs_setup' | 'ready'
+  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'
+  | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
 const RATING_TAGS = [
   'Clear Audio',
@@ -68,26 +49,18 @@ function getMeme(minutesLate: number): { title: string; sub: string; emoji: stri
 
 export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
-  
-  // Core State
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
 
-  // Session Metadata
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
-
-  // Rating State
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
-
-  // Verification Metadata
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
 
-  // Refs
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
@@ -96,10 +69,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // Pre-warm GPS
+  // --- iOS FIX DETECTION ---
+  // Detect if user is on iOS AND using a browser other than Safari (where WebAuthn fails)
+  const isIosNonSafari = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isNotSafari = /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return isIOS && isNotSafari;
+  };
+
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-
     const id = navigator.geolocation.watchPosition(
       (position) => {
         prewarmBufferRef.current.push({
@@ -116,17 +97,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
-
     prewarmWatchIdRef.current = id;
-
-    return () => {
-      if (prewarmWatchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(prewarmWatchIdRef.current);
-      }
-    };
+    return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, []);
 
-  // Pre-warm Fingerprint
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -137,13 +111,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         console.error('[CampusCheck] Fingerprint generation failed:', err);
       }
     }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
-  // Fetch Session Metadata
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -152,18 +122,53 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
-      } catch {
-        // Non-fatal
-      }
+      } catch {}
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
 
-  // Auto-advance from 'success' to 'rating'
+  const syncOfflineQueue = useCallback(async () => {
+    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    if (queue.length === 0) return;
+    setStatus('syncing');
+    const remainingQueue: typeof queue = [];
+    let successCount = 0;
+
+    for (const item of queue) {
+      try {
+        const res = await fetch('/api/verify-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: item.session,
+            matricNumber: item.matric,
+            telemetry: item.telemetry,
+            deviceFingerprint: item.fingerprint,
+            verificationMethod: item.verificationMethod
+          })
+        });
+        if (res.ok || res.status === 409) successCount++;
+        else remainingQueue.push(item);
+      } catch {
+        remainingQueue.push(item);
+      }
+    }
+    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
+    if (successCount > 0 && remainingQueue.length === 0) {
+      triggerSuccessVibration();
+      setStatus('success');
+    } else if (remainingQueue.length > 0) {
+      setStatus('offline-queued');
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineQueue);
+    const id = setTimeout(() => { syncOfflineQueue(); }, 0);
+    return () => { window.removeEventListener('online', syncOfflineQueue); clearTimeout(id); };
+  }, [syncOfflineQueue]);
+
   useEffect(() => {
     if (status !== 'success') return;
     const t = setTimeout(() => setStatus('rating'), 2500);
@@ -270,8 +275,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed');
       }
     } catch (error) {
-      const isNetwork = !navigator.onLine ||
-        (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
+      const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
         existing.push({
@@ -280,7 +284,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           telemetry: gpsTelemetry,
           fingerprint: fingerprintRef.current,
           verificationMethod,
-          timestamp: Date.now(),
+          timestamp: Date.now()
         });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
@@ -296,37 +300,38 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setLiveAccuracy(null);
     let verificationMethod = 'skipped';
 
-    try {
-      const genRes = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber })
-      });
+    // THE FIX: iOS Non-Safari bypasses WebAuthn completely
+    const skipWebAuthn = isIosNonSafari();
 
-      if (genRes.status === 404) {
-        verificationMethod = 'skipped';
-      } else {
-        const options = await genRes.json();
-        if (options.error) throw new Error(options.error);
-
-        const asseResp = await startAuthentication(options);
-
-        const verifyRes = await fetch('/api/webauthn/auth/verify', {
+    if (!skipWebAuthn) {
+      try {
+        const genRes = await fetch('/api/webauthn/auth/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ matricNumber, authResponse: asseResp })
+          body: JSON.stringify({ matricNumber })
         });
-        const verifyResult = await verifyRes.json();
-
-        if (verifyResult.verified) {
-          verificationMethod = 'biometric';
+        if (genRes.status === 404) {
+          verificationMethod = 'skipped';
         } else {
-          throw new Error("Biometric mismatch");
+          const options = await genRes.json();
+          if (options.error) throw new Error(options.error);
+          const asseResp = await startAuthentication(options);
+          const verifyRes = await fetch('/api/webauthn/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricNumber, authResponse: asseResp })
+          });
+          const verifyResult = await verifyRes.json();
+          if (verifyResult.verified) verificationMethod = 'biometric';
+          else throw new Error("Biometric mismatch");
         }
+      } catch (error) {
+        console.warn("Biometric failed, falling back to flagged mode:", error);
+        verificationMethod = 'skipped';
       }
-    } catch (error) {
-      console.warn("Biometric failed, falling back to flagged mode:", error);
-      verificationMethod = 'skipped';
+    } else {
+      // iOS Non-Safari: Bypass biometrics and flag as iOS Web
+      verificationMethod = 'ios_web';
     }
 
     if (!navigator.geolocation) {

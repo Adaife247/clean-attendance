@@ -4,10 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 const GEOFENCE_RADIUS_METERS = 250;
 const HARD_BLOCK_METERS = 500;
 
-interface AttendanceLogDeviceInfo {
-  deviceFingerprint?: string;
-}
-
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -33,6 +29,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
+    // 1. Fetch Session
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
@@ -52,7 +49,6 @@ export async function POST(request: Request) {
     }
 
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
-
     if (opensAfter > 0 && session.created_at) {
       const sessionStart = new Date(session.created_at).getTime();
       const now = Date.now();
@@ -66,7 +62,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Enrollment check
+    // 2. Hard Reject: Enrollment Check
     const { data: courseRow } = await supabase
       .from('courses')
       .select('id')
@@ -75,9 +71,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!courseRow) {
-      return NextResponse.json({
-        message: "Course configuration error. Please notify your lecturer."
-      }, { status: 500 });
+      return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
     }
 
     const { data: enrollment } = await supabase
@@ -89,10 +83,11 @@ export async function POST(request: Request) {
 
     if (!enrollment) {
       return NextResponse.json({
-        message: `You are not registered for ${session.course_code}. Contact your lecturer to be added.`
-      }, { status: 403 });
+        message: `You are not registered for ${session.course_code}. Please contact your lecturer.`
+      }, { status: 403 }); // Hard Reject
     }
 
+    // 3. Hard Reject: Duplicate Check
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -104,7 +99,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // Layer 1: hardware fingerprint proxy check
+    // 4. Hard Reject: Proxy Check
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -113,82 +108,14 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint);
 
       if (ghostLogs && ghostLogs.length > 0) {
-        await supabase.from('attendance_logs').insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'flagged',
-          device_info: JSON.stringify({
-            telemetry,
-            reason: `Hardware proxy match with ${ghostLogs[0].matric_number}`,
-            deviceFingerprint,
-          }),
-          device_hash: hardwareFingerprint
-        }]);
         return NextResponse.json({
-          status: 'flagged',
-          distance: 0,
-          message: "Security Block: Multiple check-ins detected from identical hardware specs."
-        }, { status: 200 });
+          status: 'rejected',
+          message: "Security Block: This device has already been used for another student."
+        }, { status: 403 }); // Hard Reject
       }
     }
 
-    // Layer 2: cross-browser device fingerprint check
-    if (deviceFingerprint && deviceFingerprint !== 'unknown') {
-      const { data: existingFingerprints } = await supabase
-        .from('attendance_logs')
-        .select('matric_number, device_info')
-        .eq('session_id', sessionId)
-        .neq('matric_number', cleanMatric);
-
-      if (existingFingerprints) {
-        for (const log of existingFingerprints) {
-          const info: AttendanceLogDeviceInfo =
-            typeof log.device_info === 'string'
-              ? JSON.parse(log.device_info)
-              : (log.device_info as AttendanceLogDeviceInfo);
-
-          if (info?.deviceFingerprint === deviceFingerprint) {
-            await supabase.from('attendance_logs').insert([{
-              session_id: sessionId,
-              matric_number: cleanMatric,
-              status: 'flagged',
-              device_info: JSON.stringify({
-                telemetry,
-                reason: `Cross-browser device match with ${log.matric_number}`,
-                deviceFingerprint,
-              }),
-              device_hash: deviceFingerprint,
-            }]);
-
-            return NextResponse.json({
-              status: 'flagged',
-              distance: 0,
-              message: 'Security Block: This device has already been used to check in for another student in this session.',
-            }, { status: 200 });
-          }
-        }
-      }
-    }
-
-    // Layer 3: Coarse IP cluster check (Soft Lock)
-    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (clientIp !== 'unknown') {
-      const ninetySecondsAgo = new Date(Date.now() - 90000).toISOString();
-      const { data: sameIpCheckins } = await supabase
-        .from('attendance_logs')
-        .select('matric_number')
-        .eq('session_id', sessionId)
-        .neq('matric_number', cleanMatric)
-        .gte('check_in_time', ninetySecondsAgo);
-
-      if (sameIpCheckins && sameIpCheckins.length >= 2) {
-        // Flag them, but let the location check below decide if they are in the hall
-        // We will override their finalStatus to 'flagged' later if they pass the geofence.
-        // This prevents blocking legitimate students on the same campus Wi-Fi.
-      }
-    }
-
-    // Anomaly detection
+    // 5. Geofence & Anomaly Check
     let isSpoofed = false;
     let bestPing = telemetry[0];
 
@@ -197,14 +124,19 @@ export async function POST(request: Request) {
       if (ping.acc < bestPing.acc) bestPing = ping;
     }
 
-    if (bestPing.acc < 3) isSpoofed = true;
-
+    let totalDrift = 0;
     for (let i = 1; i < telemetry.length; i++) {
       const prev = telemetry[i - 1];
       const curr = telemetry[i];
       const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      totalDrift += drift;
+      
       const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
       if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
+    }
+
+    if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) {
+      isSpoofed = true; 
     }
 
     const distanceToLecturer = getDistanceInMeters(
@@ -229,9 +161,9 @@ export async function POST(request: Request) {
       if (isSpoofed) {
         finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
-      } else if (verificationMethod === 'skipped') {
-        finalStatus = 'flagged';
-        responseMessage = "Flagged: Biometric skipped. Lecturer must visually verify.";
+      } else if (verificationMethod === 'ios_web') {
+        finalStatus = 'verified';
+        responseMessage = "Verified via iOS GPS";
       } else {
         finalStatus = 'verified';
         responseMessage = "Verified";
@@ -248,7 +180,6 @@ export async function POST(request: Request) {
         distanceMeters: Math.round(distanceToLecturer),
         deviceFingerprint: deviceFingerprint || 'unknown',
         verificationMethod: verificationMethod || 'skipped',
-        clientIp,
       }),
       device_hash: hardwareFingerprint || 'unknown-hardware',
     }]);
