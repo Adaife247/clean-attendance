@@ -1,9 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText
+  Megaphone, Calendar, Edit3, Save, FileText, Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -18,36 +18,19 @@ interface CourseRecord {
   streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
 }
 
-interface LogRow {
-  session_id: string;
-  status: string;
-}
-
-interface SessionRow {
-  session_id: string;
-  course_code: string;
-  created_at: string;
-  is_active: boolean;
-  expires_at: string | null;
-}
-
-interface HistoryRow extends SessionRow {
-  status: string;
-}
-
-interface CampusUpdate {
-  id: string;
-  title: string;
-  content: string;
-  author: string;
-  course_code: string | null;
-  created_at: string;
-}
+interface LogRow { session_id: string; status: string; }
+interface SessionRow { session_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
+interface HistoryRow extends SessionRow { status: string; }
+interface CampusUpdate { id: string; title: string; content: string; author: string; course_code: string | null; created_at: string; }
+interface AvailableCourse { id: string; course_code: string; department: string; level: string; }
 
 export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register'>('dashboard');
   
   const [matricNumber, setMatricNumber] = useState('');
+  const [studentDept, setStudentDept] = useState('');
+  const [studentLevel, setStudentLevel] = useState('');
+  
   const [isVerifying, setIsVerifying] = useState(false);
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
@@ -58,6 +41,10 @@ export default function StudentPortal() {
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [feed, setFeed] = useState<CampusUpdate[]>([]);
+  
+  // Self-registration State
+  const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
+  const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('campuscheck_student_matric');
@@ -79,10 +66,9 @@ export default function StudentPortal() {
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
-      // 1. REQUIRE WEBAUTHN AUTHENTICATION
+      // 1. WebAuthn
       const genRes = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: cleanMatric })
       });
 
@@ -96,20 +82,17 @@ export default function StudentPortal() {
       const asseResp = await startAuthentication(options);
 
       const verifyRes = await fetch('/api/webauthn/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: cleanMatric, authResponse: asseResp })
       });
 
       const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) {
-        throw new Error("Biometric verification failed. Access denied.");
-      }
+      if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
 
-      // 2. FETCH NICKNAME
+      // 2. Fetch Profile
       const { data: profile } = await supabase
         .from('student_profiles')
-        .select('nickname')
+        .select('nickname, department, level')
         .eq('matric_number', cleanMatric)
         .maybeSingle();
 
@@ -117,8 +100,18 @@ export default function StudentPortal() {
         setNickname(profile.nickname);
         setSavedNickname(profile.nickname);
       }
+      if (profile?.department) setStudentDept(profile.department);
+      if (profile?.level) setStudentLevel(profile.level);
 
-      // 3. FETCH ENROLLMENTS
+      // 3. Fetch Feed
+      const { data: feedData } = await supabase
+        .from('campus_updates')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (feedData) setFeed(feedData);
+
+      // 4. Fetch Records (Only enrolled)
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -127,7 +120,7 @@ export default function StudentPortal() {
       if (enrollError) throw enrollError;
 
       if (!enrollmentRows || enrollmentRows.length === 0) {
-        setError("You are not enrolled in any course yet.");
+        setRecords([]);
         return;
       }
 
@@ -138,20 +131,8 @@ export default function StudentPortal() {
         .in('id', courseIds);
 
       if (courseError) throw courseError;
-      
       const courseCodes = courseRows?.map(c => c.course_code) || [];
 
-      // 4. FETCH FEED (Only for their courses)
-      // Supabase doesn't have a native OR condition for null easily, so we fetch matching course or global
-      const { data: feedData } = await supabase
-        .from('campus_updates')
-        .select('*')
-        .or(`course_code.is.null,course_code.in.(${courseCodes.join(',')})`)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (feedData) setFeed(feedData);
-
-      // 5. FETCH SESSIONS
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
         .select('session_id, course_code, created_at, is_active, expires_at')
@@ -166,10 +147,7 @@ export default function StudentPortal() {
         const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
         return !isExpired;
       });
-      
-      if (liveSession) {
-        setActiveLiveClass(liveSession.course_code);
-      }
+      if (liveSession) setActiveLiveClass(liveSession.course_code);
 
       const sessionIds = (sessionRows || []).map(s => s.session_id);
       let studentLogs: LogRow[] = [];
@@ -195,19 +173,16 @@ export default function StudentPortal() {
       setHistory(historyData);
 
       const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
-
       (sessionRows as SessionRow[] || []).forEach(session => {
         const course = session.course_code;
         const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
         stats.total += 1;
         stats.sessions.push(session);
-
         if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
         courseStats.set(course, stats);
       });
 
       const finalRecords: CourseRecord[] = [];
-
       courseStats.forEach((stats, course) => {
         const total = stats.total;
         const attended = stats.attended;
@@ -245,14 +220,63 @@ export default function StudentPortal() {
     }
   };
 
-  const saveNickname = async () => {
-    if (!nickname.trim() || !matricNumber) return;
+  const saveProfile = async () => {
+    if (!matricNumber) return;
     await supabase.from('student_profiles').upsert({
       matric_number: matricNumber.toUpperCase().trim(),
-      nickname: nickname.trim()
+      nickname: nickname.trim(),
+      department: studentDept.toUpperCase().trim(),
+      level: studentLevel.trim()
     });
     setSavedNickname(nickname.trim());
     setIsEditingNickname(false);
+    // Refresh available courses after saving profile
+    fetchAvailableCourses();
+  };
+
+  // --- FIXED: Wrapped in useCallback ---
+  const fetchAvailableCourses = useCallback(async () => {
+    if (!studentDept || !studentLevel) return;
+    
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('id, course_code, department, level')
+      .eq('department', studentDept.toUpperCase())
+      .eq('level', studentLevel);
+
+    if (allCourses) {
+      const { data: enrolled } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('matric_number', matricNumber.toUpperCase().trim());
+      
+      const enrolledIds = new Set(enrolled?.map(e => e.course_id) || []);
+      const available = allCourses.filter(c => !enrolledIds.has(c.id));
+      
+      setAvailableCourses(available);
+    }
+  }, [studentDept, studentLevel, matricNumber]);
+
+  useEffect(() => {
+    if (activeTab === 'register') fetchAvailableCourses();
+  }, [activeTab, fetchAvailableCourses]);
+
+  const handleEnroll = async (courseId: string, courseCode: string) => {
+    setIsEnrolling(courseId);
+    try {
+      const { error } = await supabase.from('enrollments').insert([{
+        course_id: courseId,
+        matric_number: matricNumber.toUpperCase().trim()
+      }]);
+      if (error) throw error;
+      alert(`Successfully enrolled in ${courseCode}!`);
+      handleVerifyAndFetch(); // Refresh data
+      setActiveTab('dashboard');
+    } catch {
+      alert("Failed to enroll. Please try again.");
+    } finally {
+      setIsEnrolling(null);
+    }
   };
 
   const getShieldColor = (pct: number) => {
@@ -297,20 +321,9 @@ export default function StudentPortal() {
             <>
               <div className="relative mb-4">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                <input
-                  type="text"
-                  placeholder="Matric Number (e.g. CSC/2021/001)"
-                  value={matricNumber}
-                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()}
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
-                />
+                <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
               </div>
-              <button
-                onClick={handleVerifyAndFetch}
-                disabled={matricNumber.length < 5 || isVerifying}
-                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
-              >
+              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70">
                 {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
               </button>
@@ -325,58 +338,69 @@ export default function StudentPortal() {
 
           {records && (
             <>
-              <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
-                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
-                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
-                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
+              <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
+                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
+                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
+                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
               </div>
 
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   
-                  <div className="flex items-center justify-between bg-blue-50 border border-blue-100 p-3 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Nickname:</span>
+                  {/* Profile Editor */}
+                  <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
+                        {isEditingNickname ? (
+                          <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-sm font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
+                        ) : (
+                          <span className="text-sm font-black text-blue-900">{savedNickname || 'Not set'}</span>
+                        )}
+                      </div>
                       {isEditingNickname ? (
-                        <input 
-                          type="text" 
-                          value={nickname} 
-                          onChange={e => setNickname(e.target.value)} 
-                          className="bg-white border border-blue-200 rounded px-2 py-1 text-sm font-bold text-gray-900 outline-none w-32"
-                          placeholder="E.g., Big Fish"
-                          maxLength={15}
-                        />
+                        <button onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={16} /></button>
                       ) : (
-                        <span className="text-sm font-black text-blue-900">{savedNickname || 'Not set'}</span>
+                        <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={16} /></button>
                       )}
                     </div>
-                    {isEditingNickname ? (
-                      <button onClick={saveNickname} className="text-blue-600 hover:text-blue-800"><Save size={16} /></button>
-                    ) : (
-                      <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={16} /></button>
+                    
+                    {isEditingNickname && (
+                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
+                        <input type="text" value={studentDept} onChange={e => setStudentDept(e.target.value)} placeholder="Dept (e.g., CSC)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full uppercase" />
+                        <input type="text" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} placeholder="Level (e.g., 200)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full" />
+                      </div>
                     )}
                   </div>
 
-                  {records.map((record) => {
-                    const colors = getShieldColor(record.percentage);
-                    return (
-                      <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
-                            <p className="text-[11px] text-gray-600 font-semibold mt-0.5">{record.attended_classes} / {record.total_classes} Classes</p>
+                  {records.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-2xl border border-gray-200">
+                      <p className="text-sm font-bold text-gray-500">You have no courses yet.</p>
+                      <button onClick={() => setActiveTab('register')} className="mt-3 text-[#2563EB] font-bold text-sm hover:underline">Go to Course Registration</button>
+                    </div>
+                  ) : (
+                    records.map((record) => {
+                      const colors = getShieldColor(record.percentage);
+                      return (
+                        <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
+                              <p className="text-[11px] text-gray-600 font-semibold mt-0.5">{record.attended_classes} / {record.total_classes} Classes</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                          <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
+                            <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
+                            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
                           </div>
                         </div>
-                        <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
-                          <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
-                          <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               )}
 
@@ -403,6 +427,43 @@ export default function StudentPortal() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'register' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Plus size={18} className="text-[#2563EB]" />
+                    <h3 className="font-bold text-gray-800">Register for Courses</h3>
+                  </div>
+                  
+                  {(!studentDept || !studentLevel) ? (
+                    <div className="text-center p-6 bg-yellow-50 border border-yellow-200 rounded-xl">
+                      <p className="text-sm font-bold text-yellow-800">Please set your Department and Level in the Shield tab first.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {availableCourses.length === 0 ? (
+                        <p className="text-center text-sm text-gray-500 py-4">No new courses available for {studentDept} {studentLevel}.</p>
+                      ) : (
+                        availableCourses.map(course => (
+                          <div key={course.id} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{course.course_code}</p>
+                              <p className="text-[10px] text-gray-500 font-medium">{course.department} • Level {course.level}</p>
+                            </div>
+                            <button 
+                              onClick={() => handleEnroll(course.id, course.course_code)}
+                              disabled={isEnrolling === course.id}
+                              className="bg-[#2563EB] text-white px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                              {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

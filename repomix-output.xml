@@ -50,11 +50,15 @@ app/
       route.ts
     dashboard-data/
       route.ts
+    end-session/
+      route.ts
     hod-data/
       route.ts
     master-export/
       route.ts
     override-attendance/
+      route.ts
+    post-feed/
       route.ts
     rate-session/
       route.ts
@@ -79,6 +83,8 @@ app/
         route.ts
   dashboard/
     analytics/
+      page.tsx
+    broadcast/
       page.tsx
     courses/
       page.tsx
@@ -128,6 +134,28 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="app/api/end-session/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+export async function POST(request: Request) {
+  try {
+    const { sessionId } = await request.json();
+    if (!sessionId) return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
+
+    const { error } = await supabase
+      .from('lecture_sessions')
+      .update({ is_active: false })
+      .eq('session_id', sessionId);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Failed to end session' }, { status: 500 });
+  }
+}
+</file>
 
 <file path="app/api/hod-data/route.ts">
 import { NextResponse } from 'next/server';
@@ -986,6 +1014,226 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/dashboard/broadcast/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/utils/supabase';
+import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
+
+interface Course { id: string; course_code: string; }
+interface LecturerProfile { full_name: string; }
+interface BroadcastPost {
+  id: string;
+  title: string;
+  content: string;
+  course_code: string;
+  created_at: string;
+}
+
+export default function BroadcastPage() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [profile, setProfile] = useState<LecturerProfile | null>(null);
+  
+  const [feedTitle, setFeedTitle] = useState('');
+  const [feedContent, setFeedContent] = useState('');
+  const [feedCourseCode, setFeedCourseCode] = useState('');
+  const [feedLink, setFeedLink] = useState('');
+  const [feedExpiry, setFeedExpiry] = useState('');
+  
+  const [isPosting, setIsPosting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState<BroadcastPost[]>([]);
+
+  const fetchData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profileData } = await supabase
+      .from('lecturers')
+      .select('full_name')
+      .eq('id', session.user.id)
+      .single();
+    if (profileData) setProfile(profileData);
+
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('id, course_code')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+    if (courseData) {
+      setCourses(courseData);
+      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
+    }
+
+    // Fetch their previous broadcasts
+    if (profileData) {
+      const courseCodes = courseData?.map(c => c.course_code) || [];
+      if (courseCodes.length > 0) {
+        const { data: posts } = await supabase
+          .from('campus_updates')
+          .select('id, title, content, course_code, created_at')
+          .in('course_code', courseCodes)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (posts) setHistory(posts);
+      }
+    }
+    
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    // Defer to next tick to fix React 19 setState warning
+    const id = setTimeout(() => { fetchData(); }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  const handlePostFeed = async () => {
+    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
+      alert("Please fill all fields and select a course.");
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/post-feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: feedTitle,
+          content: feedContent,
+          author: profile?.full_name || 'Lecturer',
+          course_code: feedCourseCode,
+          link_url: feedLink.trim() || null,
+          expires_at: feedExpiry || null
+        })
+      });
+      if (response.ok) {
+        alert(`Announcement posted to ${feedCourseCode} students!`);
+        setFeedTitle('');
+        setFeedContent('');
+        setFeedLink('');
+        setFeedExpiry('');
+        fetchData(); // Refresh the history list
+      } else {
+        alert("Failed to post announcement.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans space-y-6">
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+        <div className="bg-[#2563EB] p-6 text-white">
+          <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
+          <p className="text-blue-100 font-medium mt-1">Send announcements and updates to your students.</p>
+        </div>
+        
+        <div className="p-6 md:p-8 space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Target Class</label>
+            <select 
+              value={feedCourseCode} 
+              onChange={e => setFeedCourseCode(e.target.value)} 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
+            >
+              <option value="">-- Select a Course --</option>
+              {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Announcement Title</label>
+            <input 
+              type="text" 
+              value={feedTitle} 
+              onChange={e => setFeedTitle(e.target.value)} 
+              placeholder="e.g., Venue Change for Mid-Term Exam" 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Message</label>
+            <textarea 
+              value={feedContent} 
+              onChange={e => setFeedContent(e.target.value)} 
+              placeholder="Type your announcement here..." 
+              rows={3} 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" 
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Link (Optional)</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><LinkIcon size={16} className="text-gray-400" /></div>
+                <input 
+                  type="url" 
+                  value={feedLink} 
+                  onChange={e => setFeedLink(e.target.value)} 
+                  placeholder="https://..." 
+                  className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Expiry Date (Optional)</label>
+              <input 
+                type="datetime-local" 
+                value={feedExpiry} 
+                onChange={e => setFeedExpiry(e.target.value)} 
+                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-600 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+              />
+            </div>
+          </div>
+
+          <button 
+            onClick={handlePostFeed} 
+            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} 
+            className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2 mt-4"
+          >
+            {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
+          </button>
+        </div>
+      </div>
+
+      {/* RECENT BROADCASTS HISTORY */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {history.length === 0 ? (
+            /* Fixed the apostrophe escape here */
+            <div className="p-8 text-center text-gray-500 font-medium">You haven&apos;t posted any announcements yet.</div>
+          ) : (
+            history.map((post) => (
+              <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className="font-extrabold text-gray-900">{post.title}</h4>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{post.course_code}</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1 mb-2">{post.content}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Sent {new Date(post.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/hod/page.tsx">
 'use client';
 import { useState, useEffect, useCallback } from 'react';
@@ -1552,135 +1800,32 @@ export async function GET(request: Request) {
 }
 </file>
 
-<file path="app/dashboard/layout.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { 
-  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award 
-} from 'lucide-react';
-import Link from 'next/link';
+<file path="app/api/post-feed/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isHod, setIsHod] = useState(false);
+export async function POST(request: Request) {
+  try {
+    const { title, content, author, course_code, link_url, expires_at } = await request.json();
+    
+    if (!title || !content || !course_code) {
+      return NextResponse.json({ error: 'Title, content, and course_code are required' }, { status: 400 });
+    }
 
-  // Check if the logged-in lecturer is an HOD
-  useEffect(() => {
-    const checkHodStatus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+    const { error } = await supabase.from('campus_updates').insert([{
+      title, 
+      content, 
+      author: author || 'Lecturer',
+      course_code,
+      link_url: link_url || null,
+      expires_at: expires_at || null
+    }]);
 
-      const { data } = await supabase
-        .from('lecturers')
-        .select('department')
-        .eq('id', session.user.id)
-        .single();
-
-      // You can adjust this logic later (e.g., check an `is_hod` boolean column)
-      if (data?.department) {
-        setIsHod(true);
-      }
-    };
-    checkHodStatus();
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
-  const navItems = [
-    { name: 'Live Radar', href: '/dashboard', icon: Radio },
-    { name: 'Student Management', href: '/dashboard/courses', icon: Users },
-    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
-  ];
-
-  if (isHod) {
-    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: 'Failed to post update' }, { status: 500 });
   }
-
-  return (
-    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
-      
-      {/* Mobile Top Navigation */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
-          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
-        </div>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200"
-        >
-          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </div>
-
-      {/* Desktop Sidebar & Mobile Dropdown */}
-      <aside className={`
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 transition-transform duration-300 ease-in-out
-        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
-        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
-      `}>
-        {/* Desktop Branding (Hidden on Mobile) */}
-        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100">
-          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
-            <ShieldCheck size={22} strokeWidth={2.5} />
-          </div>
-          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
-        </div>
-
-        {/* Navigation Links */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link 
-                key={item.name} 
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Secure Logout Button */}
-        <div className="p-4 border-t border-gray-100">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all"
-          >
-            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
-        {children}
-      </main>
-
-      {/* Mobile Overlay (Click to close menu) */}
-      {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-gray-900/20 z-30 md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-    </div>
-  );
 }
 </file>
 
@@ -2040,6 +2185,112 @@ export const rpID = process.env.NODE_ENV === 'production'
 export const origin = process.env.NODE_ENV === 'production' 
   ? `https://${rpID}` 
   : 'http://localhost:3000';
+</file>
+
+<file path="app/dashboard/layout.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { 
+  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
+} from 'lucide-react';
+import Link from 'next/link';
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHod, setIsHod] = useState(false);
+
+  useEffect(() => {
+    const checkHodStatus = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
+      if (data?.department) setIsHod(true);
+    };
+    checkHodStatus();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
+  const navItems = [
+    { name: 'Live Radar', href: '/dashboard', icon: Radio },
+    { name: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
+    { name: 'Student Management', href: '/dashboard/courses', icon: Users },
+    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
+  ];
+
+  if (isHod) {
+    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
+  }
+
+  return (
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
+          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+
+      <aside className={`
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 transition-transform duration-300 ease-in-out
+        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
+        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
+      `}>
+        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100">
+          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+            <ShieldCheck size={22} strokeWidth={2.5} />
+          </div>
+          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-gray-100">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
+            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
+        {children}
+      </main>
+
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+    </div>
+  );
+}
 </file>
 
 <file path="app/layout.tsx">
@@ -3512,6 +3763,7 @@ interface SessionRow {
   course_code: string;
   created_at: string;
   is_active: boolean;
+  expires_at: string | null;
 }
 
 interface HistoryRow extends SessionRow {
@@ -3523,6 +3775,7 @@ interface CampusUpdate {
   title: string;
   content: string;
   author: string;
+  course_code: string | null;
   created_at: string;
 }
 
@@ -3536,7 +3789,6 @@ export default function StudentPortal() {
   const [error, setError] = useState('');
   const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
 
-  // Profile & Feed State
   const [nickname, setNickname] = useState('');
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -3556,6 +3808,7 @@ export default function StudentPortal() {
     setError('');
     setRecords(null);
     setHistory(null);
+    setActiveLiveClass(null);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
@@ -3600,15 +3853,7 @@ export default function StudentPortal() {
         setSavedNickname(profile.nickname);
       }
 
-      // 3. FETCH FEED
-      const { data: feedData } = await supabase
-        .from('campus_updates')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (feedData) setFeed(feedData);
-
-      // 4. FETCH RECORDS
+      // 3. FETCH ENROLLMENTS
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -3631,16 +3876,35 @@ export default function StudentPortal() {
       
       const courseCodes = courseRows?.map(c => c.course_code) || [];
 
+      // 4. FETCH FEED (Only for their courses)
+      // Supabase doesn't have a native OR condition for null easily, so we fetch matching course or global
+      const { data: feedData } = await supabase
+        .from('campus_updates')
+        .select('*')
+        .or(`course_code.is.null,course_code.in.(${courseCodes.join(',')})`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (feedData) setFeed(feedData);
+
+      // 5. FETCH SESSIONS
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
-        .select('session_id, course_code, created_at, is_active')
+        .select('session_id, course_code, created_at, is_active, expires_at')
         .in('course_code', courseCodes)
         .order('created_at', { ascending: false });
 
       if (sessionError) throw sessionError;
 
-      const liveSession = sessionRows?.find(s => s.is_active === true);
-      if (liveSession) setActiveLiveClass(liveSession.course_code);
+      const now = new Date().getTime();
+      const liveSession = sessionRows?.find(s => {
+        if (!s.is_active) return false;
+        const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
+        return !isExpired;
+      });
+      
+      if (liveSession) {
+        setActiveLiveClass(liveSession.course_code);
+      }
 
       const sessionIds = (sessionRows || []).map(s => s.session_id);
       let studentLogs: LogRow[] = [];
@@ -3659,14 +3923,12 @@ export default function StudentPortal() {
       const logStatusMap = new Map<string, string>();
       studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
 
-      // Build History
       const historyData: HistoryRow[] = (sessionRows || []).map(session => {
         const status = logStatusMap.get(session.session_id) || 'absent';
         return { ...session, status };
       });
       setHistory(historyData);
 
-      // Build Aggregate Records
       const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
 
       (sessionRows as SessionRow[] || []).forEach(session => {
@@ -3740,7 +4002,6 @@ export default function StudentPortal() {
 
       <div className="w-full max-w-md relative z-10 pt-4">
         
-        {/* Header */}
         <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
           <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
@@ -3752,7 +4013,6 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
-        {/* Live Class Alert */}
         {activeLiveClass && (
           <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
             <div className="flex items-center gap-3">
@@ -3766,10 +4026,8 @@ export default function StudentPortal() {
           </div>
         )}
 
-        {/* Main Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
           
-          {/* If not logged in yet */}
           {!records && (
             <>
               <div className="relative mb-4">
@@ -3800,21 +4058,17 @@ export default function StudentPortal() {
             </>
           )}
 
-          {/* If logged in */}
           {records && (
             <>
-              {/* Tabs */}
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
                 <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
                 <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
               </div>
 
-              {/* TAB 1: DASHBOARD (SHIELD + NICKNAME) */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   
-                  {/* Nickname Editor */}
                   <div className="flex items-center justify-between bg-blue-50 border border-blue-100 p-3 rounded-xl">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Nickname:</span>
@@ -3861,7 +4115,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* TAB 2: RECORDS (VAULT ARCHIVE) */}
               {activeTab === 'records' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
@@ -3888,7 +4141,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* TAB 3: CAMPUS FEED */}
               {activeTab === 'feed' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
@@ -3898,7 +4150,12 @@ export default function StudentPortal() {
                   <div className="space-y-4">
                     {feed.map((post) => (
                       <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                        <h4 className="font-extrabold text-gray-900 text-sm mb-1">{post.title}</h4>
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                          {post.course_code && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-600 leading-relaxed mb-2">{post.content}</p>
                         <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                           <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
@@ -3910,7 +4167,6 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* Lock Button */}
               <button
                 onClick={() => { setRecords(null); setHistory(null); }}
                 className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
@@ -4065,10 +4321,6 @@ import { createClient } from '@supabase/supabase-js';
 const GEOFENCE_RADIUS_METERS = 250;
 const HARD_BLOCK_METERS = 500;
 
-interface AttendanceLogDeviceInfo {
-  deviceFingerprint?: string;
-}
-
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -4094,6 +4346,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
+    // 1. Fetch Session
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
@@ -4113,7 +4366,6 @@ export async function POST(request: Request) {
     }
 
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
-
     if (opensAfter > 0 && session.created_at) {
       const sessionStart = new Date(session.created_at).getTime();
       const now = Date.now();
@@ -4127,7 +4379,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Enrollment check
+    // 2. Hard Reject: Enrollment Check
     const { data: courseRow } = await supabase
       .from('courses')
       .select('id')
@@ -4136,9 +4388,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!courseRow) {
-      return NextResponse.json({
-        message: "Course configuration error. Please notify your lecturer."
-      }, { status: 500 });
+      return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
     }
 
     const { data: enrollment } = await supabase
@@ -4150,10 +4400,11 @@ export async function POST(request: Request) {
 
     if (!enrollment) {
       return NextResponse.json({
-        message: `You are not registered for ${session.course_code}. Contact your lecturer to be added.`
-      }, { status: 403 });
+        message: `You are not registered for ${session.course_code}. Please contact your lecturer.`
+      }, { status: 403 }); // Hard Reject
     }
 
+    // 3. Hard Reject: Duplicate Check
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id')
@@ -4165,7 +4416,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // Layer 1: hardware fingerprint proxy check
+    // 4. Hard Reject: Proxy Check
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -4174,82 +4425,14 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint);
 
       if (ghostLogs && ghostLogs.length > 0) {
-        await supabase.from('attendance_logs').insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'flagged',
-          device_info: JSON.stringify({
-            telemetry,
-            reason: `Hardware proxy match with ${ghostLogs[0].matric_number}`,
-            deviceFingerprint,
-          }),
-          device_hash: hardwareFingerprint
-        }]);
         return NextResponse.json({
-          status: 'flagged',
-          distance: 0,
-          message: "Security Block: Multiple check-ins detected from identical hardware specs."
-        }, { status: 200 });
+          status: 'rejected',
+          message: "Security Block: This device has already been used for another student."
+        }, { status: 403 }); // Hard Reject
       }
     }
 
-    // Layer 2: cross-browser device fingerprint check
-    if (deviceFingerprint && deviceFingerprint !== 'unknown') {
-      const { data: existingFingerprints } = await supabase
-        .from('attendance_logs')
-        .select('matric_number, device_info')
-        .eq('session_id', sessionId)
-        .neq('matric_number', cleanMatric);
-
-      if (existingFingerprints) {
-        for (const log of existingFingerprints) {
-          const info: AttendanceLogDeviceInfo =
-            typeof log.device_info === 'string'
-              ? JSON.parse(log.device_info)
-              : (log.device_info as AttendanceLogDeviceInfo);
-
-          if (info?.deviceFingerprint === deviceFingerprint) {
-            await supabase.from('attendance_logs').insert([{
-              session_id: sessionId,
-              matric_number: cleanMatric,
-              status: 'flagged',
-              device_info: JSON.stringify({
-                telemetry,
-                reason: `Cross-browser device match with ${log.matric_number}`,
-                deviceFingerprint,
-              }),
-              device_hash: deviceFingerprint,
-            }]);
-
-            return NextResponse.json({
-              status: 'flagged',
-              distance: 0,
-              message: 'Security Block: This device has already been used to check in for another student in this session.',
-            }, { status: 200 });
-          }
-        }
-      }
-    }
-
-    // Layer 3: Coarse IP cluster check (Soft Lock)
-    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (clientIp !== 'unknown') {
-      const ninetySecondsAgo = new Date(Date.now() - 90000).toISOString();
-      const { data: sameIpCheckins } = await supabase
-        .from('attendance_logs')
-        .select('matric_number')
-        .eq('session_id', sessionId)
-        .neq('matric_number', cleanMatric)
-        .gte('check_in_time', ninetySecondsAgo);
-
-      if (sameIpCheckins && sameIpCheckins.length >= 2) {
-        // Flag them, but let the location check below decide if they are in the hall
-        // We will override their finalStatus to 'flagged' later if they pass the geofence.
-        // This prevents blocking legitimate students on the same campus Wi-Fi.
-      }
-    }
-
-    // Anomaly detection
+    // 5. Geofence & Anomaly Check
     let isSpoofed = false;
     let bestPing = telemetry[0];
 
@@ -4258,14 +4441,19 @@ export async function POST(request: Request) {
       if (ping.acc < bestPing.acc) bestPing = ping;
     }
 
-    if (bestPing.acc < 3) isSpoofed = true;
-
+    let totalDrift = 0;
     for (let i = 1; i < telemetry.length; i++) {
       const prev = telemetry[i - 1];
       const curr = telemetry[i];
       const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      totalDrift += drift;
+      
       const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
       if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
+    }
+
+    if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) {
+      isSpoofed = true; 
     }
 
     const distanceToLecturer = getDistanceInMeters(
@@ -4290,9 +4478,9 @@ export async function POST(request: Request) {
       if (isSpoofed) {
         finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
-      } else if (verificationMethod === 'skipped') {
-        finalStatus = 'flagged';
-        responseMessage = "Flagged: Biometric skipped. Lecturer must visually verify.";
+      } else if (verificationMethod === 'ios_web') {
+        finalStatus = 'verified';
+        responseMessage = "Verified via iOS GPS";
       } else {
         finalStatus = 'verified';
         responseMessage = "Verified";
@@ -4309,7 +4497,6 @@ export async function POST(request: Request) {
         distanceMeters: Math.round(distanceToLecturer),
         deviceFingerprint: deviceFingerprint || 'unknown',
         verificationMethod: verificationMethod || 'skipped',
-        clientIp,
       }),
       device_hash: hardwareFingerprint || 'unknown-hardware',
     }]);
@@ -4375,7 +4562,6 @@ export default function LecturerDashboard() {
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
 
-  // Helper to kill stale sessions
   const clearStaleSession = () => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setActiveSessionId(null);
@@ -4383,13 +4569,11 @@ export default function LecturerDashboard() {
     setSetupError('');
   };
 
-  // Moved this up so it's defined before the useEffect uses it
   const checkSessionValidity = async (sessionId: string) => {
     const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', sessionId).single();
     if (data && data.is_active) {
       setActiveSessionId(sessionId);
     } else {
-      // The session was ended on the backend, so clear it locally
       localStorage.removeItem(ACTIVE_SESSION_KEY);
     }
   };
@@ -4518,8 +4702,18 @@ export default function LecturerDashboard() {
     );
   };
 
-  const endSession = () => {
+  const endSession = async () => {
+    if (!activeSessionId) return;
     if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
+      try {
+        await fetch('/api/end-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: activeSessionId })
+        });
+      } catch (e) {
+        console.error("Failed to notify server", e);
+      }
       clearStaleSession();
     }
   };
@@ -4615,7 +4809,8 @@ export default function LecturerDashboard() {
   const copySessionInfo = () => {
     const baseUrl = window.location.origin;
     const link = `${baseUrl}/?sessionId=${activeSessionId}`;
-    const clipboardText = `📌 CampusCheck Attendance Link:\n${link}\n\nOpen this link on your phone to check in.`;
+    const courseName = data?.course || 'Active Class';
+    const clipboardText = `📌 *CampusCheck Attendance Link*\n\n📚 Class: ${courseName}\n⏱ Opens: ${checkinOpensAfter === 0 ? 'Immediately' : `In ${checkinOpensAfter} minutes`}\n\n🔗 ${link}\n\n_Open this link on your phone to check in. You must be inside the lecture hall._`;
     navigator.clipboard.writeText(clipboardText);
     alert("Attendance link copied! Share it with your students.");
   };
@@ -4625,7 +4820,6 @@ export default function LecturerDashboard() {
     return (
       <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
@@ -4636,7 +4830,7 @@ export default function LecturerDashboard() {
                 {viewMode === 'history' ? 'Review past session ledgers and download reports.' : `Welcome, ${profile?.full_name || 'Lecturer'}`}
               </p>
             </div>
-            <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto">
+            <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto items-center">
               <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
               <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
             </div>
@@ -4803,7 +4997,7 @@ export default function LecturerDashboard() {
         </div>
 
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Student Management</h3>
+          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
           <div className="flex flex-col sm:flex-row gap-3">
             <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
             <div className="flex gap-2">
@@ -4877,6 +5071,7 @@ export default function LecturerDashboard() {
 <file path="components/StudentCheckIn.tsx">
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
@@ -4908,25 +5103,32 @@ const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
-  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
-  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
-  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
-  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
+  if (minutesLate <= 2) {
+    return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
+  }
+  if (minutesLate <= 10) {
+    return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
+  }
+  if (minutesLate <= 25) {
+    return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
+  }
+  if (minutesLate <= 45) {
+    return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
+  }
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
 export default function StudentCheckIn({ sessionId }: Props) {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
 
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
-
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
-
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
 
@@ -4938,10 +5140,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // Pre-warm GPS on page load
+  // --- iOS FIX DETECTION ---
+  // Detect if user is on iOS AND using a browser other than Safari (where WebAuthn fails)
+  const isIosNonSafari = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isNotSafari = /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return isIOS && isNotSafari;
+  };
+
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-
     const id = navigator.geolocation.watchPosition(
       (position) => {
         prewarmBufferRef.current.push({
@@ -4955,22 +5165,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
           prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
         }
       },
-      () => {
-        // Silent — best-effort
-      },
+      () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
-
     prewarmWatchIdRef.current = id;
-
-    return () => {
-      if (prewarmWatchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(prewarmWatchIdRef.current);
-      }
-    };
+    return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, []);
 
-  // Pre-warm device fingerprint (generate once, cache in ref)
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -4981,13 +5182,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         console.error('[CampusCheck] Fingerprint generation failed:', err);
       }
     }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
-  // Fetch session metadata (for memes)
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -4996,15 +5193,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
-      } catch {
-        // Non-fatal
-      }
+      } catch {}
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
 
   const syncOfflineQueue = useCallback(async () => {
@@ -5024,7 +5216,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             matricNumber: item.matric,
             telemetry: item.telemetry,
             deviceFingerprint: item.fingerprint,
-            verificationMethod: item.verificationMethod,
+            verificationMethod: item.verificationMethod
           })
         });
         if (res.ok || res.status === 409) successCount++;
@@ -5045,10 +5237,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
     const id = setTimeout(() => { syncOfflineQueue(); }, 0);
-    return () => {
-      window.removeEventListener('online', syncOfflineQueue);
-      clearTimeout(id);
-    };
+    return () => { window.removeEventListener('online', syncOfflineQueue); clearTimeout(id); };
   }, [syncOfflineQueue]);
 
   useEffect(() => {
@@ -5123,7 +5312,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
-      // Fingerprint may not be ready yet — wait for it (max 6s)
       let fingerprint = fingerprintRef.current;
       if (!fingerprint) {
         const start = Date.now();
@@ -5158,8 +5346,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed');
       }
     } catch (error) {
-      const isNetwork = !navigator.onLine ||
-        (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
+      const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
         existing.push({
@@ -5168,7 +5355,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           telemetry: gpsTelemetry,
           fingerprint: fingerprintRef.current,
           verificationMethod,
-          timestamp: Date.now(),
+          timestamp: Date.now()
         });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
@@ -5182,41 +5369,40 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     setLiveAccuracy(null);
-
     let verificationMethod = 'skipped';
 
-    // 1. Try WebAuthn (But don't block the user if it fails)
-    try {
-      const genRes = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber })
-      });
+    // THE FIX: iOS Non-Safari bypasses WebAuthn completely
+    const skipWebAuthn = isIosNonSafari();
 
-      if (genRes.status === 404) {
-        verificationMethod = 'skipped';
-      } else {
-        const options = await genRes.json();
-        if (options.error) throw new Error(options.error);
-
-        const asseResp = await startAuthentication(options);
-
-        const verifyRes = await fetch('/api/webauthn/auth/verify', {
+    if (!skipWebAuthn) {
+      try {
+        const genRes = await fetch('/api/webauthn/auth/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ matricNumber, authResponse: asseResp })
+          body: JSON.stringify({ matricNumber })
         });
-        const verifyResult = await verifyRes.json();
-
-        if (verifyResult.verified) {
-          verificationMethod = 'biometric';
+        if (genRes.status === 404) {
+          verificationMethod = 'skipped';
         } else {
-          throw new Error("Biometric mismatch");
+          const options = await genRes.json();
+          if (options.error) throw new Error(options.error);
+          const asseResp = await startAuthentication(options);
+          const verifyRes = await fetch('/api/webauthn/auth/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricNumber, authResponse: asseResp })
+          });
+          const verifyResult = await verifyRes.json();
+          if (verifyResult.verified) verificationMethod = 'biometric';
+          else throw new Error("Biometric mismatch");
         }
+      } catch (error) {
+        console.warn("Biometric failed, falling back to flagged mode:", error);
+        verificationMethod = 'skipped';
       }
-    } catch (error) {
-      console.warn("Biometric failed, falling back to flagged mode:", error);
-      verificationMethod = 'skipped';
+    } else {
+      // iOS Non-Safari: Bypass biometrics and flag as iOS Web
+      verificationMethod = 'ios_web';
     }
 
     if (!navigator.geolocation) {
@@ -5338,7 +5524,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       // Silent fail
     } finally {
       setIsSubmittingRating(false);
-      setStatus('rated');
+      router.push('/portal'); // <-- REDIRECT TO PORTAL
     }
   };
 
@@ -5526,7 +5712,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
                   disabled={isSubmittingRating || ratingStars === 0}
                   className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit'}
+                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
                 </button>
               </div>
             </div>
