@@ -230,11 +230,9 @@ export default function StudentPortal() {
     });
     setSavedNickname(nickname.trim());
     setIsEditingNickname(false);
-    // Refresh available courses after saving profile
     fetchAvailableCourses();
   };
 
-  // --- FIXED: Wrapped in useCallback ---
   const fetchAvailableCourses = useCallback(async () => {
     if (!studentDept || !studentLevel) return;
     
@@ -270,7 +268,7 @@ export default function StudentPortal() {
       }]);
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
-      handleVerifyAndFetch(); // Refresh data
+      handleVerifyAndFetch();
       setActiveTab('dashboard');
     } catch {
       alert("Failed to enroll. Please try again.");
@@ -348,7 +346,6 @@ export default function StudentPortal() {
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   
-                  {/* Profile Editor */}
                   <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
