@@ -306,7 +306,7 @@ export default function CourseManagement() {
 
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-          <Users className="text-[#2563EB]" size={28} /> Student Management
+          <Users className="text-[#2563EB]" size={28} /> Course & Student Management
         </h1>
         <p className="text-gray-500 mt-1 font-medium">
           Manage course rosters, grant medical waivers, and wipe device locks.

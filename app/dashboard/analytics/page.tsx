@@ -262,8 +262,9 @@ export default function AnalyticsPage() {
               ) : atRiskStudents.length === 0 ? (
                 <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
               ) : (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left whitespace-nowrap">
+                /* THE FIX IS HERE: Changed overflow-hidden to overflow-x-auto */
+                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left whitespace-nowrap min-w-125">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
                         <th className="px-6 py-3 font-bold">Matric Number</th>
