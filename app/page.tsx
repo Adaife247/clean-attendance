@@ -76,7 +76,7 @@ function CheckInWrapper() {
             <div>
               <h4 className="font-bold text-sm">Joining a Live Class?</h4>
               <p className="text-xs text-blue-100 font-medium mt-1 leading-relaxed">
-                Click the secure session link provided by your lecturer or Class Rep to mark your attendance.
+                Click the secure session link provided by your lecturer to mark your attendance.
               </p>
             </div>
           </div>
