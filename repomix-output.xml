@@ -135,6 +135,203 @@ tsconfig.json
 <files>
 This section contains the contents of the repository's files.
 
+<file path="app/globals.css">
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+</file>
+
+<file path="public/file.svg">
+<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
+</file>
+
+<file path="public/globe.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
+</file>
+
+<file path="public/next.svg">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
+</file>
+
+<file path="public/vercel.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
+</file>
+
+<file path="public/window.svg">
+<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
+</file>
+
+<file path="AGENTS.md">
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+</file>
+
+<file path="CLAUDE.md">
+@AGENTS.md
+</file>
+
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+</file>
+
+<file path="postcss.config.mjs">
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+
+export default config;
+</file>
+
+<file path="README.md">
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+</file>
+
+<file path="app/api/admin-login/route.ts">
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+
+export async function POST(request: Request) {
+  try {
+    const { password } = await request.json();
+
+    // SECURED: Pulled dynamically from Vercel parameters
+    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
+
+    if (!CORRECT_PASSWORD) {
+      return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
+    }
+
+    if (password === CORRECT_PASSWORD) {
+      // Next.js 15 requires awaiting the cookies API before setting them
+      const cookieStore = await cookies();
+      
+      // Give them the secure HTTP-only cookie that lasts for 8 hours
+      cookieStore.set({
+        name: 'attendance_admin_token',
+        value: 'verified',
+        httpOnly: true,
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 60 * 8, // 8 hours
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ message: "Invalid password" }, { status: 401 });
+  } catch (error) {
+    console.error("Login API Error:", error);
+    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/end-session/route.ts">
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
@@ -317,61 +514,75 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/globals.css">
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+<file path="public/manifest.json">
+{
+  "name": "CampusCheck",
+  "short_name": "CampusCheck",
+  "description": "Geofenced campus verification system.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
 </file>
 
-<file path="public/file.svg">
-<svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
-</file>
+<file path=".gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-<file path="public/globe.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g clip-path="url(#a)"><path fill-rule="evenodd" clip-rule="evenodd" d="M10.27 14.1a6.5 6.5 0 0 0 3.67-3.45q-1.24.21-2.7.34-.31 1.83-.97 3.1M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.48-1.52a7 7 0 0 1-.96 0H7.5a4 4 0 0 1-.84-1.32q-.38-.89-.63-2.08a40 40 0 0 0 3.92 0q-.25 1.2-.63 2.08a4 4 0 0 1-.84 1.31zm2.94-4.76q1.66-.15 2.95-.43a7 7 0 0 0 0-2.58q-1.3-.27-2.95-.43a18 18 0 0 1 0 3.44m-1.27-3.54a17 17 0 0 1 0 3.64 39 39 0 0 1-4.3 0 17 17 0 0 1 0-3.64 39 39 0 0 1 4.3 0m1.1-1.17q1.45.13 2.69.34a6.5 6.5 0 0 0-3.67-3.44q.65 1.26.98 3.1M8.48 1.5l.01.02q.41.37.84 1.31.38.89.63 2.08a40 40 0 0 0-3.92 0q.25-1.2.63-2.08a4 4 0 0 1 .85-1.32 7 7 0 0 1 .96 0m-2.75.4a6.5 6.5 0 0 0-3.67 3.44 29 29 0 0 1 2.7-.34q.31-1.83.97-3.1M4.58 6.28q-1.66.16-2.95.43a7 7 0 0 0 0 2.58q1.3.27 2.95.43a18 18 0 0 1 0-3.44m.17 4.71q-1.45-.12-2.69-.34a6.5 6.5 0 0 0 3.67 3.44q-.65-1.27-.98-3.1" fill="#666"/></g><defs><clipPath id="a"><path fill="#fff" d="M0 0h16v16H0z"/></clipPath></defs></svg>
-</file>
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-<file path="public/next.svg">
-<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 394 80"><path fill="#000" d="M262 0h68.5v12.7h-27.2v66.6h-13.6V12.7H262V0ZM149 0v12.7H94v20.4h44.3v12.6H94v21h55v12.6H80.5V0h68.7zm34.3 0h-17.8l63.8 79.4h17.9l-32-39.7 32-39.6h-17.9l-23 28.6-23-28.6zm18.3 56.7-9-11-27.1 33.7h17.8l18.3-22.7z"/><path fill="#000" d="M81 79.3 17 0H0v79.3h13.6V17l50.2 62.3H81Zm252.6-.4c-1 0-1.8-.4-2.5-1s-1.1-1.6-1.1-2.6.3-1.8 1-2.5 1.6-1 2.6-1 1.8.3 2.5 1a3.4 3.4 0 0 1 .6 4.3 3.7 3.7 0 0 1-3 1.8zm23.2-33.5h6v23.3c0 2.1-.4 4-1.3 5.5a9.1 9.1 0 0 1-3.8 3.5c-1.6.8-3.5 1.3-5.7 1.3-2 0-3.7-.4-5.3-1s-2.8-1.8-3.7-3.2c-.9-1.3-1.4-3-1.4-5h6c.1.8.3 1.6.7 2.2s1 1.2 1.6 1.5c.7.4 1.5.5 2.4.5 1 0 1.8-.2 2.4-.6a4 4 0 0 0 1.6-1.8c.3-.8.5-1.8.5-3V45.5zm30.9 9.1a4.4 4.4 0 0 0-2-3.3 7.5 7.5 0 0 0-4.3-1.1c-1.3 0-2.4.2-3.3.5-.9.4-1.6 1-2 1.6a3.5 3.5 0 0 0-.3 4c.3.5.7.9 1.3 1.2l1.8 1 2 .5 3.2.8c1.3.3 2.5.7 3.7 1.2a13 13 0 0 1 3.2 1.8 8.1 8.1 0 0 1 3 6.5c0 2-.5 3.7-1.5 5.1a10 10 0 0 1-4.4 3.5c-1.8.8-4.1 1.2-6.8 1.2-2.6 0-4.9-.4-6.8-1.2-2-.8-3.4-2-4.5-3.5a10 10 0 0 1-1.7-5.6h6a5 5 0 0 0 3.5 4.6c1 .4 2.2.6 3.4.6 1.3 0 2.5-.2 3.5-.6 1-.4 1.8-1 2.4-1.7a4 4 0 0 0 .8-2.4c0-.9-.2-1.6-.7-2.2a11 11 0 0 0-2.1-1.4l-3.2-1-3.8-1c-2.8-.7-5-1.7-6.6-3.2a7.2 7.2 0 0 1-2.4-5.7 8 8 0 0 1 1.7-5 10 10 0 0 1 4.3-3.5c2-.8 4-1.2 6.4-1.2 2.3 0 4.4.4 6.2 1.2 1.8.8 3.2 2 4.3 3.4 1 1.4 1.5 3 1.5 5h-5.8z"/></svg>
-</file>
+# testing
+/coverage
 
-<file path="public/vercel.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1155 1000"><path d="m577.3 0 577.4 1000H0z" fill="#fff"/></svg>
-</file>
+# next.js
+/.next/
+/out/
 
-<file path="public/window.svg">
-<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 2.5h13v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM0 1h16v11.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 0 12.5zm3.75 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M7 4.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m1.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5" fill="#666"/></svg>
-</file>
+# production
+/build
 
-<file path="AGENTS.md">
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# misc
+.DS_Store
+*.pem
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.vercel
 </file>
 
 <file path="app.py">
@@ -449,8 +660,34 @@ if __name__ == "__main__":
     print("=======================================")
 </file>
 
-<file path="CLAUDE.md">
-@AGENTS.md
+<file path="eslint.config.mjs">
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+  {
+    rules: {
+      // Tailwind v4's "suggestCanonicalClasses" rule flags older but perfectly
+      // valid class names (e.g., min-w-[200px] vs min-w-50, bg-gradient-to-br
+      // vs bg-linear-to-br). These are cosmetic preferences, not bugs.
+      // We'll do a dedicated Tailwind modernization pass later if desired.
+      "tailwindcss/suggestCanonicalClasses": "off",
+    },
+  },
+]);
+
+export default eslintConfig;
 </file>
 
 <file path="et --hard beaef43">
@@ -745,142 +982,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/dashboard/:path*'],
 };
-</file>
-
-<file path="next.config.ts">
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
-};
-
-export default nextConfig;
-</file>
-
-<file path="postcss.config.mjs">
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-
-export default config;
-</file>
-
-<file path="README.md">
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-</file>
-
-<file path="tsconfig.json">
-{
-  "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./*"]
-    }
-  },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules"]
-}
-</file>
-
-<file path="app/api/admin-login/route.ts">
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-
-export async function POST(request: Request) {
-  try {
-    const { password } = await request.json();
-
-    // SECURED: Pulled dynamically from Vercel parameters
-    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
-
-    if (!CORRECT_PASSWORD) {
-      return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
-    }
-
-    if (password === CORRECT_PASSWORD) {
-      // Next.js 15 requires awaiting the cookies API before setting them
-      const cookieStore = await cookies();
-      
-      // Give them the secure HTTP-only cookie that lasts for 8 hours
-      cookieStore.set({
-        name: 'attendance_admin_token',
-        value: 'verified',
-        httpOnly: true,
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 8, // 8 hours
-      });
-
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ message: "Invalid password" }, { status: 401 });
-  } catch (error) {
-    console.error("Login API Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
-  }
-}
 </file>
 
 <file path="app/api/request-override/route.ts">
@@ -1465,31 +1566,6 @@ export default function PWARegister() {
 }
 </file>
 
-<file path="public/manifest.json">
-{
-  "name": "CampusCheck",
-  "short_name": "CampusCheck",
-  "description": "Geofenced campus verification system.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#F9FAFB",
-  "theme_color": "#2563EB",
-  "orientation": "portrait-primary",
-  "icons": [
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
-}
-</file>
-
 <file path="public/sw.js">
 const CACHE_NAME = 'campuscheck-v2';
 
@@ -1590,82 +1666,6 @@ export const supabase = new Proxy({} as SupabaseClient, {
     return typeof value === 'function' ? value.bind(client) : value;
   },
 });
-</file>
-
-<file path=".gitignore">
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-.vercel
-</file>
-
-<file path="eslint.config.mjs">
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
-
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-  ]),
-  {
-    rules: {
-      // Tailwind v4's "suggestCanonicalClasses" rule flags older but perfectly
-      // valid class names (e.g., min-w-[200px] vs min-w-50, bg-gradient-to-br
-      // vs bg-linear-to-br). These are cosmetic preferences, not bugs.
-      // We'll do a dedicated Tailwind modernization pass later if desired.
-      "tailwindcss/suggestCanonicalClasses": "off",
-    },
-  },
-]);
-
-export default eslintConfig;
 </file>
 
 <file path="app/api/attendance-history/route.ts">
@@ -1826,6 +1826,65 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'Failed to post update' }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/layout.tsx">
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import PWARegister from "../components/PWARegister";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#2563EB',
+};
+
+// Required Apple PWA configuration and Cache-Busted Icons
+export const metadata: Metadata = {
+  title: "CampusCheck",
+  description: "Geofenced campus verification system",
+  manifest: "/manifest.json",
+  icons: {
+    icon: '/icon-192x192.png?v=2', 
+    apple: '/icon-192x192.png?v=2',
+  },
+  appleWebApp: {
+    capable: true,
+    title: "CampusCheck",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <PWARegister />
+        {children}
+      </body>
+    </html>
+  );
 }
 </file>
 
@@ -2187,6 +2246,77 @@ export const origin = process.env.NODE_ENV === 'production'
   : 'http://localhost:3000';
 </file>
 
+<file path="app/api/override-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
+
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // 1. Check if they already have a log entry
+    const { data: existingLog, error: fetchError } = await supabase
+      .from('attendance_logs')
+      .select('id, device_hash')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+
+    if (existingLog) {
+      // Update existing log: set status to verified, keep existing device_hash
+      const { error: updateError } = await supabase
+        .from('attendance_logs')
+        .update({ 
+          status: 'verified', 
+          device_info: JSON.stringify({ method: "Manual Override - Updated" })
+          // device_hash remains unchanged
+        })
+        .eq('id', existingLog.id);
+      
+      if (updateError) throw updateError;
+      
+    } else {
+      // Insert new log for a student who never tried to check in
+      const { error: insertError } = await supabase
+        .from('attendance_logs')
+        .insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
+          device_hash: 'manual-override'  // mark as manually added (no device fingerprint)
+        }]);
+      
+      if (insertError) throw insertError;
+    }
+
+    return NextResponse.json({ message: "Success" });
+    
+  } catch (error: any) {
+    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
+    console.error("Error Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("Details:", error.details);
+    console.error("============================================================\n");
+    
+    return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/dashboard/layout.tsx">
 'use client';
 import { useState, useEffect } from 'react';
@@ -2293,65 +2423,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 }
 </file>
 
-<file path="app/layout.tsx">
-import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import PWARegister from "../components/PWARegister";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#2563EB',
-};
-
-// Required Apple PWA configuration and Cache-Busted Icons
-export const metadata: Metadata = {
-  title: "CampusCheck",
-  description: "Geofenced campus verification system",
-  manifest: "/manifest.json",
-  icons: {
-    icon: '/icon-192x192.png?v=2', 
-    apple: '/icon-192x192.png?v=2',
-  },
-  appleWebApp: {
-    capable: true,
-    title: "CampusCheck",
-    statusBarStyle: "default",
-  },
-  formatDetection: {
-    telephone: false,
-  },
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <PWARegister />
-        {children}
-      </body>
-    </html>
-  );
-}
-</file>
-
 <file path="package.json">
 {
   "name": "clean-attendance",
@@ -2370,7 +2441,8 @@ export default function RootLayout({
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -2381,77 +2453,6 @@ export default function RootLayout({
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
-}
-</file>
-
-<file path="app/api/override-attendance/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    
-    const sessionId = body.sessionId || body.session_id || body.session;
-    const rawMatric = body.matricNumber || body.matric_number || body.matric;
-
-    if (!sessionId || !rawMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
-
-    // 1. Check if they already have a log entry
-    const { data: existingLog, error: fetchError } = await supabase
-      .from('attendance_logs')
-      .select('id, device_hash')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      throw fetchError;
-    }
-
-    if (existingLog) {
-      // Update existing log: set status to verified, keep existing device_hash
-      const { error: updateError } = await supabase
-        .from('attendance_logs')
-        .update({ 
-          status: 'verified', 
-          device_info: JSON.stringify({ method: "Manual Override - Updated" })
-          // device_hash remains unchanged
-        })
-        .eq('id', existingLog.id);
-      
-      if (updateError) throw updateError;
-      
-    } else {
-      // Insert new log for a student who never tried to check in
-      const { error: insertError } = await supabase
-        .from('attendance_logs')
-        .insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
-          device_hash: 'manual-override'  // mark as manually added (no device fingerprint)
-        }]);
-      
-      if (insertError) throw insertError;
-    }
-
-    return NextResponse.json({ message: "Success" });
-    
-  } catch (error: any) {
-    console.error("\n================ DATABASE REJECTED OVERRIDE ================");
-    console.error("Error Code:", error.code);
-    console.error("Message:", error.message);
-    console.error("Details:", error.details);
-    console.error("============================================================\n");
-    
-    return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }
 </file>
@@ -2796,58 +2797,6 @@ export default function AnalyticsPage() {
 }
 </file>
 
-<file path="app/api/dashboard-data/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-interface AttendanceLogRow {
-  id: string;
-  matric_number: string;
-  status: string;
-  check_in_time: string;
-}
-
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-
-    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
-
-    const { data: session, error: sessionError } = await supabase
-      .from('lecture_sessions')
-      .select('is_active, course_code, created_at')
-      .eq('session_id', sessionId)
-      .single();
-
-    if (sessionError) console.error("Session Error:", sessionError.message);
-
-    const courseName = session?.course_code || "Unknown Course";
-
-    const { data: logs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('check_in_time', { ascending: false });
-
-    return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true,
-      createdAt: session?.created_at || null,
-      logs: (logs as AttendanceLogRow[] | null || []).map((l) => ({
-        id: l.id,
-        matricNumber: l.matric_number,
-        status: l.status,
-        time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }))
-    });
-  } catch {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/create-session/route.ts">
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -2900,6 +2849,215 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+
+interface AttendanceLogRow {
+  id: string;
+  matric_number: string;
+  status: string;
+  check_in_time: string;
+  device_info: string | null; // NEW
+}
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
+
+    const { data: session, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code, created_at')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (sessionError) console.error("Session Error:", sessionError.message);
+
+    const courseName = session?.course_code || "Unknown Course";
+
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
+
+    // Fetch nicknames for the students who checked in
+    const matrics = (logs || []).map(l => l.matric_number);
+    const { data: profiles } = await supabase
+      .from('student_profiles')
+      .select('matric_number, nickname')
+      .in('matric_number', matrics);
+
+    const nicknameMap = new Map();
+    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
+
+    return NextResponse.json({
+      course: courseName,
+      isActive: session?.is_active === true,
+      createdAt: session?.created_at || null,
+      logs: (logs as AttendanceLogRow[] | null || []).map((l) => {
+        let reason = null;
+        if (l.status !== 'verified' && l.device_info) {
+          try {
+            const info = JSON.parse(l.device_info);
+            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
+            else if (info.verificationMethod === 'skipped') reason = "Biometric skipped (iOS/Android)";
+            else if (info.reason) reason = info.reason;
+          } catch {}
+        }
+        
+        return {
+          id: l.id,
+          matricNumber: l.matric_number,
+          nickname: nicknameMap.get(l.matric_number) || null,
+          status: l.status,
+          time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reason
+        };
+      })
+    });
+  } catch {
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        window.location.href = '/dashboard';
+      } else {
+        if (secretKey !== FACULTY_SECRET_KEY) {
+          throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
+        }
+
+        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        
+        if (data.user) {
+          const { error: profileError } = await supabase.from('lecturers').insert([{
+            id: data.user.id, email: email, full_name: fullName, department: department
+          }]);
+          if (profileError) throw profileError;
+        }
+        alert('Registration successful! You can now log in.');
+        setIsLogin(true);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Faculty Access</h1>
+          <p className="text-gray-500 mt-2 font-medium">CampusCheck Administration</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+          
+          <div className="flex bg-gray-50 p-1 rounded-xl mb-8">
+            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
+            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
+                  <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                </div>
+              </>
+            )}
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
+              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
+              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-100 flex items-start gap-2">
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-700 font-bold text-xs">{error}</p>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-3.5 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
+              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
+              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
+            </button>
+          </form>
+        </div>
+
+        {/* NEW: Back to Hub Navigation */}
+        <div className="mt-6 text-center animate-in fade-in">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -3472,138 +3630,6 @@ export default function CourseManagement() {
 }
 </file>
 
-<file path="app/login/page.tsx">
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-
-const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
-
-export default function LoginPage() {
-  const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [secretKey, setSecretKey] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      if (isLogin) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) throw signInError;
-        window.location.href = '/dashboard';
-      } else {
-        if (secretKey !== FACULTY_SECRET_KEY) {
-          throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
-        }
-
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-        if (signUpError) throw signUpError;
-        
-        if (data.user) {
-          const { error: profileError } = await supabase.from('lecturers').insert([{
-            id: data.user.id, email: email, full_name: fullName, department: department
-          }]);
-          if (profileError) throw profileError;
-        }
-        alert('Registration successful! You can now log in.');
-        setIsLogin(true);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md">
-        
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Faculty Access</h1>
-          <p className="text-gray-500 mt-2 font-medium">CampusCheck Administration</p>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
-          
-          <div className="flex bg-gray-50 p-1 rounded-xl mb-8">
-            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
-            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
-          </div>
-
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
-                </div>
-              </>
-            )}
-
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
-              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
-              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 rounded-lg border border-red-100 flex items-start gap-2">
-                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-red-700 font-bold text-xs">{error}</p>
-              </div>
-            )}
-
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-3.5 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
-              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
-              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
-            </button>
-          </form>
-        </div>
-
-        {/* NEW: Back to Hub Navigation */}
-        <div className="mt-6 text-center animate-in fade-in">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
-            <ArrowLeft size={16} /> Back to Hub
-          </Link>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="app/page.tsx">
 'use client';
 import { Suspense } from 'react';
@@ -3683,7 +3709,7 @@ function CheckInWrapper() {
             <div>
               <h4 className="font-bold text-sm">Joining a Live Class?</h4>
               <p className="text-xs text-blue-100 font-medium mt-1 leading-relaxed">
-                Click the secure session link provided by your lecturer or Class Rep to mark your attendance.
+                Click the secure session link provided by your lecturer to mark your attendance.
               </p>
             </div>
           </div>
@@ -3728,462 +3754,6 @@ export default function Page() {
     }>
       <CheckInWrapper />
     </Suspense>
-  );
-}
-</file>
-
-<file path="app/portal/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/utils/supabase';
-import { 
-  ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText
-} from 'lucide-react';
-import Link from 'next/link';
-import { startAuthentication } from '@simplewebauthn/browser';
-
-interface CourseRecord {
-  course_code: string;
-  total_classes: number;
-  attended_classes: number;
-  percentage: number;
-  skips_left: number;
-  streak: number;
-  streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
-}
-
-interface LogRow {
-  session_id: string;
-  status: string;
-}
-
-interface SessionRow {
-  session_id: string;
-  course_code: string;
-  created_at: string;
-  is_active: boolean;
-  expires_at: string | null;
-}
-
-interface HistoryRow extends SessionRow {
-  status: string;
-}
-
-interface CampusUpdate {
-  id: string;
-  title: string;
-  content: string;
-  author: string;
-  course_code: string | null;
-  created_at: string;
-}
-
-export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed'>('dashboard');
-  
-  const [matricNumber, setMatricNumber] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [records, setRecords] = useState<CourseRecord[] | null>(null);
-  const [history, setHistory] = useState<HistoryRow[] | null>(null);
-  const [error, setError] = useState('');
-  const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
-
-  const [nickname, setNickname] = useState('');
-  const [savedNickname, setSavedNickname] = useState('');
-  const [isEditingNickname, setIsEditingNickname] = useState(false);
-  const [feed, setFeed] = useState<CampusUpdate[]>([]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('campuscheck_student_matric');
-    if (saved) {
-      const id = setTimeout(() => { setMatricNumber(saved); }, 0);
-      return () => clearTimeout(id);
-    }
-  }, []);
-
-  const handleVerifyAndFetch = async () => {
-    if (matricNumber.length < 5) return;
-    setIsVerifying(true);
-    setError('');
-    setRecords(null);
-    setHistory(null);
-    setActiveLiveClass(null);
-
-    const cleanMatric = matricNumber.toUpperCase().trim();
-    localStorage.setItem('campuscheck_student_matric', cleanMatric);
-
-    try {
-      // 1. REQUIRE WEBAUTHN AUTHENTICATION
-      const genRes = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber: cleanMatric })
-      });
-
-      if (genRes.status === 404) {
-        throw new Error("You haven't linked your biometrics yet. You must check into a lecture first.");
-      }
-
-      const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
-
-      const asseResp = await startAuthentication(options);
-
-      const verifyRes = await fetch('/api/webauthn/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber: cleanMatric, authResponse: asseResp })
-      });
-
-      const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) {
-        throw new Error("Biometric verification failed. Access denied.");
-      }
-
-      // 2. FETCH NICKNAME
-      const { data: profile } = await supabase
-        .from('student_profiles')
-        .select('nickname')
-        .eq('matric_number', cleanMatric)
-        .maybeSingle();
-
-      if (profile?.nickname) {
-        setNickname(profile.nickname);
-        setSavedNickname(profile.nickname);
-      }
-
-      // 3. FETCH ENROLLMENTS
-      const { data: enrollmentRows, error: enrollError } = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('matric_number', cleanMatric);
-
-      if (enrollError) throw enrollError;
-
-      if (!enrollmentRows || enrollmentRows.length === 0) {
-        setError("You are not enrolled in any course yet.");
-        return;
-      }
-
-      const courseIds = enrollmentRows.map(e => e.course_id);
-      const { data: courseRows, error: courseError } = await supabase
-        .from('courses')
-        .select('id, course_code')
-        .in('id', courseIds);
-
-      if (courseError) throw courseError;
-      
-      const courseCodes = courseRows?.map(c => c.course_code) || [];
-
-      // 4. FETCH FEED (Only for their courses)
-      // Supabase doesn't have a native OR condition for null easily, so we fetch matching course or global
-      const { data: feedData } = await supabase
-        .from('campus_updates')
-        .select('*')
-        .or(`course_code.is.null,course_code.in.(${courseCodes.join(',')})`)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (feedData) setFeed(feedData);
-
-      // 5. FETCH SESSIONS
-      const { data: sessionRows, error: sessionError } = await supabase
-        .from('lecture_sessions')
-        .select('session_id, course_code, created_at, is_active, expires_at')
-        .in('course_code', courseCodes)
-        .order('created_at', { ascending: false });
-
-      if (sessionError) throw sessionError;
-
-      const now = new Date().getTime();
-      const liveSession = sessionRows?.find(s => {
-        if (!s.is_active) return false;
-        const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
-        return !isExpired;
-      });
-      
-      if (liveSession) {
-        setActiveLiveClass(liveSession.course_code);
-      }
-
-      const sessionIds = (sessionRows || []).map(s => s.session_id);
-      let studentLogs: LogRow[] = [];
-
-      if (sessionIds.length > 0) {
-        const { data: logRows, error: logError } = await supabase
-          .from('attendance_logs')
-          .select('session_id, status')
-          .eq('matric_number', cleanMatric)
-          .in('session_id', sessionIds);
-
-        if (logError) throw logError;
-        studentLogs = logRows || [];
-      }
-
-      const logStatusMap = new Map<string, string>();
-      studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
-
-      const historyData: HistoryRow[] = (sessionRows || []).map(session => {
-        const status = logStatusMap.get(session.session_id) || 'absent';
-        return { ...session, status };
-      });
-      setHistory(historyData);
-
-      const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
-
-      (sessionRows as SessionRow[] || []).forEach(session => {
-        const course = session.course_code;
-        const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
-        stats.total += 1;
-        stats.sessions.push(session);
-
-        if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
-        courseStats.set(course, stats);
-      });
-
-      const finalRecords: CourseRecord[] = [];
-
-      courseStats.forEach((stats, course) => {
-        const total = stats.total;
-        const attended = stats.attended;
-        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
-        const maxAbsences = Math.floor(total * 0.30);
-        const currentAbsences = total - attended;
-        const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
-
-        let streak = 0;
-        for (const session of stats.sessions) {
-          if (logStatusMap.get(session.session_id) === 'verified') streak += 1;
-          else break;
-        }
-
-        let tier: CourseRecord['streak_tier'] = 'None';
-        if (streak >= 10) tier = 'Odogwu';
-        else if (streak >= 5) tier = 'Consistent';
-        else if (streak >= 1) tier = 'JJC';
-
-        finalRecords.push({
-          course_code: course, total_classes: total, attended_classes: attended,
-          percentage, skips_left: skipsLeft, streak, streak_tier: tier,
-        });
-      });
-
-      finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
-      setRecords(finalRecords);
-
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Verification failed.";
-      setRecords(null);
-      setError(msg);
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const saveNickname = async () => {
-    if (!nickname.trim() || !matricNumber) return;
-    await supabase.from('student_profiles').upsert({
-      matric_number: matricNumber.toUpperCase().trim(),
-      nickname: nickname.trim()
-    });
-    setSavedNickname(nickname.trim());
-    setIsEditingNickname(false);
-  };
-
-  const getShieldColor = (pct: number) => {
-    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
-    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
-    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
-
-      <div className="w-full max-w-md relative z-10 pt-4">
-        
-        <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
-          <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
-            <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-            {savedNickname ? `Hey, ${savedNickname}!` : 'Survival Companion'}
-          </h1>
-          <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
-        </div>
-
-        {activeLiveClass && (
-          <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-full animate-pulse"><Clock size={20} /></div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Now</p>
-                <p className="font-extrabold text-lg">{activeLiveClass}</p>
-              </div>
-            </div>
-            <span className="text-xs font-bold text-white/80 text-right leading-tight max-w-20">Check WhatsApp</span>
-          </div>
-        )}
-
-        <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
-          
-          {!records && (
-            <>
-              <div className="relative mb-4">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                <input
-                  type="text"
-                  placeholder="Matric Number (e.g. CSC/2021/001)"
-                  value={matricNumber}
-                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()}
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium"
-                />
-              </div>
-              <button
-                onClick={handleVerifyAndFetch}
-                disabled={matricNumber.length < 5 || isVerifying}
-                className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70"
-              >
-                {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
-                {isVerifying ? "Verifying..." : "Unlock Portal"}
-              </button>
-              
-              {error && (
-                <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
-                  <p className="text-red-700 font-bold text-sm">{error}</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {records && (
-            <>
-              <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
-                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
-                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
-                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
-              </div>
-
-              {activeTab === 'dashboard' && (
-                <div className="space-y-5 animate-in fade-in">
-                  
-                  <div className="flex items-center justify-between bg-blue-50 border border-blue-100 p-3 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Nickname:</span>
-                      {isEditingNickname ? (
-                        <input 
-                          type="text" 
-                          value={nickname} 
-                          onChange={e => setNickname(e.target.value)} 
-                          className="bg-white border border-blue-200 rounded px-2 py-1 text-sm font-bold text-gray-900 outline-none w-32"
-                          placeholder="E.g., Big Fish"
-                          maxLength={15}
-                        />
-                      ) : (
-                        <span className="text-sm font-black text-blue-900">{savedNickname || 'Not set'}</span>
-                      )}
-                    </div>
-                    {isEditingNickname ? (
-                      <button onClick={saveNickname} className="text-blue-600 hover:text-blue-800"><Save size={16} /></button>
-                    ) : (
-                      <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={16} /></button>
-                    )}
-                  </div>
-
-                  {records.map((record) => {
-                    const colors = getShieldColor(record.percentage);
-                    return (
-                      <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
-                            <p className="text-[11px] text-gray-600 font-semibold mt-0.5">{record.attended_classes} / {record.total_classes} Classes</p>
-                          </div>
-                          <div className="text-right">
-                            <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
-                          </div>
-                        </div>
-                        <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
-                          <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
-                          <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {activeTab === 'records' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <FileText size={18} className="text-gray-400" />
-                    <h3 className="font-bold text-gray-800">Attendance History</h3>
-                  </div>
-                  <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
-                    {history?.map((h, i) => (
-                      <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
-                          <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
-                        </div>
-                        {h.status === 'verified' ? (
-                          <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
-                        ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                          <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
-                        ) : (
-                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'feed' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Megaphone size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800">Campus Updates</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {feed.map((post) => (
-                      <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
-                          {post.course_code && (
-                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-600 leading-relaxed mb-2">{post.content}</p>
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                          <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    ))}
-                    {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => { setRecords(null); setHistory(null); }}
-                className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
-              >
-                <Lock size={16} /> Lock Portal
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="mt-8 text-center animate-in fade-in pb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-            <ArrowLeft size={16} /> Back to Hub
-          </Link>
-        </div>
-      </div>
-    </div>
   );
 }
 </file>
@@ -4311,6 +3881,520 @@ export async function POST(request: Request) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/portal/page.tsx">
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/utils/supabase';
+import { 
+  ShieldCheck, User, Clock, ArrowLeft, Lock,
+  Megaphone, Calendar, Edit3, Save, FileText, Plus
+} from 'lucide-react';
+import Link from 'next/link';
+import { startAuthentication } from '@simplewebauthn/browser';
+
+interface CourseRecord {
+  course_code: string;
+  total_classes: number;
+  attended_classes: number;
+  percentage: number;
+  skips_left: number;
+  streak: number;
+  streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
+}
+
+interface LogRow { session_id: string; status: string; }
+interface SessionRow { session_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
+interface HistoryRow extends SessionRow { status: string; }
+interface CampusUpdate { id: string; title: string; content: string; author: string; course_code: string | null; created_at: string; }
+interface AvailableCourse { id: string; course_code: string; department: string; level: string; }
+
+export default function StudentPortal() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register'>('dashboard');
+  
+  const [matricNumber, setMatricNumber] = useState('');
+  const [studentDept, setStudentDept] = useState('');
+  const [studentLevel, setStudentLevel] = useState('');
+  
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [records, setRecords] = useState<CourseRecord[] | null>(null);
+  const [history, setHistory] = useState<HistoryRow[] | null>(null);
+  const [error, setError] = useState('');
+  const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
+
+  const [nickname, setNickname] = useState('');
+  const [savedNickname, setSavedNickname] = useState('');
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [feed, setFeed] = useState<CampusUpdate[]>([]);
+  
+  // Self-registration State
+  const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
+  const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('campuscheck_student_matric');
+    if (saved) {
+      const id = setTimeout(() => { setMatricNumber(saved); }, 0);
+      return () => clearTimeout(id);
+    }
+  }, []);
+
+  const handleVerifyAndFetch = async () => {
+    if (matricNumber.length < 5) return;
+    setIsVerifying(true);
+    setError('');
+    setRecords(null);
+    setHistory(null);
+    setActiveLiveClass(null);
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+    localStorage.setItem('campuscheck_student_matric', cleanMatric);
+
+    try {
+      // 1. WebAuthn
+      const genRes = await fetch('/api/webauthn/auth/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric })
+      });
+
+      if (genRes.status === 404) {
+        throw new Error("You haven't linked your biometrics yet. You must check into a lecture first.");
+      }
+
+      const options = await genRes.json();
+      if (options.error) throw new Error(options.error);
+
+      const asseResp = await startAuthentication(options);
+
+      const verifyRes = await fetch('/api/webauthn/auth/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric, authResponse: asseResp })
+      });
+
+      const verifyResult = await verifyRes.json();
+      if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
+
+      // 2. Fetch Profile
+      const { data: profile } = await supabase
+        .from('student_profiles')
+        .select('nickname, department, level')
+        .eq('matric_number', cleanMatric)
+        .maybeSingle();
+
+      if (profile?.nickname) {
+        setNickname(profile.nickname);
+        setSavedNickname(profile.nickname);
+      }
+      if (profile?.department) setStudentDept(profile.department);
+      if (profile?.level) setStudentLevel(profile.level);
+
+      // 3. Fetch Feed
+      const { data: feedData } = await supabase
+        .from('campus_updates')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (feedData) setFeed(feedData);
+
+      // 4. Fetch Records (Only enrolled)
+      const { data: enrollmentRows, error: enrollError } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('matric_number', cleanMatric);
+
+      if (enrollError) throw enrollError;
+
+      if (!enrollmentRows || enrollmentRows.length === 0) {
+        setRecords([]);
+        return;
+      }
+
+      const courseIds = enrollmentRows.map(e => e.course_id);
+      const { data: courseRows, error: courseError } = await supabase
+        .from('courses')
+        .select('id, course_code')
+        .in('id', courseIds);
+
+      if (courseError) throw courseError;
+      const courseCodes = courseRows?.map(c => c.course_code) || [];
+
+      const { data: sessionRows, error: sessionError } = await supabase
+        .from('lecture_sessions')
+        .select('session_id, course_code, created_at, is_active, expires_at')
+        .in('course_code', courseCodes)
+        .order('created_at', { ascending: false });
+
+      if (sessionError) throw sessionError;
+
+      const now = new Date().getTime();
+      const liveSession = sessionRows?.find(s => {
+        if (!s.is_active) return false;
+        const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
+        return !isExpired;
+      });
+      if (liveSession) setActiveLiveClass(liveSession.course_code);
+
+      const sessionIds = (sessionRows || []).map(s => s.session_id);
+      let studentLogs: LogRow[] = [];
+
+      if (sessionIds.length > 0) {
+        const { data: logRows, error: logError } = await supabase
+          .from('attendance_logs')
+          .select('session_id, status')
+          .eq('matric_number', cleanMatric)
+          .in('session_id', sessionIds);
+
+        if (logError) throw logError;
+        studentLogs = logRows || [];
+      }
+
+      const logStatusMap = new Map<string, string>();
+      studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
+
+      const historyData: HistoryRow[] = (sessionRows || []).map(session => {
+        const status = logStatusMap.get(session.session_id) || 'absent';
+        return { ...session, status };
+      });
+      setHistory(historyData);
+
+      const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
+      (sessionRows as SessionRow[] || []).forEach(session => {
+        const course = session.course_code;
+        const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
+        stats.total += 1;
+        stats.sessions.push(session);
+        if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
+        courseStats.set(course, stats);
+      });
+
+      const finalRecords: CourseRecord[] = [];
+      courseStats.forEach((stats, course) => {
+        const total = stats.total;
+        const attended = stats.attended;
+        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
+        const maxAbsences = Math.floor(total * 0.30);
+        const currentAbsences = total - attended;
+        const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
+
+        let streak = 0;
+        for (const session of stats.sessions) {
+          if (logStatusMap.get(session.session_id) === 'verified') streak += 1;
+          else break;
+        }
+
+        let tier: CourseRecord['streak_tier'] = 'None';
+        if (streak >= 10) tier = 'Odogwu';
+        else if (streak >= 5) tier = 'Consistent';
+        else if (streak >= 1) tier = 'JJC';
+
+        finalRecords.push({
+          course_code: course, total_classes: total, attended_classes: attended,
+          percentage, skips_left: skipsLeft, streak, streak_tier: tier,
+        });
+      });
+
+      finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
+      setRecords(finalRecords);
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Verification failed.";
+      setRecords(null);
+      setError(msg);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!matricNumber) return;
+    await supabase.from('student_profiles').upsert({
+      matric_number: matricNumber.toUpperCase().trim(),
+      nickname: nickname.trim(),
+      department: studentDept.toUpperCase().trim(),
+      level: studentLevel.trim()
+    });
+    setSavedNickname(nickname.trim());
+    setIsEditingNickname(false);
+    fetchAvailableCourses();
+  };
+
+  const fetchAvailableCourses = useCallback(async () => {
+    if (!studentDept || !studentLevel) return;
+    
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('id, course_code, department, level')
+      .eq('department', studentDept.toUpperCase())
+      .eq('level', studentLevel);
+
+    if (allCourses) {
+      const { data: enrolled } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('matric_number', matricNumber.toUpperCase().trim());
+      
+      const enrolledIds = new Set(enrolled?.map(e => e.course_id) || []);
+      const available = allCourses.filter(c => !enrolledIds.has(c.id));
+      
+      setAvailableCourses(available);
+    }
+  }, [studentDept, studentLevel, matricNumber]);
+
+  useEffect(() => {
+    if (activeTab === 'register') fetchAvailableCourses();
+  }, [activeTab, fetchAvailableCourses]);
+
+  const handleEnroll = async (courseId: string, courseCode: string) => {
+    setIsEnrolling(courseId);
+    try {
+      const { error } = await supabase.from('enrollments').insert([{
+        course_id: courseId,
+        matric_number: matricNumber.toUpperCase().trim()
+      }]);
+      if (error) throw error;
+      alert(`Successfully enrolled in ${courseCode}!`);
+      handleVerifyAndFetch();
+      setActiveTab('dashboard');
+    } catch {
+      alert("Failed to enroll. Please try again.");
+    } finally {
+      setIsEnrolling(null);
+    }
+  };
+
+  const getShieldColor = (pct: number) => {
+    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
+    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
+    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="w-full max-w-md relative z-10 pt-4">
+        
+        <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
+          <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
+            <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            {savedNickname ? `Hey, ${savedNickname}!` : 'Survival Companion'}
+          </h1>
+          <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
+        </div>
+
+        {activeLiveClass && (
+          <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-full animate-pulse"><Clock size={20} /></div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Now</p>
+                <p className="font-extrabold text-lg">{activeLiveClass}</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-white/80 text-right leading-tight max-w-20">Check WhatsApp</span>
+          </div>
+        )}
+
+        <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
+          
+          {!records && (
+            <>
+              <div className="relative mb-4">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+                <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
+              </div>
+              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70">
+                {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
+                {isVerifying ? "Verifying..." : "Unlock Portal"}
+              </button>
+              
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
+                  <p className="text-red-700 font-bold text-sm">{error}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {records && (
+            <>
+              <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
+                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
+                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
+                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
+              </div>
+
+              {activeTab === 'dashboard' && (
+                <div className="space-y-5 animate-in fade-in">
+                  
+                  <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
+                        {isEditingNickname ? (
+                          <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-sm font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
+                        ) : (
+                          <span className="text-sm font-black text-blue-900">{savedNickname || 'Not set'}</span>
+                        )}
+                      </div>
+                      {isEditingNickname ? (
+                        <button onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={16} /></button>
+                      ) : (
+                        <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={16} /></button>
+                      )}
+                    </div>
+                    
+                    {isEditingNickname && (
+                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
+                        <input type="text" value={studentDept} onChange={e => setStudentDept(e.target.value)} placeholder="Dept (e.g., CSC)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full uppercase" />
+                        <input type="text" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} placeholder="Level (e.g., 200)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full" />
+                      </div>
+                    )}
+                  </div>
+
+                  {records.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-2xl border border-gray-200">
+                      <p className="text-sm font-bold text-gray-500">You have no courses yet.</p>
+                      <button onClick={() => setActiveTab('register')} className="mt-3 text-[#2563EB] font-bold text-sm hover:underline">Go to Course Registration</button>
+                    </div>
+                  ) : (
+                    records.map((record) => {
+                      const colors = getShieldColor(record.percentage);
+                      return (
+                        <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
+                              <p className="text-[11px] text-gray-600 font-semibold mt-0.5">{record.attended_classes} / {record.total_classes} Classes</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                            </div>
+                          </div>
+                          <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
+                            <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
+                            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'records' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FileText size={18} className="text-gray-400" />
+                    <h3 className="font-bold text-gray-800">Attendance History</h3>
+                  </div>
+                  <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
+                    {history?.map((h, i) => (
+                      <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
+                          <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
+                        </div>
+                        {h.status === 'verified' ? (
+                          <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
+                        ) : h.status === 'flagged' || h.status === 'pending_override' ? (
+                          <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                        ) : (
+                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'register' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Plus size={18} className="text-[#2563EB]" />
+                    <h3 className="font-bold text-gray-800">Register for Courses</h3>
+                  </div>
+                  
+                  {(!studentDept || !studentLevel) ? (
+                    <div className="text-center p-6 bg-yellow-50 border border-yellow-200 rounded-xl">
+                      <p className="text-sm font-bold text-yellow-800">Please set your Department and Level in the Shield tab first.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {availableCourses.length === 0 ? (
+                        <p className="text-center text-sm text-gray-500 py-4">No new courses available for {studentDept} {studentLevel}.</p>
+                      ) : (
+                        availableCourses.map(course => (
+                          <div key={course.id} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{course.course_code}</p>
+                              <p className="text-[10px] text-gray-500 font-medium">{course.department} • Level {course.level}</p>
+                            </div>
+                            <button 
+                              onClick={() => handleEnroll(course.id, course.course_code)}
+                              disabled={isEnrolling === course.id}
+                              className="bg-[#2563EB] text-white px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                              {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'feed' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Megaphone size={18} className="text-[#2563EB]" />
+                    <h3 className="font-bold text-gray-800">Campus Updates</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {feed.map((post) => (
+                      <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                          {post.course_code && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-600 leading-relaxed mb-2">{post.content}</p>
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                    {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => { setRecords(null); setHistory(null); }}
+                className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
+              >
+                <Lock size={16} /> Lock Portal
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="mt-8 text-center animate-in fade-in pb-8">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -4519,12 +4603,19 @@ export async function POST(request: Request) {
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/utils/supabase';
 import {
-  Users, Clock, CheckCircle, AlertTriangle, ShieldCheck,
+  Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
   User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText
 } from 'lucide-react';
 
-interface Log { id: string; matricNumber: string; nickname?: string; status: string; time: string; }
+interface Log { 
+  id: string; 
+  matricNumber: string; 
+  nickname?: string; 
+  status: string; 
+  time: string; 
+  reason?: string; 
+}
 interface DashboardData { course: string; isActive: boolean; logs: Log[]; }
 interface LecturerProfile { full_name: string; department: string; }
 interface Course { id: string; course_code: string; }
@@ -4969,9 +5060,14 @@ export default function LecturerDashboard() {
   }
 
   // --- Live Radar View ---
+  const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
+  const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
+
   return (
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* Header Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -4996,6 +5092,46 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* REVIEW REQUIRED SECTION */}
+        {flaggedLogs.length > 0 && (
+          <div className="bg-red-50 rounded-2xl shadow-sm border border-red-200 overflow-hidden animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="px-4 md:px-6 py-4 border-b border-red-100 bg-red-100/50 flex items-center gap-2">
+              <AlertTriangle className="text-red-600" size={18} />
+              <h3 className="font-bold text-red-900">Review Required ({flaggedLogs.length})</h3>
+            </div>
+            <div className="divide-y divide-red-100">
+              {flaggedLogs.map((log) => (
+                <div key={log.id} className="p-4 md:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-red-100/30 transition-colors">
+                  <div>
+                    <p className="font-bold text-gray-900 text-lg">
+                      {log.matricNumber}
+                      {log.nickname && <span className="text-sm text-gray-500 font-medium ml-2">({log.nickname})</span>}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-[10px] uppercase font-bold text-red-700 bg-red-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        {log.status === 'pending_override' ? <Hand size={10} /> : <AlertTriangle size={10} />}
+                        {log.status === 'pending_override' ? 'Raised Hand' : 'Flagged'}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                        <Clock size={12} /> {log.time}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium mt-2">
+                      <strong>Reason:</strong> {log.reason || 'Biometric skipped or location anomaly'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleManualOverride(log.matricNumber)}
+                    className="whitespace-nowrap bg-white border border-red-200 text-red-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck size={16} /> Approve
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -5011,9 +5147,10 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
+        {/* CLEAN VERIFIED LEDGER */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex flex-row items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-            <h3 className="font-bold text-gray-700 flex items-center gap-2"><Users size={18} /> Verified Ledger</h3>
+            <h3 className="font-bold text-gray-700 flex items-center gap-2"><CheckCircle className="text-green-500" size={18} /> Verified Ledger ({verifiedLogs.length})</h3>
             <span className="text-xs text-gray-400 font-bold">Updated: {lastRefreshed || 'Just now'}</span>
           </div>
           <div className="overflow-x-auto">
@@ -5023,16 +5160,15 @@ export default function LecturerDashboard() {
                   <th className="px-4 md:px-6 py-4 font-bold">Matric Number</th>
                   <th className="px-4 md:px-6 py-4 font-bold">Time</th>
                   <th className="px-4 md:px-6 py-4 font-bold">Status</th>
-                  <th className="px-4 md:px-6 py-4 font-bold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data?.logs.length === 0 ? (
+                {verifiedLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 md:px-6 py-12 text-center text-gray-400 font-bold">Waiting for students to check in...</td>
+                    <td colSpan={3} className="px-4 md:px-6 py-12 text-center text-gray-400 font-bold">No verified check-ins yet.</td>
                   </tr>
                 ) : (
-                  data?.logs.map((log) => (
+                  verifiedLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 md:px-6 py-3 md:py-4 font-bold text-gray-900">
                         {log.matricNumber}
@@ -5040,20 +5176,7 @@ export default function LecturerDashboard() {
                       </td>
                       <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm font-medium"><Clock size={14} /> {log.time}</td>
                       <td className="px-4 md:px-6 py-3 md:py-4">
-                        {log.status === 'verified' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Verified</span>
-                        ) : log.status === 'pending_override' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-50 text-orange-700 border border-orange-200 animate-pulse"><Hand size={12} strokeWidth={2.5} /> Raised Hand</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200"><AlertTriangle size={12} strokeWidth={2.5} /> Flagged</span>
-                        )}
-                      </td>
-                      <td className="px-4 md:px-6 py-3 md:py-4 text-right">
-                        {log.status !== 'verified' && (
-                          <button onClick={() => handleManualOverride(log.matricNumber)} className="inline-flex items-center justify-center gap-1 text-xs font-bold text-gray-600 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm hover:bg-gray-50 transition-all">
-                            <ShieldCheck size={14} /> Approve
-                          </button>
-                        )}
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Verified</span>
                       </td>
                     </tr>
                   ))
@@ -5074,7 +5197,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
-  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
@@ -5088,12 +5211,7 @@ type Status =
   | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
 const RATING_TAGS = [
-  'Clear Audio',
-  'Well Explained',
-  'Too Fast',
-  'Too Slow',
-  'Great Examples',
-  'Confusing',
+  'Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing',
 ];
 
 const GPS_BROWSER_TIMEOUT_MS = 20000;
@@ -5103,18 +5221,10 @@ const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
-  if (minutesLate <= 2) {
-    return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
-  }
-  if (minutesLate <= 10) {
-    return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
-  }
-  if (minutesLate <= 25) {
-    return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
-  }
-  if (minutesLate <= 45) {
-    return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
-  }
+  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
+  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
+  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
+  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
@@ -5132,6 +5242,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
 
+  // Pre-Flight GPS Check State
+  const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
@@ -5140,8 +5253,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
 
-  // --- iOS FIX DETECTION ---
-  // Detect if user is on iOS AND using a browser other than Safari (where WebAuthn fails)
   const isIosNonSafari = () => {
     if (typeof navigator === 'undefined') return false;
     const ua = navigator.userAgent;
@@ -5150,16 +5261,47 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
+  // --- PRE-FLIGHT GPS CHECK (REACT 19 SAFE) ---
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      // We use a microtask to satisfy the synchronous setState rule
+      Promise.resolve().then(() => setGpsStatus('denied'));
+      return;
+    }
+    
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        // Initial check
+        Promise.resolve().then(() => setGpsStatus(result.state as 'granted' | 'denied' | 'prompt'));
+        
+        // Listen for changes (e.g., user clicks Allow)
+        const handleChange = () => {
+          setGpsStatus(result.state as 'granted' | 'denied' | 'prompt');
+        };
+        
+        result.addEventListener('change', handleChange);
+        
+        return () => {
+          result.removeEventListener('change', handleChange);
+        };
+      }).catch(() => {
+        Promise.resolve().then(() => setGpsStatus('prompt'));
+      });
+    } else {
+      Promise.resolve().then(() => setGpsStatus('prompt'));
+    }
+  }, []);
+
+  // Pre-warm GPS (only if granted or prompt)
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    if (gpsStatus === 'denied') return;
+
     const id = navigator.geolocation.watchPosition(
       (position) => {
         prewarmBufferRef.current.push({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          alt: position.coords.altitude,
-          acc: position.coords.accuracy,
-          timestamp: position.timestamp
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
         });
         if (prewarmBufferRef.current.length > 30) {
           prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
@@ -5170,7 +5312,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     );
     prewarmWatchIdRef.current = id;
     return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
-  }, []);
+  }, [gpsStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5178,9 +5320,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const fp = await generateDeviceFingerprint();
         if (!cancelled) fingerprintRef.current = fp.hash;
-      } catch (err) {
-        console.error('[CampusCheck] Fingerprint generation failed:', err);
-      }
+      } catch {}
     }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, []);
@@ -5209,21 +5349,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     for (const item of queue) {
       try {
         const res = await fetch('/api/verify-attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: item.session,
-            matricNumber: item.matric,
-            telemetry: item.telemetry,
-            deviceFingerprint: item.fingerprint,
-            verificationMethod: item.verificationMethod
-          })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceFingerprint: item.fingerprint, verificationMethod: item.verificationMethod })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
-      } catch {
-        remainingQueue.push(item);
-      }
+      } catch { remainingQueue.push(item); }
     }
     localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
     if (successCount > 0 && remainingQueue.length === 0) {
@@ -5249,14 +5380,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
     setStatus('checking');
-
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-
       if (res.status === 404) setStatus('needs_setup');
       else if (res.ok) setStatus('ready');
       else throw new Error("Failed to verify ledger.");
@@ -5274,29 +5402,21 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('failed');
         return;
       }
-
       setStatus('locating');
-
       const genRes = await fetch('/api/webauthn/register/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-
       const options = await genRes.json();
-      if (!genRes.ok || options.error) {
-        throw new Error(options.error || "Server rejected registration.");
-      }
-
+      if (!genRes.ok || options.error) throw new Error(options.error || "Server rejected registration.");
+      
       const attResp = await startRegistration(options);
-
       const verifyRes = await fetch('/api/webauthn/register/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
-
+      
       if (verifyResult.verified) {
         localStorage.setItem('campuscheck_device_anchor', matricNumber);
         setStatus('ready');
@@ -5322,15 +5442,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
 
       const response = await fetch('/api/verify-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          matricNumber,
-          telemetry: gpsTelemetry,
-          deviceFingerprint: fingerprint || 'unknown',
-          verificationMethod
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceFingerprint: fingerprint || 'unknown', verificationMethod })
       });
       const result = await response.json();
 
@@ -5349,14 +5462,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
-        existing.push({
-          session: sessionId,
-          matric: matricNumber,
-          telemetry: gpsTelemetry,
-          fingerprint: fingerprintRef.current,
-          verificationMethod,
-          timestamp: Date.now()
-        });
+        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
         localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
         setStatus('offline-queued');
       } else {
@@ -5371,14 +5477,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setLiveAccuracy(null);
     let verificationMethod = 'skipped';
 
-    // THE FIX: iOS Non-Safari bypasses WebAuthn completely
     const skipWebAuthn = isIosNonSafari();
 
     if (!skipWebAuthn) {
       try {
         const genRes = await fetch('/api/webauthn/auth/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ matricNumber })
         });
         if (genRes.status === 404) {
@@ -5388,8 +5492,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           if (options.error) throw new Error(options.error);
           const asseResp = await startAuthentication(options);
           const verifyRes = await fetch('/api/webauthn/auth/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ matricNumber, authResponse: asseResp })
           });
           const verifyResult = await verifyRes.json();
@@ -5401,15 +5504,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
         verificationMethod = 'skipped';
       }
     } else {
-      // iOS Non-Safari: Bypass biometrics and flag as iOS Web
       verificationMethod = 'ios_web';
     }
 
-    if (!navigator.geolocation) {
-      setErrorMessage("Browser doesn't support location.");
-      setStatus('failed');
-      return;
-    }
+    if (!navigator.geolocation) { setErrorMessage("Browser doesn't support location."); setStatus('failed'); return; }
 
     const pings: Telemetry[] = [...prewarmBufferRef.current];
     let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
@@ -5431,18 +5529,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     };
 
-    if (pings.length >= 1) {
-      sentAny = true;
-      sendPayloadToVercel(pings, verificationMethod);
-    }
+    if (pings.length >= 1) { sentAny = true; sendPayloadToVercel(pings, verificationMethod); }
 
     const overallTimeoutId = setTimeout(() => {
-      if (!sentAny && pings.length === 0) {
-        finishWith(pings);
-      } else {
-        didFinish = true;
-        if (watchId) navigator.geolocation.clearWatch(watchId);
-      }
+      if (!sentAny && pings.length === 0) finishWith(pings);
+      else { didFinish = true; if (watchId) navigator.geolocation.clearWatch(watchId); }
     }, GPS_OVERALL_TIMEOUT_MS);
 
     let lastSendTs = Date.now();
@@ -5452,14 +5543,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const acc = position.coords.accuracy;
         if (acc < bestAcc) bestAcc = acc;
         setLiveAccuracy(Math.round(bestAcc));
-
-        pings.push({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          alt: position.coords.altitude,
-          acc: position.coords.accuracy,
-          timestamp: position.timestamp
-        });
+        pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
 
         const now = Date.now();
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
@@ -5473,13 +5557,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (didFinish || sentAny) return;
         didFinish = true;
-
-        if (error.code === 1) {
-          setStatus('denied');
-        } else {
-          setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`);
-          setStatus('failed');
-        }
+        if (error.code === 1) setStatus('denied');
+        else { setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`); setStatus('failed'); }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
     );
@@ -5489,21 +5568,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsAppealing(true);
     try {
       const response = await fetch('/api/request-override', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, matricNumber })
       });
-      if (response.ok) {
-        alert("Appeal sent! Please look at the lecturer for visual confirmation.");
-        setStatus('idle');
-      } else {
-        alert("Failed to send appeal. Check network.");
-      }
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIsAppealing(false);
-    }
+      if (response.ok) { alert("Appeal sent! Please look at the lecturer for visual confirmation."); setStatus('idle'); }
+      else alert("Failed to send appeal. Check network.");
+    } catch { alert("Network error."); }
+    finally { setIsAppealing(false); }
   };
 
   const toggleTag = (tag: string) => {
@@ -5515,23 +5586,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
     try {
       if (!skip) {
         await fetch('/api/rate-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
-    } catch {
-      // Silent fail
-    } finally {
+    } catch {}
+    finally {
       setIsSubmittingRating(false);
-      router.push('/portal'); // <-- REDIRECT TO PORTAL
+      router.push('/portal');
     }
   };
 
   const memeData = useMemo(() => {
-    if (!sessionCreatedAt || verifiedAt === null) {
-      return { minutesLate: 0, meme: getMeme(0) };
-    }
+    if (!sessionCreatedAt || verifiedAt === null) return { minutesLate: 0, meme: getMeme(0) };
     const start = new Date(sessionCreatedAt).getTime();
     const minutesLate = Math.max(0, Math.floor((verifiedAt - start) / 60000));
     return { minutesLate, meme: getMeme(minutesLate) };
@@ -5541,26 +5608,38 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
 
+        {/* Pre-Flight GPS Banner */}
+        {gpsStatus === 'denied' && (
+          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
+            <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+            <div>
+              <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
+              <p className="text-xs text-red-700 font-medium mt-1">
+                Please allow location access in your browser settings to check in. Without it, the system cannot verify you.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {gpsStatus === 'prompt' && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
+            <MapPin className="text-amber-600 shrink-0 mt-0.5" size={20} />
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">Location Permission Needed</h4>
+              <p className="text-xs text-amber-700 font-medium mt-1">
+                Please tap &quot;Allow&quot; when your browser asks for location access.
+              </p>
+            </div>
+          </div>
+        )}
+
         {status === 'idle' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400">
-                <User size={18} />
-              </div>
-              <input
-                type="text"
-                placeholder="Matric Number (e.g., CSC/2021/001)"
-                value={matricNumber}
-                onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()}
-                className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase"
-              />
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><User size={18} /></div>
+              <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase" />
             </div>
-            <button
-              onClick={checkStudentStatus}
-              disabled={matricNumber.length < 5}
-              className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50"
-            >
+            <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50">
               Continue <ArrowRight size={20} className="text-gray-300" />
             </button>
           </div>
@@ -5568,50 +5647,22 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'needs_setup' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-              <ShieldCheck size={32} className="text-[#2563EB]" />
-            </div>
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><ShieldCheck size={32} className="text-[#2563EB]" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Hardware Setup</h3>
-            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">
-              We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.
-            </p>
-            <button
-              onClick={registerDevice}
-              className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
-            >
-              Scan Biometrics
-            </button>
-            <button
-              onClick={() => setStatus('idle')}
-              className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm"
-            >
-              Cancel
-            </button>
+            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
+            <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
+            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
           </div>
         )}
 
         {status === 'ready' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
-              <CheckCircle size={32} className="text-green-600" />
-            </div>
+            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100"><CheckCircle size={32} className="text-green-600" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Identity Confirmed</h3>
             <p className="text-gray-900 font-black text-xl mt-1">{matricNumber}</p>
-            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">
-              Your device is securely linked. Ensure you are inside the lecture hall.
-            </p>
-            <button
-              onClick={executeFinalCheckIn}
-              className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"
-            >
-              <Navigation size={20} /> Submit Attendance
-            </button>
-            <button
-              onClick={() => setStatus('idle')}
-              className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm"
-            >
-              Not you? Switch account
-            </button>
+            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is securely linked. Ensure you are inside the lecture hall.</p>
+            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
+            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
           </div>
         )}
 
@@ -5619,16 +5670,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold text-center">
-              {status === 'checking' ? "Verifying ledger..."
-                : status === 'locating' ? "Sending your location..."
-                : status === 'syncing' ? "Syncing offline data..."
-                : "Verifying coordinates..."}
+              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Sending your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
             </p>
             {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
-              <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
-                <Signal size={14} className="text-[#2563EB]" />
-                <span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span>
-              </div>
+              <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"><Signal size={14} className="text-[#2563EB]" /><span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span></div>
             )}
           </div>
         )}
@@ -5637,9 +5682,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 text-center">
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
-            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">
-              {matricNumber}
-            </p>
+            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
             <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. Hang tight...</p>
           </div>
         )}
@@ -5651,9 +5694,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <h3 className="text-xl font-extrabold text-blue-900">{memeData.meme.title}</h3>
               <p className="text-sm text-blue-700 font-medium mt-1">{memeData.meme.sub}</p>
               {sessionCreatedAt && (
-                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">
-                  {memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}
-                </p>
+                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
               )}
             </div>
 
@@ -5663,17 +5704,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
               <div className="flex justify-center gap-2 mt-5">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setRatingStars(star)}
-                    className="transition-transform active:scale-90"
-                    aria-label={`Rate ${star} stars`}
-                  >
-                    <Star
-                      size={36}
-                      className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
-                      strokeWidth={1.5}
-                    />
+                  <button key={star} onClick={() => setRatingStars(star)} className="transition-transform active:scale-90" aria-label={`Rate ${star} stars`}>
+                    <Star size={36} className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} strokeWidth={1.5} />
                   </button>
                 ))}
               </div>
@@ -5683,35 +5715,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
                   {RATING_TAGS.map((tag) => {
                     const active = ratingTags.includes(tag);
                     return (
-                      <button
-                        key={tag}
-                        onClick={() => toggleTag(tag)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                          active
-                            ? 'bg-[#2563EB] text-white border-[#2563EB]'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
-                        }`}
-                      >
-                        {tag}
-                      </button>
+                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>{tag}</button>
                     );
                   })}
                 </div>
               )}
 
               <div className="flex gap-2 mt-6">
-                <button
-                  onClick={() => submitRating(true)}
-                  disabled={isSubmittingRating}
-                  className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50"
-                >
-                  Skip
-                </button>
-                <button
-                  onClick={() => submitRating(false)}
-                  disabled={isSubmittingRating || ratingStars === 0}
-                  className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                >
+                <button onClick={() => submitRating(true)} disabled={isSubmittingRating} className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50">Skip</button>
+                <button onClick={() => submitRating(false)} disabled={isSubmittingRating || ratingStars === 0} className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
                   {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
                 </button>
               </div>
@@ -5719,21 +5731,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {status === 'rated' && (
-          <div className="py-8 text-center">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Thanks for the feedback!</h3>
-            <p className="text-gray-500 mt-2 text-sm font-medium">You may close this page.</p>
-          </div>
-        )}
-
         {status === 'offline-queued' && (
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">
-              Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.
-            </p>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.</p>
           </div>
         )}
 
@@ -5741,40 +5743,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-
             <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
-              {errorMessage.includes("out of bounds")
-                ? "You are too far away. You must be inside the lecture hall to check in."
-                : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down")
-                ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again."
-                : errorMessage}
+              {errorMessage.includes("out of bounds") ? "You are too far away. You must be inside the lecture hall to check in." : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down") ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again." : errorMessage}
             </p>
-
             <div className="mt-6 space-y-3">
               {!errorMessage.includes("out of bounds") && (
-                <button
-                  onClick={executeFinalCheckIn}
-                  className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"
-                >
-                  <RefreshCw size={18} /> Try Again
-                </button>
+                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
               )}
-
-              <button
-                onClick={() => setStatus('idle')}
-                className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm"
-              >
-                Start Over Completely
-              </button>
-
+              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
               {!errorMessage.includes("out of bounds") && (
-                <button
-                  onClick={requestAppeal}
-                  disabled={isAppealing}
-                  className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4"
-                >
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />}
-                  Raise Hand (I am in the hall)
+                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
                 </button>
               )}
             </div>
@@ -5785,23 +5764,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
-            <p className="text-red-600 mt-2 text-sm font-medium">
-              Please allow location access in your browser settings to verify your presence.
-            </p>
-            <button
-              onClick={() => setStatus('idle')}
-              className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all"
-            >
-              Go Back
-            </button>
+            <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
+            <button onClick={() => setStatus('idle')} className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
           </div>
         )}
       </div>
 
       <div className="mt-8 text-center space-y-4">
-        <p className="text-xs font-semibold text-gray-400">
-          Make sure you are physically inside the lecture hall before checking in.
-        </p>
+        <p className="text-xs font-semibold text-gray-400">Make sure you are physically inside the lecture hall before checking in.</p>
       </div>
     </div>
   );

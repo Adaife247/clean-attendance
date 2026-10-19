@@ -37,7 +37,7 @@ export async function POST(request: Request) {
           public_key: immuneKey, 
           counter: credential.counter,
           transports: credential.transports || [],
-          device_hash: 'webauthn-verified', // Rely strictly on WebAuthn identity
+          device_hash: 'webauthn-verified', 
           created_at: new Date().toISOString()
         }, { onConflict: 'matric_number' });
 
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ verified: true });
     }
     return NextResponse.json({ verified: false }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

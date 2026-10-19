@@ -23,8 +23,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
 
-  } catch (error: any) {
-    console.error("Device Reset Error:", error.message);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Device Reset Error:", msg);
     return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
   }
 }

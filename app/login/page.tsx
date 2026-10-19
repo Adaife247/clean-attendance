@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -8,7 +7,6 @@ import Link from 'next/link';
 const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   
   const [email, setEmail] = useState('');
@@ -47,8 +45,9 @@ export default function LoginPage() {
         alert('Registration successful! You can now log in.');
         setIsLogin(true);
       }
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Authentication failed';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -116,7 +115,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* NEW: Back to Hub Navigation */}
         <div className="mt-6 text-center animate-in fade-in">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
             <ArrowLeft size={16} /> Back to Hub

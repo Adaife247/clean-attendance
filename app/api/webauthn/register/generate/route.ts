@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { rpName, rpID } from '@/utils/webauthn';
 
 export async function POST(request: Request) {
@@ -30,7 +29,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(options);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

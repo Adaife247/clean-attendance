@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
 
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
   }
 }

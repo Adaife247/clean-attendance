@@ -5,39 +5,63 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const courseCode = searchParams.get('courseCode');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
 
     if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
 
-    // 1. Get all sessions for this specific course
-    const { data: sessions, error: sessionError } = await supabase
+    // 1. Build the base query for sessions
+    let query = supabase
       .from('lecture_sessions')
       .select('session_id')
-      .ilike('course_code', courseCode);
+      .eq('course_code', courseCode);
+
+    // Apply Date Filters if they exist
+    if (startDate) {
+      query = query.gte('created_at', new Date(startDate).toISOString());
+    }
+    if (endDate) {
+      // Set to the very end of the selected day (23:59:59)
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', end.toISOString());
+    }
+
+    const { data: sessions, error: sessionError } = await query;
 
     if (sessionError) throw sessionError;
 
     if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ message: "No sessions recorded for this course yet." }, { status: 404 });
+      return NextResponse.json({ message: "No sessions recorded for this timeframe." }, { status: 404 });
     }
 
     const sessionIds = sessions.map(s => s.session_id);
     const totalClasses = sessions.length;
 
-    // 2. Get the official course roster
+    // 2. Get the official course roster (from enrollments table)
     const { data: courseData } = await supabase
       .from('courses')
-      .select('roster')
-      .ilike('course_code', courseCode)
+      .select('id')
+      .eq('course_code', courseCode)
       .single();
 
-    const roster = courseData?.roster || [];
+    if (!courseData) {
+       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
 
-    // 3. Get all verified attendance logs for the entire semester
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('matric_number')
+      .eq('course_id', courseData.id);
+
+    const roster = enrollments?.map(e => e.matric_number) || [];
+
+    // 3. Get all verified attendance logs for the specific sessions
     const { data: logs, error: logError } = await supabase
       .from('attendance_logs')
       .select('matric_number, status')
       .in('session_id', sessionIds)
-      .eq('status', 'verified'); // Only count verified attendances!
+      .eq('status', 'verified');
 
     if (logError) throw logError;
 
@@ -47,11 +71,10 @@ export async function GET(request: Request) {
     // Start by assuming everyone on the roster has 0 attendance
     roster.forEach((matric: string) => attendanceMap.set(matric, 0));
 
-    // Now loop through the logs and increment their scores
+    // Loop through logs and increment scores
     (logs || []).forEach(log => {
-      // If a student checked in but wasn't on the official roster, add them now
       if (!attendanceMap.has(log.matric_number)) {
-         attendanceMap.set(log.matric_number, 0);
+         attendanceMap.set(log.matric_number, 0); // Catch students not on roster
       }
       attendanceMap.set(log.matric_number, attendanceMap.get(log.matric_number)! + 1);
     });
@@ -64,7 +87,7 @@ export async function GET(request: Request) {
         totalClasses,
         attended,
         percentage,
-        eligible: percentage >= 70 ? 'YES' : 'NO' // Exam eligibility flag
+        eligible: percentage >= 70 ? 'YES' : 'NO'
       };
     });
 
@@ -77,7 +100,8 @@ export async function GET(request: Request) {
         report
     });
 
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to generate export";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

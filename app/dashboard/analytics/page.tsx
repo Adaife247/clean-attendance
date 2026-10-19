@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
@@ -37,6 +37,8 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -80,9 +82,12 @@ export default function AnalyticsPage() {
     }
   }, [selectedCourseCode, startDate, endDate]);
 
+  // Safely trigger the initial fetch when selectedCourseCode is set
   useEffect(() => {
-    if (!selectedCourseCode) return;
-    fetchReportData(false);
+    if (selectedCourseCode && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchReportData(false);
+    }
   }, [selectedCourseCode, fetchReportData]);
 
   const handleDownload = (isFullSemester: boolean) => {
@@ -146,7 +151,7 @@ export default function AnalyticsPage() {
             value={selectedCourseCode}
             onChange={(e) => setSelectedCourseCode(e.target.value)}
             disabled={courses.length === 0}
-            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-[200px] cursor-pointer"
+            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer"
           >
             {courses.length === 0
               ? <option>No Courses Found</option>
