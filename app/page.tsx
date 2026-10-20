@@ -62,14 +62,15 @@ function CheckInWrapper() {
             
           </div>
 
+          {/* UPDATED COPY: No more "Check WhatsApp" friction */}
           <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
             <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
               <Zap size={20} className="text-white" />
             </div>
             <div>
-              <h4 className="font-bold text-sm">Joining a Live Class?</h4>
+              <h4 className="font-bold text-sm">Live Class in Session?</h4>
               <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                Click the secure session link provided by your lecturer to mark your attendance.
+                Log in to the Student Portal with your Matric Number. If your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear for you to instantly check in.
               </p>
             </div>
           </div>
