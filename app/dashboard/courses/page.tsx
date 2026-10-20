@@ -45,6 +45,9 @@ interface LogRow {
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
 
+// Regex to strictly find Matric Numbers (must contain a slash or hyphen)
+const MATRIC_REGEX = /[\/\-]/; 
+
 export default function CourseManagement() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
@@ -196,7 +199,7 @@ export default function CourseManagement() {
     if (error) alert(`Failed to update course: ${error.message}`);
     else {
       await fetchCourses();
-      setEditingCourse(null); // Close modal
+      setEditingCourse(null);
     }
     setActioningId(null);
   };
@@ -256,7 +259,8 @@ export default function CourseManagement() {
           
           jsonData.forEach(row => {
             row.forEach(cell => {
-               if (typeof cell === 'string' && cell.length > 5 && !cell.includes('MATRIC')) {
+               // FIX: Only accept strings that look like matric numbers
+               if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
                  rawMatrics.push(cell.trim().toUpperCase());
                }
             });
@@ -266,14 +270,14 @@ export default function CourseManagement() {
           const cleanMatrics = csvText
             .split(/[\n,]+/)
             .map(m => m.trim().toUpperCase())
-            .filter(m => m.length > 5 && !m.includes('MATRIC'));
+            .filter(m => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
           rawMatrics = cleanMatrics;
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
 
         if (uniqueMatrics.length === 0) {
-          alert("No valid matric numbers found in the file.");
+          alert("No valid matric numbers found. Ensure your file has a format like CSC/2021/001 or CSC-2021-001.");
           setUploadingId(null);
           e.target.value = '';
           return;
@@ -503,7 +507,6 @@ export default function CourseManagement() {
                 </div>
               </div>
               
-              {/* FIX: Added explicit labels for the inputs */}
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 ml-1">Planned Lectures</label>
@@ -581,11 +584,10 @@ export default function CourseManagement() {
                   <div>
                     <h4 className="font-extrabold text-gray-900 text-lg">{course.course_code}</h4>
                     <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                      {course.department} • {course.level}L
+                      {course.department || 'N/A'} • {course.level ? `${course.level}L` : 'N/A'}
                     </p>
                   </div>
                   
-                  {/* Delete Button on Hover */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                     <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
                       <Trash2 size={14} />
@@ -633,7 +635,9 @@ export default function CourseManagement() {
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-3xl">
               <div>
                 <h2 className="text-xl font-black text-gray-900">{editingCourse.course_code}</h2>
-                <p className="text-xs font-bold text-gray-500 uppercase">{editingCourse.department} • {editingCourse.level}L</p>
+                <p className="text-xs font-bold text-gray-500 uppercase">
+                  {editingCourse.department || 'N/A'} • {editingCourse.level ? `${editingCourse.level}L` : 'N/A'}
+                </p>
               </div>
               <button onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
                 <X size={20} />
