@@ -249,11 +249,9 @@ export default function CourseManagement() {
         let rawMatrics: string[] = [];
 
         if (isExcel) {
-          // Parse Excel File
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          // Convert all cells to text, flatten the array
           const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
           
           jsonData.forEach(row => {
@@ -264,7 +262,6 @@ export default function CourseManagement() {
             });
           });
         } else {
-          // Parse CSV File
           const csvText = event.target?.result as string;
           const cleanMatrics = csvText
             .split(/[\n,]+/)
@@ -295,7 +292,7 @@ export default function CourseManagement() {
           alert(`Success! ${uniqueMatrics.length} students synced.`);
           await fetchCourses();
           if (editingCourse?.id === courseId) {
-            handleOpenModal(editingCourse); // Refresh modal list if it's open
+            handleOpenModal(editingCourse);
           }
         } else {
           alert(`Upload failed: ${error.message}`);
@@ -444,7 +441,6 @@ export default function CourseManagement() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
 
-      {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
           <Users className="text-[#2563EB]" size={28} /> Course & Student Management
@@ -506,22 +502,31 @@ export default function CourseManagement() {
                   <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  placeholder="Planned Classes"
-                  value={plannedClasses}
-                  onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-                />
-                <input
-                  type="number"
-                  placeholder="Max CA Score"
-                  value={maxScore}
-                  onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-                />
+              
+              {/* FIX: Added explicit labels for the inputs */}
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 ml-1">Planned Lectures</label>
+                  <input
+                    type="number"
+                    placeholder="15"
+                    value={plannedClasses}
+                    onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 ml-1">Max CA Marks</label>
+                  <input
+                    type="number"
+                    placeholder="10"
+                    value={maxScore}
+                    onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                  />
+                </div>
               </div>
+
               <button
                 onClick={createCourse}
                 disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel}
@@ -580,7 +585,7 @@ export default function CourseManagement() {
                     </p>
                   </div>
                   
-                  {/* Edit / Delete Buttons on Hover */}
+                  {/* Delete Button on Hover */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                     <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
                       <Trash2 size={14} />
@@ -647,11 +652,11 @@ export default function CourseManagement() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Planned Classes</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Planned Lectures</label>
                     <input type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Score</label>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Marks</label>
                     <input type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                 </div>
