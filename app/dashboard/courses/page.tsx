@@ -4,12 +4,15 @@ import { supabase } from '@/utils/supabase';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck
+  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info
 } from 'lucide-react';
 
 interface Course {
   id: string;
   course_code: string;
+  total_planned_classes: number;
+  max_attendance_score: number;
+  is_finalized: boolean;
   roster: string[] | null;
 }
 
@@ -40,9 +43,14 @@ export default function CourseManagement() {
   const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
 
+  // Create Course State
   const [newCourseCode, setNewCourseCode] = useState('');
+  const [plannedClasses, setPlannedClasses] = useState<number | ''>(15);
+  const [maxScore, setMaxScore] = useState<number | ''>(10);
   const [isCreating, setIsCreating] = useState(false);
+
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<string | null>(null);
 
   // Single Student Add
   const [singleMatric, setSingleMatric] = useState('');
@@ -103,30 +111,63 @@ export default function CourseManagement() {
   }, [fetchEnrollmentCounts]);
 
   useEffect(() => {
-    // Defer to next tick so setState inside fetchCourses doesn't run synchronously
-    // within the effect. Satisfies React 19's set-state-in-effect rule.
     const id = setTimeout(() => { fetchCourses(); }, 0);
     return () => clearTimeout(id);
   }, [fetchCourses]);
 
   const createCourse = async () => {
-    if (!newCourseCode.trim()) return;
+    if (!newCourseCode.trim() || !plannedClasses || !maxScore) return;
     setIsCreating(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       const { error } = await supabase.from('courses').insert([{
         lecturer_id: session.user.id,
         course_code: newCourseCode.toUpperCase(),
+        total_planned_classes: Number(plannedClasses),
+        max_attendance_score: Number(maxScore),
         roster: [],
       }]);
       if (!error) {
         setNewCourseCode('');
+        setPlannedClasses(15);
+        setMaxScore(10);
         await fetchCourses();
       } else {
         alert("Failed to create course.");
       }
     }
     setIsCreating(false);
+  };
+
+  const handleEditCourse = async (courseId: string, currentCode: string) => {
+    const newCode = window.prompt("Enter the new Course Code (e.g., CSC 101):", currentCode);
+    if (!newCode || newCode.trim() === '' || newCode === currentCode) return;
+    
+    setActioningId(courseId);
+    const { error } = await supabase
+      .from('courses')
+      .update({ course_code: newCode.toUpperCase().trim() })
+      .eq('id', courseId);
+      
+    if (error) alert(`Failed to update course: ${error.message}`);
+    else await fetchCourses();
+    
+    setActioningId(null);
+  };
+
+  const handleDeleteCourse = async (courseId: string, courseCode: string) => {
+    if (!window.confirm(`Are you sure you want to delete ${courseCode}?\n\nWARNING: This will permanently delete all enrollments, sessions, and attendance logs tied to this course. This cannot be undone.`)) return;
+    
+    setActioningId(courseId);
+    const { error } = await supabase
+      .from('courses')
+      .delete()
+      .eq('id', courseId);
+      
+    if (error) alert(`Failed to delete course: ${error.message}`);
+    else await fetchCourses();
+    
+    setActioningId(null);
   };
 
   const handleFileUpload = async (
@@ -323,8 +364,16 @@ export default function CourseManagement() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Create Course */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">1. Establish New Course</h3>
-            <div className="flex gap-2">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+              1. Establish New Course
+              <div className="group relative cursor-pointer">
+                <Info size={14} className="text-gray-400 hover:text-[#2563EB]" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs font-medium p-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  How many lectures do you plan to hold? We use this to calculate the final 70% exam eligibility and CA scores. (Default is 15).
+                </div>
+              </div>
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 placeholder="e.g., MTH 101"
@@ -332,10 +381,24 @@ export default function CourseManagement() {
                 onChange={(e) => setNewCourseCode(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
               />
+              <input
+                type="number"
+                placeholder="Planned Classes"
+                value={plannedClasses}
+                onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full sm:w-32 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+              />
+              <input
+                type="number"
+                placeholder="Max CA Score"
+                value={maxScore}
+                onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full sm:w-32 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+              />
               <button
                 onClick={createCourse}
-                disabled={isCreating || !newCourseCode.trim()}
-                className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md"
+                disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore}
+                className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center justify-center shadow-md shrink-0"
               >
                 {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
               </button>
@@ -371,12 +434,26 @@ export default function CourseManagement() {
           </div>
         </div>
 
-        {/* Course Cards with CSV Upload */}
+        {/* Course Cards with CSV Upload & Edit/Delete */}
         {courses.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-gray-100">
             {courses.map(course => (
-              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
+              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center relative group">
+                
+                {/* Edit / Delete Buttons on Hover */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  <button onClick={() => handleEditCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-blue-600 rounded-md shadow-sm border border-gray-200">
+                    <Edit3 size={12} />
+                  </button>
+                  <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+
                 <h4 className="font-extrabold text-gray-900 mb-1">{course.course_code}</h4>
+                <p className="text-[10px] font-bold text-gray-500 mb-1">
+                  {course.total_planned_classes} Planned • {course.max_attendance_score} Marks
+                </p>
                 <p className="text-xs font-bold text-gray-500 mb-3">
                   {courseCounts[course.id] || 0} Students
                 </p>

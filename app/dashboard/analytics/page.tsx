@@ -1,13 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 
 interface CourseRow {
   id: string;
   course_code: string;
+  max_attendance_score: number;
+  is_finalized: boolean;
 }
 
 interface StudentReportRow {
@@ -27,6 +29,7 @@ interface ReportData {
 export default function AnalyticsPage() {
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -36,18 +39,28 @@ export default function AnalyticsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [lockGrades, setLockGrades] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCourses = async () => {
-      const { data } = await supabase.from('courses').select('id, course_code');
+      const { data } = await supabase.from('courses').select('id, course_code, max_attendance_score, is_finalized');
       if (data && data.length > 0) {
         setCourses(data);
         setSelectedCourseCode(data[0].course_code);
+        setSelectedCourse(data[0]);
       }
     };
     fetchCourses();
   }, []);
+
+  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const code = e.target.value;
+    setSelectedCourseCode(code);
+    const course = courses.find(c => c.course_code === code);
+    if (course) setSelectedCourse(course);
+  };
 
   const fetchReportData = useCallback(async (useFilters: boolean = false) => {
     if (!selectedCourseCode) return;
@@ -80,42 +93,64 @@ export default function AnalyticsPage() {
     }
   }, [selectedCourseCode, startDate, endDate]);
 
-  // Wrap in setTimeout to satisfy React 19's cascading render rule
   useEffect(() => {
     if (!selectedCourseCode) return;
-    const id = setTimeout(() => {
-      fetchReportData(false);
-    }, 0);
+    const id = setTimeout(() => { fetchReportData(false); }, 0);
     return () => clearTimeout(id);
   }, [selectedCourseCode, fetchReportData]);
 
-  const handleDownload = (isFullSemester: boolean) => {
-    if (!reportData || !reportData.report) return;
+  const handleDownload = async (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report || !selectedCourse) return;
     setIsDownloading(true);
 
+    if (lockGrades) {
+      setIsFinalizing(true);
+      const { error } = await supabase
+        .from('courses')
+        .update({ is_finalized: true })
+        .eq('id', selectedCourse.id);
+      
+      if (error) {
+        alert("Failed to lock grades in the database.");
+        setIsFinalizing(false);
+        setIsDownloading(false);
+        return;
+      }
+      
+      setCourses(prev => prev.map(c => c.id === selectedCourse.id ? { ...c, is_finalized: true } : c));
+      setSelectedCourse(prev => prev ? { ...prev, is_finalized: true } : null);
+      setLockGrades(false); 
+    }
+
+    const maxScore = selectedCourse.max_attendance_score || 10;
     const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
     const datePrinted = new Date().toLocaleDateString();
+    const finalStatus = selectedCourse.is_finalized || lockGrades ? "FINALIZED" : "LIVE (UNFINALIZED)";
 
     const header = [
-      [`OFFICIAL ATTENDANCE REPORT`],
+      [`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`],
       [`Course Code:`, selectedCourseCode],
       [`Reporting Period:`, timeLabel],
       [`Total Classes Held:`, reportData.totalClasses],
       [`Date Generated:`, datePrinted],
       [],
-      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", "REMARK"]
+      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", `CA SCORE (/${maxScore})`, "REMARK"]
     ];
 
     const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
 
-    const rows = sortedReport.map((s, index) => [
-      index + 1,
-      s.matricNumber,
-      s.totalClasses,
-      s.attended,
-      s.percentage,
-      s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
-    ]);
+    const rows = sortedReport.map((s, index) => {
+      const caScore = ((s.percentage / 100) * maxScore).toFixed(1);
+      return [
+        index + 1,
+        s.matricNumber,
+        s.totalClasses,
+        s.attended,
+        s.percentage,
+        caScore,
+        s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
+      ];
+    });
 
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -128,12 +163,14 @@ export default function AnalyticsPage() {
     link.click();
     document.body.removeChild(link);
 
+    setIsFinalizing(false);
     setIsDownloading(false);
   };
 
   const applyCustomDates = () => { fetchReportData(true); };
 
   const atRiskStudents: StudentReportRow[] = reportData?.report?.filter(s => s.eligible === 'NO') || [];
+  const maxScore = selectedCourse?.max_attendance_score || 10;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
@@ -148,7 +185,7 @@ export default function AnalyticsPage() {
           </div>
           <select
             value={selectedCourseCode}
-            onChange={(e) => setSelectedCourseCode(e.target.value)}
+            onChange={handleCourseChange}
             disabled={courses.length === 0}
             className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer"
           >
@@ -170,12 +207,34 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Lock className="text-blue-600 mt-0.5 shrink-0" size={20} />
+              <div>
+                <p className="font-bold text-blue-900 text-sm">Lock Final Grades</p>
+                <p className="text-xs text-blue-700 font-medium mt-0.5">Check this to permanently calculate CA scores and end the semester for this course.</p>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm">
+              <input 
+                type="checkbox" 
+                checked={lockGrades || selectedCourse?.is_finalized} 
+                onChange={(e) => setLockGrades(e.target.checked)}
+                disabled={selectedCourse?.is_finalized}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                {selectedCourse?.is_finalized ? "Finalized" : "Lock Grades"}
+              </span>
+            </label>
+          </div>
+
           <button
             onClick={() => handleDownload(true)}
-            disabled={isDownloading || !reportData}
+            disabled={isDownloading || isFinalizing || !reportData}
             className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6"
           >
-            {isDownloading ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
+            {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
             Download Full Semester CSV
           </button>
 
@@ -218,7 +277,7 @@ export default function AnalyticsPage() {
                   </button>
                   <button
                     onClick={() => handleDownload(false)}
-                    disabled={isDownloading || !reportData}
+                    disabled={isDownloading || isFinalizing || !reportData}
                     className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"
                   >
                     <Download size={16} /> Export Range
@@ -267,6 +326,7 @@ export default function AnalyticsPage() {
                       <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
                         <th className="px-6 py-3 font-bold">Matric Number</th>
                         <th className="px-6 py-3 font-bold text-center">Attendance</th>
+                        <th className="px-6 py-3 font-bold text-right">CA Score</th>
                         <th className="px-6 py-3 font-bold text-right">Standing</th>
                       </tr>
                     </thead>
@@ -275,6 +335,9 @@ export default function AnalyticsPage() {
                         <tr key={i} className="hover:bg-red-50/20 transition-colors">
                           <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
                           <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
+                          <td className="px-6 py-3 text-right font-bold text-gray-600">
+                            {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
+                          </td>
                           <td className="px-6 py-3 text-right">
                             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">
                               {student.percentage}%
