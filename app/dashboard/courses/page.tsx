@@ -4,12 +4,14 @@ import { supabase } from '@/utils/supabase';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info
+  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown
 } from 'lucide-react';
 
 interface Course {
   id: string;
   course_code: string;
+  department: string;
+  level: string;
   total_planned_classes: number;
   max_attendance_score: number;
   is_finalized: boolean;
@@ -38,6 +40,9 @@ interface LogRow {
   status: string;
 }
 
+const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
+const LEVELS = ['100', '200', '300', '400', '500'];
+
 export default function CourseManagement() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
@@ -45,6 +50,8 @@ export default function CourseManagement() {
 
   // Create Course State
   const [newCourseCode, setNewCourseCode] = useState('');
+  const [newDept, setNewDept] = useState('');
+  const [newLevel, setNewLevel] = useState('');
   const [plannedClasses, setPlannedClasses] = useState<number | ''>(15);
   const [maxScore, setMaxScore] = useState<number | ''>(10);
   const [isCreating, setIsCreating] = useState(false);
@@ -116,13 +123,15 @@ export default function CourseManagement() {
   }, [fetchCourses]);
 
   const createCourse = async () => {
-    if (!newCourseCode.trim() || !plannedClasses || !maxScore) return;
+    if (!newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel) return;
     setIsCreating(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       const { error } = await supabase.from('courses').insert([{
         lecturer_id: session.user.id,
         course_code: newCourseCode.toUpperCase(),
+        department: newDept,
+        level: newLevel,
         total_planned_classes: Number(plannedClasses),
         max_attendance_score: Number(maxScore),
         roster: [],
@@ -131,6 +140,8 @@ export default function CourseManagement() {
         setNewCourseCode('');
         setPlannedClasses(15);
         setMaxScore(10);
+        setNewDept('');
+        setNewLevel('');
         await fetchCourses();
       } else {
         alert("Failed to create course.");
@@ -369,38 +380,65 @@ export default function CourseManagement() {
               <div className="group relative cursor-pointer">
                 <Info size={14} className="text-gray-400 hover:text-[#2563EB]" />
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs font-medium p-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                  How many lectures do you plan to hold? We use this to calculate the final 70% exam eligibility and CA scores. (Default is 15).
+                  Define the course details. We use these to calculate the final 70% exam eligibility and CA scores.
                 </div>
               </div>
             </h3>
-            <div className="flex flex-col sm:flex-row gap-2">
+            
+            <div className="flex flex-col gap-2">
               <input
                 type="text"
-                placeholder="e.g., MTH 101"
+                placeholder="Course Code (e.g., MTH 101)"
                 value={newCourseCode}
                 onChange={(e) => setNewCourseCode(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
               />
-              <input
-                type="number"
-                placeholder="Planned Classes"
-                value={plannedClasses}
-                onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full sm:w-32 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-              />
-              <input
-                type="number"
-                placeholder="Max CA Score"
-                value={maxScore}
-                onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full sm:w-32 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <select
+                    value={newDept}
+                    onChange={(e) => setNewDept(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                  >
+                    <option value="" disabled>Select Dept</option>
+                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                </div>
+                <div className="relative">
+                  <select
+                    value={newLevel}
+                    onChange={(e) => setNewLevel(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                  >
+                    <option value="" disabled>Select Level</option>
+                    {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  placeholder="Planned Classes"
+                  value={plannedClasses}
+                  onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                />
+                <input
+                  type="number"
+                  placeholder="Max CA Score"
+                  value={maxScore}
+                  onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                />
+              </div>
               <button
                 onClick={createCourse}
-                disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore}
-                className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center justify-center shadow-md shrink-0"
+                disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel}
+                className="w-full bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-md mt-2"
               >
-                {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />} Create Course
               </button>
             </div>
           </div>
@@ -408,28 +446,33 @@ export default function CourseManagement() {
           {/* Add Single Student */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">2. Add Single Student (Late Reg)</h3>
-            <div className="flex gap-2">
-              <select
-                value={targetCourseId}
-                onChange={(e) => setTargetCourseId(e.target.value)}
-                className="w-1/3 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
-              >
-                {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
-              </select>
-              <input
-                type="text"
-                placeholder="Matric Number"
-                value={singleMatric}
-                onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
-                className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
-              />
-              <button
-                onClick={handleSingleStudentAdd}
-                disabled={isAddingSingle || !singleMatric.trim()}
-                className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md"
-              >
-                {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
-              </button>
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <select
+                  value={targetCourseId}
+                  onChange={(e) => setTargetCourseId(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                >
+                  {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Matric Number"
+                  value={singleMatric}
+                  onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+                />
+                <button
+                  onClick={handleSingleStudentAdd}
+                  disabled={isAddingSingle || !singleMatric.trim()}
+                  className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
+                >
+                  {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -452,6 +495,9 @@ export default function CourseManagement() {
 
                 <h4 className="font-extrabold text-gray-900 mb-1">{course.course_code}</h4>
                 <p className="text-[10px] font-bold text-gray-500 mb-1">
+                  {course.department} • {course.level}L
+                </p>
+                <p className="text-[10px] font-bold text-gray-500 mb-3">
                   {course.total_planned_classes} Planned • {course.max_attendance_score} Marks
                 </p>
                 <p className="text-xs font-bold text-gray-500 mb-3">

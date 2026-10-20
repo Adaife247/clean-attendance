@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -29,6 +29,9 @@ interface HistoryRow extends SessionRow { status: string; }
 interface CampusUpdate { id: string; title: string; content: string; author: string; course_code: string | null; created_at: string; }
 interface AvailableCourse { id: string; course_code: string; department: string; level: string; }
 
+const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
+const LEVELS = ['100', '200', '300', '400', '500'];
+
 export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register'>('dashboard');
   
@@ -40,8 +43,6 @@ export default function StudentPortal() {
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [error, setError] = useState('');
-  
-  // This holds the live session ID if a class is currently active
   const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string } | null>(null);
 
   const [nickname, setNickname] = useState('');
@@ -72,7 +73,6 @@ export default function StudentPortal() {
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
 
     try {
-      // 1. WebAuthn
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: cleanMatric })
@@ -95,7 +95,6 @@ export default function StudentPortal() {
       const verifyResult = await verifyRes.json();
       if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
 
-      // 2. Fetch Profile
       const { data: profile } = await supabase
         .from('student_profiles')
         .select('nickname, department, level')
@@ -109,7 +108,6 @@ export default function StudentPortal() {
       if (profile?.department) setStudentDept(profile.department);
       if (profile?.level) setStudentLevel(profile.level);
 
-      // 3. Fetch Feed
       const { data: feedData } = await supabase
         .from('campus_updates')
         .select('*')
@@ -117,7 +115,6 @@ export default function StudentPortal() {
         .limit(10);
       if (feedData) setFeed(feedData);
 
-      // 4. Fetch Records (Only enrolled)
       const { data: enrollmentRows, error: enrollError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -148,8 +145,6 @@ export default function StudentPortal() {
       if (sessionError) throw sessionError;
 
       const now = new Date().getTime();
-      
-      // Find the live session
       const liveSession = sessionRows?.find(s => {
         if (!s.is_active) return false;
         const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
@@ -217,7 +212,6 @@ export default function StudentPortal() {
           : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
 
         const percentage = Math.round((attended / denominator) * 100);
-        
         const maxAbsences = Math.floor(denominator * 0.30);
         const currentAbsences = denominator - attended;
         const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
@@ -233,11 +227,7 @@ export default function StudentPortal() {
         else if (streak >= 5) tier = 'Consistent';
         else if (streak >= 1) tier = 'JJC';
 
-        const ca_score = stats.is_finalized 
-          ? ((attended / denominator) * stats.max_score).toFixed(1) 
-          : null;
-
-        // Check if this specific course has the live session
+        const ca_score = stats.is_finalized ? ((attended / denominator) * stats.max_score).toFixed(1) : null;
         const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
 
         finalRecords.push({
@@ -273,8 +263,8 @@ export default function StudentPortal() {
     await supabase.from('student_profiles').upsert({
       matric_number: matricNumber.toUpperCase().trim(),
       nickname: nickname.trim(),
-      department: studentDept.toUpperCase().trim(),
-      level: studentLevel.trim()
+      department: studentDept,
+      level: studentLevel
     });
     setSavedNickname(nickname.trim());
     setIsEditingNickname(false);
@@ -287,7 +277,7 @@ export default function StudentPortal() {
     const { data: allCourses } = await supabase
       .from('courses')
       .select('id, course_code, department, level')
-      .eq('department', studentDept.toUpperCase())
+      .eq('department', studentDept)
       .eq('level', studentLevel);
 
     if (allCourses) {
@@ -348,7 +338,6 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
-        {/* FRICTIONLESS LIVE CLASS BANNER (FIXED CLASSNAMES) */}
         {activeLiveSession && (
           <a 
             href={`/?sessionId=${activeLiveSession.sessionId}`}
@@ -419,8 +408,20 @@ export default function StudentPortal() {
                     
                     {isEditingNickname && (
                       <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
-                        <input type="text" value={studentDept} onChange={e => setStudentDept(e.target.value)} placeholder="Dept (e.g., CSC)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full uppercase" />
-                        <input type="text" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} placeholder="Level (e.g., 200)" className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full" />
+                        <div className="relative">
+                          <select value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                            <option value="">Select Dept</option>
+                            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                          </select>
+                          <ChevronDown size={12} className="absolute right-2 top-2.5 text-gray-400 pointer-events-none" />
+                        </div>
+                        <div className="relative">
+                          <select value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                            <option value="">Select Level</option>
+                            {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                          <ChevronDown size={12} className="absolute right-2 top-2.5 text-gray-400 pointer-events-none" />
+                        </div>
                       </div>
                     )}
                   </div>
