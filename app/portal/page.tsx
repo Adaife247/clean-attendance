@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -382,7 +382,7 @@ export default function StudentPortal() {
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
                 <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
                 <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
-                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
                 <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
               </div>
 
@@ -429,7 +429,7 @@ export default function StudentPortal() {
                   {records.length === 0 ? (
                     <div className="text-center py-6 bg-gray-50 rounded-2xl border border-gray-200">
                       <p className="text-sm font-bold text-gray-500">You have no courses yet.</p>
-                      <button onClick={() => setActiveTab('register')} className="mt-3 text-[#2563EB] font-bold text-sm hover:underline">Go to Course Registration</button>
+                      <button onClick={() => setActiveTab('register')} className="mt-3 text-[#2563EB] font-bold text-sm hover:underline">Go to Course Enrollment</button>
                     </div>
                   ) : (
                     records.map((record) => {
@@ -511,7 +511,14 @@ export default function StudentPortal() {
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <Plus size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800">Register for Courses</h3>
+                    <h3 className="font-bold text-gray-800">Enroll in Class</h3>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
+                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                      <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
+                    </p>
                   </div>
                   
                   {(!studentDept || !studentLevel) ? (
