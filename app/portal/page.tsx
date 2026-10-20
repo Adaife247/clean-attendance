@@ -3,19 +3,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
 
 interface CourseRecord {
   course_code: string;
-  total_classes: number;
+  total_held: number;
+  total_planned: number;
   attended_classes: number;
   percentage: number;
   skips_left: number;
   streak: number;
   streak_tier: 'JJC' | 'Consistent' | 'Odogwu' | 'None';
+  is_finalized: boolean;
+  ca_score: string | null;
+  max_score: number;
 }
 
 interface LogRow { session_id: string; status: string; }
@@ -127,7 +131,7 @@ export default function StudentPortal() {
       const courseIds = enrollmentRows.map(e => e.course_id);
       const { data: courseRows, error: courseError } = await supabase
         .from('courses')
-        .select('id, course_code')
+        .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
         .in('id', courseIds);
 
       if (courseError) throw courseError;
@@ -172,23 +176,45 @@ export default function StudentPortal() {
       });
       setHistory(historyData);
 
-      const courseStats = new Map<string, { total: number; attended: number; sessions: SessionRow[] }>();
+      const courseStats = new Map<string, { total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
+      
+      courseRows?.forEach(c => {
+        courseStats.set(c.course_code, { 
+          total_held: 0, 
+          total_planned: c.total_planned_classes || 15, 
+          attended: 0, 
+          sessions: [],
+          is_finalized: c.is_finalized,
+          max_score: c.max_attendance_score || 10
+        });
+      });
+
       (sessionRows as SessionRow[] || []).forEach(session => {
         const course = session.course_code;
-        const stats = courseStats.get(course) || { total: 0, attended: 0, sessions: [] };
-        stats.total += 1;
-        stats.sessions.push(session);
-        if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
-        courseStats.set(course, stats);
+        const stats = courseStats.get(course);
+        if (stats) {
+          stats.total_held += 1;
+          stats.sessions.push(session);
+          if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
+          courseStats.set(course, stats);
+        }
       });
 
       const finalRecords: CourseRecord[] = [];
       courseStats.forEach((stats, course) => {
-        const total = stats.total;
+        const total_held = stats.total_held;
         const attended = stats.attended;
-        const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
-        const maxAbsences = Math.floor(total * 0.30);
-        const currentAbsences = total - attended;
+        
+        // THE FIX: If finalized, we use the actual held classes. If active, we use planned classes.
+        // We also use Math.min just in case they held MORE classes than planned.
+        const denominator = stats.is_finalized 
+          ? Math.min(stats.total_planned, total_held > 0 ? total_held : 1)
+          : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
+
+        const percentage = Math.round((attended / denominator) * 100);
+        
+        const maxAbsences = Math.floor(denominator * 0.30);
+        const currentAbsences = denominator - attended;
         const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
 
         let streak = 0;
@@ -202,9 +228,22 @@ export default function StudentPortal() {
         else if (streak >= 5) tier = 'Consistent';
         else if (streak >= 1) tier = 'JJC';
 
+        const ca_score = stats.is_finalized 
+          ? ((attended / denominator) * stats.max_score).toFixed(1) 
+          : null;
+
         finalRecords.push({
-          course_code: course, total_classes: total, attended_classes: attended,
-          percentage, skips_left: skipsLeft, streak, streak_tier: tier,
+          course_code: course, 
+          total_held, 
+          total_planned: denominator,
+          attended_classes: attended,
+          percentage, 
+          skips_left: skipsLeft, 
+          streak, 
+          streak_tier: tier,
+          is_finalized: stats.is_finalized,
+          ca_score,
+          max_score: stats.max_score
         });
       });
 
@@ -381,19 +420,42 @@ export default function StudentPortal() {
                       const colors = getShieldColor(record.percentage);
                       return (
                         <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
-                          <div className="flex justify-between items-start mb-3">
+                          
+                          {record.is_finalized && (
+                            <div className="absolute top-0 right-0 bg-gray-900 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
+                              <CheckCircle size={10} /> FINALIZED
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-start mb-3 mt-1">
                             <div>
                               <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
-                              <p className="text-[11px] text-gray-600 font-semibold mt-0.5">{record.attended_classes} / {record.total_classes} Classes</p>
+                              <p className="text-[11px] text-gray-600 font-semibold mt-0.5">
+                                {record.attended_classes} / {record.total_planned} Classes
+                                {record.total_held < record.total_planned && !record.is_finalized && ` (${record.total_planned - record.total_held} remaining)`}
+                              </p>
                             </div>
                             <div className="text-right">
                               <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
+                              {record.is_finalized && (
+                                <p className="text-xs font-bold text-gray-700 mt-1 bg-white/50 px-2 py-0.5 rounded border border-gray-200">
+                                  CA: {record.ca_score} / {record.max_score}
+                                </p>
+                              )}
                             </div>
                           </div>
+                          
                           <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
                             <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
                             <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
                           </div>
+                          
+                          {!record.is_finalized && (
+                             <div className="mt-2 flex justify-between text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                               <span>{record.streak} Streak ({record.streak_tier})</span>
+                               <span>{record.skips_left} Safe Skips Left</span>
+                             </div>
+                          )}
                         </div>
                       );
                     })
@@ -418,8 +480,10 @@ export default function StudentPortal() {
                           <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
                         ) : h.status === 'flagged' || h.status === 'pending_override' ? (
                           <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                        ) : h.status === 'blocked' ? (
+                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
                         ) : (
-                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                          <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
                         )}
                       </div>
                     ))}

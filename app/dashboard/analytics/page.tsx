@@ -23,6 +23,9 @@ interface StudentReportRow {
 interface ReportData {
   course: string;
   totalClasses: number;
+  plannedClasses: number;
+  maxScore: number;
+  isFinalized: boolean;
   report: StudentReportRow[];
 }
 
@@ -101,9 +104,21 @@ export default function AnalyticsPage() {
 
   const handleDownload = async (isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
+    
+    // Warning if trying to finalize with fewer classes than planned
+    if (lockGrades && !selectedCourse.is_finalized) {
+      if (reportData.totalClasses < reportData.plannedClasses) {
+        const confirm = window.confirm(`⚠️ WARNING: You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}.\n\nIf you lock grades now, the system will calculate final scores based on the ${reportData.totalClasses} actual classes held.\n\nDo you want to proceed?`);
+        if (!confirm) return;
+      } else {
+        const confirm = window.confirm(`Are you sure? This will finalize the semester and lock CA scores. No more sessions can be held for this course.`);
+        if (!confirm) return;
+      }
+    }
+
     setIsDownloading(true);
 
-    if (lockGrades) {
+    if (lockGrades && !selectedCourse.is_finalized) {
       setIsFinalizing(true);
       const { error } = await supabase
         .from('courses')
@@ -122,10 +137,10 @@ export default function AnalyticsPage() {
       setLockGrades(false); 
     }
 
-    const maxScore = selectedCourse.max_attendance_score || 10;
+    const maxScore = reportData.maxScore || 10;
     const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
     const datePrinted = new Date().toLocaleDateString();
-    const finalStatus = selectedCourse.is_finalized || lockGrades ? "FINALIZED" : "LIVE (UNFINALIZED)";
+    const finalStatus = (selectedCourse.is_finalized || lockGrades) ? "FINALIZED" : "LIVE (UNFINALIZED)";
 
     const header = [
       [`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`],
@@ -170,7 +185,7 @@ export default function AnalyticsPage() {
   const applyCustomDates = () => { fetchReportData(true); };
 
   const atRiskStudents: StudentReportRow[] = reportData?.report?.filter(s => s.eligible === 'NO') || [];
-  const maxScore = selectedCourse?.max_attendance_score || 10;
+  const maxScore = reportData?.maxScore || 10;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
