@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -20,6 +20,7 @@ interface CourseRecord {
   is_finalized: boolean;
   ca_score: string | null;
   max_score: number;
+  active_session_id: string | null;
 }
 
 interface LogRow { session_id: string; status: string; }
@@ -39,14 +40,15 @@ export default function StudentPortal() {
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [error, setError] = useState('');
-  const [activeLiveClass, setActiveLiveClass] = useState<string | null>(null);
+  
+  // This holds the live session ID if a class is currently active
+  const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string } | null>(null);
 
   const [nickname, setNickname] = useState('');
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [feed, setFeed] = useState<CampusUpdate[]>([]);
   
-  // Self-registration State
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
 
@@ -64,7 +66,7 @@ export default function StudentPortal() {
     setError('');
     setRecords(null);
     setHistory(null);
-    setActiveLiveClass(null);
+    setActiveLiveSession(null);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
@@ -146,12 +148,17 @@ export default function StudentPortal() {
       if (sessionError) throw sessionError;
 
       const now = new Date().getTime();
+      
+      // Find the live session
       const liveSession = sessionRows?.find(s => {
         if (!s.is_active) return false;
         const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
         return !isExpired;
       });
-      if (liveSession) setActiveLiveClass(liveSession.course_code);
+      
+      if (liveSession) {
+        setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
+      }
 
       const sessionIds = (sessionRows || []).map(s => s.session_id);
       let studentLogs: LogRow[] = [];
@@ -205,8 +212,6 @@ export default function StudentPortal() {
         const total_held = stats.total_held;
         const attended = stats.attended;
         
-        // THE FIX: If finalized, we use the actual held classes. If active, we use planned classes.
-        // We also use Math.min just in case they held MORE classes than planned.
         const denominator = stats.is_finalized 
           ? Math.min(stats.total_planned, total_held > 0 ? total_held : 1)
           : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
@@ -232,6 +237,9 @@ export default function StudentPortal() {
           ? ((attended / denominator) * stats.max_score).toFixed(1) 
           : null;
 
+        // Check if this specific course has the live session
+        const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
+
         finalRecords.push({
           course_code: course, 
           total_held, 
@@ -243,7 +251,8 @@ export default function StudentPortal() {
           streak_tier: tier,
           is_finalized: stats.is_finalized,
           ca_score,
-          max_score: stats.max_score
+          max_score: stats.max_score,
+          active_session_id: activeSessionId
         });
       });
 
@@ -339,17 +348,23 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
-        {activeLiveClass && (
-          <div className="mb-6 bg-green-500 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
+        {/* FRICTIONLESS LIVE CLASS BANNER (FIXED CLASSNAMES) */}
+        {activeLiveSession && (
+          <a 
+            href={`/?sessionId=${activeLiveSession.sessionId}`}
+            className="mb-6 bg-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500 hover:bg-green-700 transition-colors"
+          >
             <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-full animate-pulse"><Clock size={20} /></div>
+              <div className="bg-white/20 p-2 rounded-full animate-pulse"><Zap size={20} /></div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Now</p>
-                <p className="font-extrabold text-lg">{activeLiveClass}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Class Now</p>
+                <p className="font-extrabold text-lg">{activeLiveSession.course}</p>
               </div>
             </div>
-            <span className="text-xs font-bold text-white/80 text-right leading-tight max-w-20">Check WhatsApp</span>
-          </div>
+            <span className="text-sm font-black bg-white text-green-700 px-3 py-1.5 rounded-lg shadow-sm">
+              Tap to Check In
+            </span>
+          </a>
         )}
 
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
@@ -471,7 +486,7 @@ export default function StudentPortal() {
                   </div>
                   <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
                     {history?.map((h, i) => (
-                      <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                      <div key={i} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
                         <div>
                           <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
                           <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
@@ -508,7 +523,7 @@ export default function StudentPortal() {
                         <p className="text-center text-sm text-gray-500 py-4">No new courses available for {studentDept} {studentLevel}.</p>
                       ) : (
                         availableCourses.map(course => (
-                          <div key={course.id} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                          <div key={course.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
                             <div>
                               <p className="font-bold text-gray-900 text-sm">{course.course_code}</p>
                               <p className="text-[10px] text-gray-500 font-medium">{course.department} • Level {course.level}</p>
@@ -516,7 +531,7 @@ export default function StudentPortal() {
                             <button 
                               onClick={() => handleEnroll(course.id, course.course_code)}
                               disabled={isEnrolling === course.id}
-                              className="bg-[#2563EB] text-white px-3 py-1.5 rounded-lg font-bold text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+                              className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
                               {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
                             </button>

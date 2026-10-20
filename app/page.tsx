@@ -1,7 +1,7 @@
 'use client';
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Loader2, User, Search, Zap, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Loader2, Search, Zap, ArrowRight, Lock } from 'lucide-react';
 import StudentCheckInComponent from '../components/StudentCheckIn'; 
 import Link from 'next/link';
 
@@ -28,54 +28,47 @@ function CheckInWrapper() {
               <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
             </div>
             <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
-            <p className="text-gray-500 mt-2 font-semibold text-lg">Your University Survival Companion</p>
+            <p className="text-gray-500 mt-2 font-semibold text-lg">Secure Attendance & Clearance</p>
           </div>
 
           <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
+            {/* PRIMARY ACTION: Student Portal */}
             <Link 
               href="/portal" 
-              className="group relative w-full flex items-center justify-between p-5 bg-linear-to-r from-gray-50 to-white hover:from-blue-50 hover:to-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-2xl transition-all duration-300 overflow-hidden"
+              className="group relative w-full flex items-center justify-between p-5 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-lg shadow-blue-500/30"
             >
-              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-transparent group-hover:bg-[#2563EB] transition-colors"></div>
               <div className="flex items-center gap-4 relative z-10">
-                <div className="bg-white p-3.5 rounded-xl shadow-sm text-gray-500 group-hover:text-[#2563EB] transition-colors border border-gray-100">
+                <div className="bg-white/20 p-3.5 rounded-xl text-white">
                   <Search size={22} />
                 </div>
                 <div className="text-left">
-                  <h3 className="font-extrabold text-gray-900 text-lg">Student Portal</h3>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5">Check Clearance Shield & records</p>
+                  <h3 className="font-extrabold text-white text-lg">Enter Student Portal</h3>
+                  <p className="text-xs text-blue-100 font-medium mt-0.5">Check Clearance Shield & records</p>
                 </div>
               </div>
-              <ArrowRight size={20} className="text-gray-300 group-hover:text-[#2563EB] group-hover:translate-x-1 transition-all" />
+              <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all" />
             </Link>
 
-            <Link 
-              href="/login" 
-              className="group relative w-full flex items-center justify-between p-5 bg-linear-to-r from-gray-50 to-white hover:from-gray-100 hover:to-gray-50 border border-gray-200 hover:border-gray-400 rounded-2xl transition-all duration-300 overflow-hidden"
-            >
-              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-transparent group-hover:bg-gray-900 transition-colors"></div>
-              <div className="flex items-center gap-4 relative z-10">
-                <div className="bg-white p-3.5 rounded-xl shadow-sm text-gray-500 group-hover:text-gray-900 transition-colors border border-gray-100">
-                  <User size={22} />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-extrabold text-gray-900 text-lg">Faculty Access</h3>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5">Manage live radar & analytics</p>
-                </div>
-              </div>
-              <ArrowRight size={20} className="text-gray-300 group-hover:text-gray-900 group-hover:translate-x-1 transition-all" />
-            </Link>
+            {/* SECONDARY ACTION: Faculty Access (Demoted) */}
+            <div className="pt-2 text-center">
+              <Link 
+                href="/login" 
+                className="inline-flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                <Lock size={14} /> Faculty Sign In
+              </Link>
+            </div>
             
           </div>
 
-          <div className="mt-8 bg-blue-600 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg shadow-blue-600/20 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-sm shrink-0">
+          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
+            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
               <Zap size={20} className="text-white" />
             </div>
             <div>
               <h4 className="font-bold text-sm">Joining a Live Class?</h4>
-              <p className="text-xs text-blue-100 font-medium mt-1 leading-relaxed">
+              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
                 Click the secure session link provided by your lecturer to mark your attendance.
               </p>
             </div>
