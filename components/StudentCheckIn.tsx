@@ -16,10 +16,7 @@ type Status =
   | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'
   | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
-const RATING_TAGS = [
-  'Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing',
-];
-
+const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
 const GPS_MIN_PINGS_TO_SEND = 1;
@@ -47,13 +44,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
-
-  // Pre-Flight GPS Check State
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
+  
+  // FIX #6 & #7: Lock the transition to avoid shaking/looping
+  const hasTransitionedRef = useRef(false);
+
+  useEffect(() => {
+    // Auto-fill matric from localStorage
+    const saved = localStorage.getItem('campuscheck_student_matric');
+    if (saved) {
+      const id = setTimeout(() => setMatricNumber(saved), 0);
+      return () => clearTimeout(id);
+    }
+  }, []);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -67,29 +74,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
-  // --- PRE-FLIGHT GPS CHECK (REACT 19 SAFE) ---
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      // We use a microtask to satisfy the synchronous setState rule
       Promise.resolve().then(() => setGpsStatus('denied'));
       return;
     }
     
     if (navigator.permissions) {
       navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-        // Initial check
         Promise.resolve().then(() => setGpsStatus(result.state as 'granted' | 'denied' | 'prompt'));
-        
-        // Listen for changes (e.g., user clicks Allow)
-        const handleChange = () => {
-          setGpsStatus(result.state as 'granted' | 'denied' | 'prompt');
-        };
-        
+        const handleChange = () => setGpsStatus(result.state as 'granted' | 'denied' | 'prompt');
         result.addEventListener('change', handleChange);
-        
-        return () => {
-          result.removeEventListener('change', handleChange);
-        };
+        return () => result.removeEventListener('change', handleChange);
       }).catch(() => {
         Promise.resolve().then(() => setGpsStatus('prompt'));
       });
@@ -98,7 +94,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   }, []);
 
-  // Pre-warm GPS (only if granted or prompt)
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     if (gpsStatus === 'denied') return;
@@ -177,9 +172,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { window.removeEventListener('online', syncOfflineQueue); clearTimeout(id); };
   }, [syncOfflineQueue]);
 
+  // FIX: Prevent the shaking by using a ref guard
   useEffect(() => {
     if (status !== 'success') return;
-    const t = setTimeout(() => setStatus('rating'), 2500);
+    if (hasTransitionedRef.current) return;
+    
+    const t = setTimeout(() => {
+      hasTransitionedRef.current = true;
+      setStatus('rating');
+    }, 2500);
     return () => clearTimeout(t);
   }, [status]);
 
@@ -414,15 +415,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
 
-        {/* Pre-Flight GPS Banner */}
         {gpsStatus === 'denied' && (
           <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
             <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
             <div>
               <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
-              <p className="text-xs text-red-700 font-medium mt-1">
-                Please allow location access in your browser settings to check in. Without it, the system cannot verify you.
-              </p>
+              <p className="text-xs text-red-700 font-medium mt-1">Please allow location access in your browser settings to check in.</p>
             </div>
           </div>
         )}
@@ -432,9 +430,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <MapPin className="text-amber-600 shrink-0 mt-0.5" size={20} />
             <div>
               <h4 className="font-bold text-amber-900 text-sm">Location Permission Needed</h4>
-              <p className="text-xs text-amber-700 font-medium mt-1">
-                Please tap &quot;Allow&quot; when your browser asks for location access.
-              </p>
+              <p className="text-xs text-amber-700 font-medium mt-1">Please tap &quot;Allow&quot; when your browser asks for location access.</p>
             </div>
           </div>
         )}

@@ -36,66 +36,38 @@ export async function POST(request: Request) {
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError || !session) {
-      return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    }
-
-    if (session.is_active !== true) {
-      return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
-    }
-
-    if (session.expires_at && new Date() > new Date(session.expires_at)) {
-      return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
-    }
+    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
+    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
+    if (session.expires_at && new Date() > new Date(session.expires_at)) return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
 
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
     if (opensAfter > 0 && session.created_at) {
       const sessionStart = new Date(session.created_at).getTime();
       const now = Date.now();
       const elapsedMinutes = (now - sessionStart) / 60000;
-
       if (elapsedMinutes < opensAfter) {
         const remaining = Math.ceil(opensAfter - elapsedMinutes);
-        return NextResponse.json({
-          message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}. Wait until the lecture has started.`
-        }, { status: 403 });
+        return NextResponse.json({ message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}. Wait until the lecture has started.` }, { status: 403 });
       }
     }
 
     // 2. Hard Reject: Enrollment Check
-    const { data: courseRow } = await supabase
-      .from('courses')
-      .select('id')
-      .ilike('course_code', session.course_code)
-      .limit(1)
-      .maybeSingle();
+    const { data: courseRow } = await supabase.from('courses').select('id').eq('course_code', session.course_code).limit(1).maybeSingle();
+    if (!courseRow) return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
 
-    if (!courseRow) {
-      return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
-    }
+    const { data: enrollment } = await supabase.from('enrollments').select('id').eq('course_id', courseRow.id).eq('matric_number', cleanMatric).maybeSingle();
+    if (!enrollment) return NextResponse.json({ message: `You are not registered for ${session.course_code}. Please contact your lecturer.` }, { status: 403 });
 
-    const { data: enrollment } = await supabase
-      .from('enrollments')
-      .select('id')
-      .eq('course_id', courseRow.id)
-      .eq('matric_number', cleanMatric)
-      .maybeSingle();
-
-    if (!enrollment) {
-      return NextResponse.json({
-        message: `You are not registered for ${session.course_code}. Please contact your lecturer.`
-      }, { status: 403 }); // Hard Reject
-    }
-
-    // 3. Hard Reject: Duplicate Check
+    // 3. Check for Existing Log (THE FIX for updating flagged logs)
     const { data: existingLog } = await supabase
       .from('attendance_logs')
-      .select('id')
+      .select('id, status')
       .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
 
-    if (existingLog) {
+    // If they already have a VERIFIED log, they are done.
+    if (existingLog && existingLog.status === 'verified') {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
@@ -105,22 +77,11 @@ export async function POST(request: Request) {
         .from('attendance_logs')
         .select('matric_number')
         .eq('session_id', sessionId)
-        .eq('device_hash', hardwareFingerprint);
+        .eq('device_hash', hardwareFingerprint)
+        .eq('status', 'verified'); // Only block if the other log was successful
 
       if (ghostLogs && ghostLogs.length > 0) {
-        // LOG AS BLOCKED INSTEAD OF FLAGGED
-        await supabase.from('attendance_logs').insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'blocked',
-          device_info: JSON.stringify({ reason: "Device already used by another student" }),
-          device_hash: hardwareFingerprint,
-        }]);
-
-        return NextResponse.json({
-          status: 'rejected',
-          message: "Security Block: This device has already been used for another student."
-        }, { status: 403 }); // Hard Reject
+        return NextResponse.json({ status: 'rejected', message: "Security Block: This device has already been used for another student." }, { status: 403 });
       }
     }
 
@@ -129,38 +90,23 @@ export async function POST(request: Request) {
     let bestPing = telemetry[0];
 
     for (let i = 0; i < telemetry.length; i++) {
-      const ping = telemetry[i];
-      if (ping.acc < bestPing.acc) bestPing = ping;
+      if (telemetry[i].acc < bestPing.acc) bestPing = telemetry[i];
     }
 
     let totalDrift = 0;
     for (let i = 1; i < telemetry.length; i++) {
-      const prev = telemetry[i - 1];
-      const curr = telemetry[i];
-      const drift = getDistanceInMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      const drift = getDistanceInMeters(telemetry[i-1].lat, telemetry[i-1].lng, telemetry[i].lat, telemetry[i].lng);
       totalDrift += drift;
-      
-      const timeDeltaSec = Math.abs(curr.timestamp - prev.timestamp) / 1000;
+      const timeDeltaSec = Math.abs(telemetry[i].timestamp - telemetry[i-1].timestamp) / 1000;
       if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
     }
 
-    if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) {
-      isSpoofed = true; 
-    }
+    if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) isSpoofed = true;
 
-    const distanceToLecturer = getDistanceInMeters(
-      session.anchor_latitude,
-      session.anchor_longitude,
-      bestPing.lat,
-      bestPing.lng
-    );
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
 
     if (distanceToLecturer > HARD_BLOCK_METERS) {
-      return NextResponse.json({
-        status: 'rejected',
-        distance: Math.round(distanceToLecturer),
-        message: "out of bounds"
-      }, { status: 403 });
+      return NextResponse.json({ status: 'rejected', distance: Math.round(distanceToLecturer), message: "out of bounds" }, { status: 403 });
     }
 
     let finalStatus = 'absent';
@@ -170,34 +116,32 @@ export async function POST(request: Request) {
       if (isSpoofed) {
         finalStatus = 'flagged';
         responseMessage = "Location anomaly detected. Please see lecturer.";
-      } else if (verificationMethod === 'ios_web') {
-        finalStatus = 'verified';
-        responseMessage = "Verified via iOS GPS";
       } else {
         finalStatus = 'verified';
-        responseMessage = "Verified";
+        responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
       }
     }
 
-    await supabase.from('attendance_logs').insert([{
-      session_id: sessionId,
-      matric_number: cleanMatric,
-      status: finalStatus,
-      device_info: JSON.stringify({
-        telemetry,
-        evaluatedAccuracy: bestPing.acc,
-        distanceMeters: Math.round(distanceToLecturer),
-        deviceFingerprint: deviceFingerprint || 'unknown',
-        verificationMethod: verificationMethod || 'skipped',
-      }),
-      device_hash: hardwareFingerprint || 'unknown-hardware',
-    }]);
+    // 6. Insert or Update
+    if (existingLog) {
+      // Update the flagged log to the new status
+      await supabase.from('attendance_logs').update({
+        status: finalStatus,
+        device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc, distanceMeters: Math.round(distanceToLecturer), deviceFingerprint, verificationMethod }),
+        device_hash: hardwareFingerprint || 'unknown-hardware',
+      }).eq('id', existingLog.id);
+    } else {
+      // Insert new log
+      await supabase.from('attendance_logs').insert([{
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        status: finalStatus,
+        device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc, distanceMeters: Math.round(distanceToLecturer), deviceFingerprint, verificationMethod }),
+        device_hash: hardwareFingerprint || 'unknown-hardware',
+      }]);
+    }
 
-    return NextResponse.json({
-      status: finalStatus,
-      distance: Math.round(distanceToLecturer),
-      message: responseMessage
-    }, { status: 200 });
+    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200 });
 
   } catch (error) {
     console.error("Verification API Error:", error);
