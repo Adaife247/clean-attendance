@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
+import * as XLSX from 'xlsx';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown
+  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown, X
 } from 'lucide-react';
 
 interface Course {
@@ -27,6 +28,7 @@ interface AuditRecord {
 
 interface EnrollmentRow {
   course_id: string;
+  matric_number: string;
 }
 
 interface SessionRow {
@@ -58,6 +60,14 @@ export default function CourseManagement() {
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+
+  // Modal State
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [editCode, setEditCode] = useState('');
+  const [editPlanned, setEditPlanned] = useState<number | ''>(15);
+  const [editMaxScore, setEditMaxScore] = useState<number | ''>(10);
+  const [modalStudents, setModalStudents] = useState<string[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
   // Single Student Add
   const [singleMatric, setSingleMatric] = useState('');
@@ -150,19 +160,44 @@ export default function CourseManagement() {
     setIsCreating(false);
   };
 
-  const handleEditCourse = async (courseId: string, currentCode: string) => {
-    const newCode = window.prompt("Enter the new Course Code (e.g., CSC 101):", currentCode);
-    if (!newCode || newCode.trim() === '' || newCode === currentCode) return;
+  const handleOpenModal = async (course: Course) => {
+    setEditingCourse(course);
+    setEditCode(course.course_code);
+    setEditPlanned(course.total_planned_classes || 15);
+    setEditMaxScore(course.max_attendance_score || 10);
+    setIsLoadingStudents(true);
+    setModalStudents([]);
+
+    const { data, error } = await supabase
+      .from('enrollments')
+      .select('matric_number')
+      .eq('course_id', course.id)
+      .order('matric_number');
+      
+    if (!error && data) {
+      setModalStudents(data.map(d => d.matric_number));
+    }
+    setIsLoadingStudents(false);
+  };
+
+  const handleSaveModal = async () => {
+    if (!editingCourse || !editCode.trim() || !editPlanned || !editMaxScore) return;
     
-    setActioningId(courseId);
+    setActioningId(editingCourse.id);
     const { error } = await supabase
       .from('courses')
-      .update({ course_code: newCode.toUpperCase().trim() })
-      .eq('id', courseId);
+      .update({ 
+        course_code: editCode.toUpperCase().trim(),
+        total_planned_classes: Number(editPlanned),
+        max_attendance_score: Number(editMaxScore)
+      })
+      .eq('id', editingCourse.id);
       
     if (error) alert(`Failed to update course: ${error.message}`);
-    else await fetchCourses();
-    
+    else {
+      await fetchCourses();
+      setEditingCourse(null); // Close modal
+    }
     setActioningId(null);
   };
 
@@ -181,6 +216,23 @@ export default function CourseManagement() {
     setActioningId(null);
   };
 
+  const handleRemoveStudent = async (matric: string) => {
+    if (!editingCourse) return;
+    if (!window.confirm(`Remove ${matric} from this course? Their past attendance logs will not be deleted.`)) return;
+    
+    const { error } = await supabase
+      .from('enrollments')
+      .delete()
+      .eq('course_id', editingCourse.id)
+      .eq('matric_number', matric);
+
+    if (error) alert("Failed to remove student.");
+    else {
+      setModalStudents(prev => prev.filter(m => m !== matric));
+      fetchEnrollmentCounts(courses.map(c => c.id));
+    }
+  };
+
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     courseId: string
@@ -189,42 +241,78 @@ export default function CourseManagement() {
     if (!file) return;
     setUploadingId(courseId);
 
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     const reader = new FileReader();
+
     reader.onload = async (event) => {
-      const csvText = event.target?.result as string;
-      const cleanMatrics = csvText
-        .split(/[\n,]+/)
-        .map(m => m.trim().toUpperCase())
-        .filter(m => m.length > 5 && !m.includes('MATRIC'));
+      try {
+        let rawMatrics: string[] = [];
 
-      const uniqueMatrics = Array.from(new Set(cleanMatrics));
+        if (isExcel) {
+          // Parse Excel File
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          // Convert all cells to text, flatten the array
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
+          
+          jsonData.forEach(row => {
+            row.forEach(cell => {
+               if (typeof cell === 'string' && cell.length > 5 && !cell.includes('MATRIC')) {
+                 rawMatrics.push(cell.trim().toUpperCase());
+               }
+            });
+          });
+        } else {
+          // Parse CSV File
+          const csvText = event.target?.result as string;
+          const cleanMatrics = csvText
+            .split(/[\n,]+/)
+            .map(m => m.trim().toUpperCase())
+            .filter(m => m.length > 5 && !m.includes('MATRIC'));
+          rawMatrics = cleanMatrics;
+        }
 
-      if (uniqueMatrics.length === 0) {
-        alert("No valid matric numbers found in the file.");
-        setUploadingId(null);
-        e.target.value = '';
-        return;
+        const uniqueMatrics = Array.from(new Set(rawMatrics));
+
+        if (uniqueMatrics.length === 0) {
+          alert("No valid matric numbers found in the file.");
+          setUploadingId(null);
+          e.target.value = '';
+          return;
+        }
+
+        const rows = uniqueMatrics.map(matric => ({
+          course_id: courseId,
+          matric_number: matric,
+        }));
+
+        const { error } = await supabase
+          .from('enrollments')
+          .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
+
+        if (!error) {
+          alert(`Success! ${uniqueMatrics.length} students synced.`);
+          await fetchCourses();
+          if (editingCourse?.id === courseId) {
+            handleOpenModal(editingCourse); // Refresh modal list if it's open
+          }
+        } else {
+          alert(`Upload failed: ${error.message}`);
+        }
+      } catch {
+        alert("Failed to read file. Ensure it is a valid CSV or Excel file.");
       }
-
-      const rows = uniqueMatrics.map(matric => ({
-        course_id: courseId,
-        matric_number: matric,
-      }));
-
-      const { error } = await supabase
-        .from('enrollments')
-        .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
-
-      if (!error) {
-        alert(`Success! ${uniqueMatrics.length} students synced.`);
-        await fetchCourses();
-      } else {
-        alert(`Upload failed: ${error.message}`);
-      }
+      
       setUploadingId(null);
       e.target.value = '';
     };
-    reader.readAsText(file);
+    
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   const handleSingleStudentAdd = async () => {
@@ -356,6 +444,7 @@ export default function CourseManagement() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
 
+      {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
           <Users className="text-[#2563EB]" size={28} /> Course & Student Management
@@ -479,48 +568,127 @@ export default function CourseManagement() {
 
         {/* Course Cards with CSV Upload & Edit/Delete */}
         {courses.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-8 pt-6 border-t border-gray-100">
             {courses.map(course => (
-              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 text-center relative group">
+              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 relative group flex flex-col justify-between">
                 
-                {/* Edit / Delete Buttons on Hover */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  <button onClick={() => handleEditCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-blue-600 rounded-md shadow-sm border border-gray-200">
-                    <Edit3 size={12} />
-                  </button>
-                  <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
-                    <Trash2 size={12} />
-                  </button>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className="font-extrabold text-gray-900 text-lg">{course.course_code}</h4>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                      {course.department} • {course.level}L
+                    </p>
+                  </div>
+                  
+                  {/* Edit / Delete Buttons on Hover */}
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
 
-                <h4 className="font-extrabold text-gray-900 mb-1">{course.course_code}</h4>
-                <p className="text-[10px] font-bold text-gray-500 mb-1">
-                  {course.department} • {course.level}L
-                </p>
-                <p className="text-[10px] font-bold text-gray-500 mb-3">
-                  {course.total_planned_classes} Planned • {course.max_attendance_score} Marks
-                </p>
-                <p className="text-xs font-bold text-gray-500 mb-3">
-                  {courseCounts[course.id] || 0} Students
-                </p>
-                <label className="cursor-pointer flex items-center justify-center gap-1 w-full py-2 bg-white border border-gray-200 rounded-lg font-bold text-[10px] text-gray-700 hover:bg-gray-100 transition-all shadow-sm">
-                  {uploadingId === course.id
-                    ? <Loader2 size={12} className="animate-spin text-[#2563EB]" />
-                    : <FileSpreadsheet size={12} className="text-[#2563EB]" />}
-                  {uploadingId === course.id ? "Syncing..." : "Upload CSV"}
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={(e) => handleFileUpload(e, course.id)}
-                    disabled={uploadingId === course.id}
-                  />
-                </label>
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-gray-600">{course.total_planned_classes} Planned Classes • {course.max_attendance_score} CA Marks</p>
+                  <p className="text-xs font-bold text-[#2563EB] mt-1">{courseCounts[course.id] || 0} Students Enrolled</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleOpenModal(course)} 
+                    className="flex-1 bg-white border border-gray-200 text-gray-700 py-2 rounded-lg font-bold text-xs hover:bg-gray-100 transition-all shadow-sm flex items-center justify-center gap-1"
+                  >
+                    <Edit3 size={12} /> Manage
+                  </button>
+                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 py-2 rounded-lg font-bold text-xs hover:bg-blue-100 transition-all shadow-sm">
+                    {uploadingId === course.id
+                      ? <Loader2 size={12} className="animate-spin text-[#2563EB]" />
+                      : <FileSpreadsheet size={12} />}
+                    {uploadingId === course.id ? "Syncing..." : "Upload"}
+                    <input
+                      type="file"
+                      accept=".csv, .xlsx, .xls"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, course.id)}
+                      disabled={uploadingId === course.id}
+                    />
+                  </label>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
+      {editingCourse && (
+        <div className="fixed inset-0 bg-gray-900/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl border border-gray-100 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+            
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-3xl">
+              <div>
+                <h2 className="text-xl font-black text-gray-900">{editingCourse.course_code}</h2>
+                <p className="text-xs font-bold text-gray-500 uppercase">{editingCourse.department} • {editingCourse.level}L</p>
+              </div>
+              <button onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Edit Course Details */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Course Details</h3>
+                
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 mb-1">Course Code</label>
+                  <input type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Planned Classes</label>
+                    <input type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Score</label>
+                    <input type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  </div>
+                </div>
+
+                <button onClick={handleSaveModal} disabled={actioningId === editingCourse.id} className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all shadow-md active:scale-[0.98]">
+                  {actioningId === editingCourse.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : "Save Changes"}
+                </button>
+              </div>
+
+              {/* Manage Students */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2 flex justify-between items-center">
+                  Enrolled Students
+                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">{modalStudents.length}</span>
+                </h3>
+                
+                {isLoadingStudents ? (
+                  <div className="flex justify-center py-6"><Loader2 className="animate-spin text-[#2563EB]" size={24} /></div>
+                ) : modalStudents.length === 0 ? (
+                  <p className="text-center text-gray-500 text-sm font-medium py-4">No students enrolled yet.</p>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                    {modalStudents.map(matric => (
+                      <div key={matric} className="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                        <span className="font-bold text-gray-800 text-sm">{matric}</span>
+                        <button onClick={() => handleRemoveStudent(matric)} className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SECTION 2: THE MICROSCOPE */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
