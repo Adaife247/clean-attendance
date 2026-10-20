@@ -108,6 +108,15 @@ export async function POST(request: Request) {
         .eq('device_hash', hardwareFingerprint);
 
       if (ghostLogs && ghostLogs.length > 0) {
+        // LOG AS BLOCKED INSTEAD OF FLAGGED
+        await supabase.from('attendance_logs').insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'blocked',
+          device_info: JSON.stringify({ reason: "Device already used by another student" }),
+          device_hash: hardwareFingerprint,
+        }]);
+
         return NextResponse.json({
           status: 'rejected',
           message: "Security Block: This device has already been used for another student."

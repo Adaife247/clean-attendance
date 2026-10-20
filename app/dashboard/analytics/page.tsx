@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
@@ -37,8 +37,6 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -82,12 +80,13 @@ export default function AnalyticsPage() {
     }
   }, [selectedCourseCode, startDate, endDate]);
 
-  // Safely trigger the initial fetch when selectedCourseCode is set
+  // Wrap in setTimeout to satisfy React 19's cascading render rule
   useEffect(() => {
-    if (selectedCourseCode && !hasFetchedRef.current) {
-      hasFetchedRef.current = true;
+    if (!selectedCourseCode) return;
+    const id = setTimeout(() => {
       fetchReportData(false);
-    }
+    }, 0);
+    return () => clearTimeout(id);
   }, [selectedCourseCode, fetchReportData]);
 
   const handleDownload = (isFullSemester: boolean) => {
@@ -262,7 +261,6 @@ export default function AnalyticsPage() {
               ) : atRiskStudents.length === 0 ? (
                 <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
               ) : (
-                /* THE FIX IS HERE: Changed overflow-hidden to overflow-x-auto */
                 <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-left whitespace-nowrap min-w-125">
                     <thead>

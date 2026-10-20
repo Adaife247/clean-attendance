@@ -40,15 +40,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
-      {/* Mobile Top Header */}
+      
+      {/* Mobile Top Header with built-in Logout */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
           <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
         </div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
-          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
+            <LogOut size={18} strokeWidth={2.5} />
+          </button>
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
       </div>
 
       {/* Sidebar */}
@@ -65,7 +71,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
         </div>
 
-        {/* Scrollable Nav Area */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
@@ -87,8 +92,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Logout pinned to bottom */}
-        <div className="p-4 border-t border-gray-100 shrink-0 bg-white">
+        {/* Desktop Logout (Hidden on Mobile) */}
+        <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
           <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
             <LogOut size={16} strokeWidth={2.5} /> Secure Logout
           </button>
@@ -99,7 +104,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {children}
       </main>
 
-      {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
