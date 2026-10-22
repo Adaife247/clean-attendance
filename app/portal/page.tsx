@@ -77,6 +77,7 @@ export default function StudentPortal() {
     setRecords(null);
     setHistory(null);
     setActiveLiveSession(null);
+    setIsClassRep(false); // Reset on new login
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
@@ -104,11 +105,14 @@ export default function StudentPortal() {
       const verifyResult = await verifyRes.json();
       if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
 
-      const { data: profile } = await supabase
+      // FETCH PROFILE AND EXPLICITLY LOG IT
+      const { data: profile, error: profileError } = await supabase
         .from('student_profiles')
         .select('nickname, department, level, is_class_rep')
         .eq('matric_number', cleanMatric)
         .maybeSingle();
+
+      console.log("DB Profile Fetch:", profile, profileError);
 
       if (profile?.nickname) {
         setNickname(profile.nickname);
@@ -116,7 +120,11 @@ export default function StudentPortal() {
       }
       if (profile?.department) setStudentDept(profile.department);
       if (profile?.level) setStudentLevel(profile.level);
-      if (profile?.is_class_rep) setIsClassRep(profile.is_class_rep);
+      
+      // EXPLICIT BOOLEAN CAST
+      if (profile?.is_class_rep === true) {
+        setIsClassRep(true);
+      }
 
       const { data: feedData } = await supabase
         .from('campus_updates')
@@ -146,7 +154,6 @@ export default function StudentPortal() {
       if (courseError) throw courseError;
       const courseCodes = courseRows?.map(c => c.course_code) || [];
       
-      // Set default rep course if they are a rep
       if (courseRows && courseRows.length > 0) setRepCourseId(courseRows[0].id);
 
       const { data: sessionRows, error: sessionError } = await supabase
@@ -328,7 +335,6 @@ export default function StudentPortal() {
     }
   };
 
-  // REP ACTION: Log Dead Battery
   const handleLogBattery = async () => {
     if (!activeLiveSession) return alert("No active lecture right now.");
     if (!repBatteryMatric.trim()) return alert("Enter the student's matric number.");
@@ -358,7 +364,6 @@ export default function StudentPortal() {
     }
   };
 
-  // REP ACTION: Upload List
   const handleRepUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !repCourseId) return;
@@ -498,7 +503,6 @@ export default function StudentPortal() {
                 <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
                 <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
                 
-                {/* REP DESK TAB */}
                 {isClassRep && (
                   <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
                 )}
@@ -506,7 +510,6 @@ export default function StudentPortal() {
 
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
-                  
                   <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -554,7 +557,6 @@ export default function StudentPortal() {
                       const colors = getShieldColor(record.percentage);
                       return (
                         <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
-                          
                           {record.is_finalized && (
                             <div className="absolute top-0 right-0 bg-gray-900 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
                               <CheckCircle size={10} /> FINALIZED
@@ -695,11 +697,8 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {/* REP DESK TAB CONTENT */}
               {activeTab === 'rep' && isClassRep && (
                 <div className="animate-in fade-in space-y-6">
-                  
-                  {/* Upload List */}
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
                     <h3 className="font-bold text-blue-900 text-sm mb-2 flex items-center gap-2"><Upload size={16}/> Upload Class List</h3>
                     <p className="text-xs text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
@@ -725,7 +724,6 @@ export default function StudentPortal() {
                     </label>
                   </div>
 
-                  {/* Dead Battery Log */}
                   <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
                     <h3 className="font-bold text-amber-900 text-sm mb-2 flex items-center gap-2"><Zap size={16}/> Log Dead Battery</h3>
                     <p className="text-xs text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
@@ -747,7 +745,6 @@ export default function StudentPortal() {
                       </button>
                     </div>
                   </div>
-
                 </div>
               )}
 
