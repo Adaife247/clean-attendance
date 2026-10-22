@@ -41,7 +41,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
       
-      {/* Mobile Top Header with built-in Logout */}
+      {/* Mobile Top Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
@@ -92,7 +92,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Desktop Logout (Hidden on Mobile) */}
         <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
           <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
             <LogOut size={16} strokeWidth={2.5} /> Secure Logout
@@ -100,6 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
+      {/* Main Content Area */}
       <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
         {children}
       </main>
