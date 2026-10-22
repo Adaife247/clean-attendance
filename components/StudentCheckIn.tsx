@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin
@@ -56,7 +56,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const hasTransitionedRef = useRef(false);
 
   useEffect(() => {
-    // THE FIX: Check URL first, then localStorage
+    // Check URL first, then localStorage
     const urlMatric = searchParams.get('matric');
     const savedMatric = localStorage.getItem('campuscheck_student_matric');
     
@@ -145,14 +145,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
 
-  // THE FIX: Lock the transition to prevent shaking
+  // THE FIX for ESLint: Wrap the setState in a Promise
   useEffect(() => {
     if (status !== 'success') return;
     if (hasTransitionedRef.current) return;
     
     const t = setTimeout(() => {
       hasTransitionedRef.current = true;
-      setStatus('rating');
+      Promise.resolve().then(() => setStatus('rating'));
     }, 2500);
     return () => clearTimeout(t);
   }, [status]);
