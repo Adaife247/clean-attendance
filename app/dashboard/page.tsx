@@ -71,6 +71,9 @@ export default function CourseManagement() {
   const [repMatric, setRepMatric] = useState<string | null>(null);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
+  // Designate Rep State
+  const [newRepMatric, setNewRepMatric] = useState('');
+
   // Single Student Add
   const [singleMatric, setSingleMatric] = useState('');
   const [targetCourseId, setTargetCourseId] = useState('');
@@ -170,6 +173,7 @@ export default function CourseManagement() {
     setIsLoadingStudents(true);
     setModalStudents([]);
     setRepMatric(null);
+    setNewRepMatric('');
 
     const { data, error } = await supabase
       .from('enrollments')
@@ -181,7 +185,6 @@ export default function CourseManagement() {
       const matrics = data.map(d => d.matric_number);
       setModalStudents(matrics);
 
-      // Check if any of these students are already a rep
       if (matrics.length > 0) {
         const { data: profiles } = await supabase
           .from('student_profiles')
@@ -247,28 +250,39 @@ export default function CourseManagement() {
     if (error) alert("Failed to remove student.");
     else {
       setModalStudents(prev => prev.filter(m => m !== matric));
+      if (repMatric === matric) setRepMatric(null);
       fetchEnrollmentCounts(courses.map(c => c.id));
     }
   };
 
   const handleMakeRep = async (matric: string) => {
-    if (repMatric === matric) {
-      // Remove rep status
-      if (!window.confirm(`Remove ${matric} as Class Rep?`)) return;
-      await supabase.from('student_profiles').update({ is_class_rep: false }).eq('matric_number', matric);
+    const cleanMatric = matric.trim().toUpperCase();
+
+    // Check if student is in this course
+    if (!modalStudents.includes(cleanMatric)) {
+      alert(`${cleanMatric} is not enrolled in this course. Upload the roster first.`);
+      return;
+    }
+
+    if (repMatric === cleanMatric) {
+      if (!window.confirm(`Remove ${cleanMatric} as Class Rep?`)) return;
+      await supabase.from('student_profiles').update({ is_class_rep: false }).eq('matric_number', cleanMatric);
       setRepMatric(null);
     } else {
-      // Set new rep
-      if (!window.confirm(`Make ${matric} the Class Rep for this course?\n\nThey will gain access to the Rep Desk.`)) return;
+      if (!window.confirm(`Make ${cleanMatric} the Class Rep for this course?\n\nThey will gain access to the Rep Desk.`)) return;
       
-      // Remove old rep (if exists in this list)
       if (repMatric) {
         await supabase.from('student_profiles').update({ is_class_rep: false }).eq('matric_number', repMatric);
       }
       
-      // Set new rep
-      await supabase.from('student_profiles').update({ is_class_rep: true }).eq('matric_number', matric);
-      setRepMatric(matric);
+      // Upsert in case they haven't saved a profile yet
+      await supabase.from('student_profiles').upsert(
+        { matric_number: cleanMatric, is_class_rep: true },
+        { onConflict: 'matric_number' }
+      );
+      
+      setRepMatric(cleanMatric);
+      setNewRepMatric('');
     }
   };
 
@@ -709,7 +723,27 @@ export default function CourseManagement() {
                   Enrolled Students
                   <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">{modalStudents.length}</span>
                 </h3>
-                
+
+                {/* QUICK DESIGNATE REP */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2 items-center">
+                  <Star className="text-amber-500 shrink-0" size={16} />
+                  <input
+                    type="text"
+                    placeholder="Designate Rep (Matric No.)"
+                    value={newRepMatric}
+                    onChange={(e) => setNewRepMatric(e.target.value.toUpperCase())}
+                    className="w-full bg-white border border-amber-200 p-2 rounded-lg text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-amber-500"
+                    onKeyDown={(e) => e.key === 'Enter' && handleMakeRep(newRepMatric)}
+                  />
+                  <button
+                    onClick={() => handleMakeRep(newRepMatric)}
+                    disabled={!newRepMatric.trim()}
+                    className="bg-amber-500 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-amber-600 disabled:opacity-50 shrink-0"
+                  >
+                    Make Rep
+                  </button>
+                </div>
+
                 {isLoadingStudents ? (
                   <div className="flex justify-center py-6"><Loader2 className="animate-spin text-[#2563EB]" size={24} /></div>
                 ) : modalStudents.length === 0 ? (
