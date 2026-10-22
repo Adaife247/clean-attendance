@@ -30,14 +30,14 @@ function CheckInWrapper() {
 
           <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
-            <div className="space-y-3">
+            <div className="space-y-4">
               <Link 
                 href="/portal" 
-                className="group relative w-full flex items-center justify-center gap-2 p-4 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-lg shadow-blue-500/30"
+                className="group relative w-full flex items-center justify-center gap-2 py-5 px-6 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_25px_rgba(37,99,235,0.4)] hover:shadow-[0_15px_35px_rgba(37,99,235,0.6)]"
               >
-                <Search size={20} className="text-white" />
-                <span className="font-extrabold text-white text-lg">Enter Student Portal</span>
-                <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all absolute right-4" />
+                <Search size={22} className="text-white" strokeWidth={3} />
+                <span className="font-black text-white text-xl tracking-wide">Enter Student Portal</span>
+                <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />
               </Link>
               
               <p className="text-center text-sm font-bold text-gray-500">
@@ -45,7 +45,6 @@ function CheckInWrapper() {
               </p>
             </div>
 
-            {/* FIX: Tailwind class min-h-11 applied */}
             <div className="mt-6 pt-6 border-t border-gray-200 text-center">
               <Link 
                 href="/login" 
