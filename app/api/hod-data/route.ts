@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -60,8 +62,9 @@ export async function GET(request: Request) {
         }
       }
 
-      // 5. NUC Compliance using ENROLLMENTS table
+      // 5. NUC Compliance - FAST BATCH QUERY
       if (totalSessions > 0 && courseIds.length > 0) {
+        // Get all enrollments for these courses
         const { data: enrollments } = await supabase
           .from('enrollments')
           .select('matric_number')
@@ -70,15 +73,21 @@ export async function GET(request: Request) {
         if (enrollments && enrollments.length > 0) {
           const uniqueMatrics = Array.from(new Set(enrollments.map(e => e.matric_number)));
           
-          for (const matric of uniqueMatrics) {
-            const { count } = await supabase
-              .from('attendance_logs')
-              .select('*', { count: 'exact', head: true })
-              .eq('matric_number', matric)
-              .in('session_id', sessionIds)
-              .eq('status', 'verified');
+          // Get ALL attendance logs for these sessions in one single query
+          const { data: allLogs } = await supabase
+            .from('attendance_logs')
+            .select('matric_number')
+            .in('session_id', sessionIds)
+            .eq('status', 'verified');
 
-            const attended = count || 0;
+          // Count how many times each student attended
+          const attendanceCounts: Record<string, number> = {};
+          (allLogs || []).forEach(log => {
+            attendanceCounts[log.matric_number] = (attendanceCounts[log.matric_number] || 0) + 1;
+          });
+
+          for (const matric of uniqueMatrics) {
+            const attended = attendanceCounts[matric] || 0;
             const percentage = (attended / totalSessions) * 100;
 
             totalStudents++;

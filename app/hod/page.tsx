@@ -33,33 +33,48 @@ export default function HODPortal() {
 
   const fetchDepartmentData = useCallback(async () => {
     try {
+      console.log("1. Starting HOD Fetch");
       setLoading(true);
       setError('');
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log("2. No session, redirecting to login");
         router.push('/login');
         return;
       }
 
+      console.log("3. Session found, fetching profile for:", session.user.id);
       const { data: profile, error: profileError } = await supabase
         .from('lecturers')
         .select('department')
         .eq('id', session.user.id)
         .single();
 
-      if (profileError || !profile?.department) {
+      if (profileError) {
+        console.log("4. Profile fetch error:", profileError);
+        throw new Error("Could not load your profile.");
+      }
+
+      if (!profile?.department) {
+        console.log("5. No department found, redirecting to dashboard");
         router.push('/dashboard');
         return;
       }
 
+      console.log("6. Department found:", profile.department, "Calling API...");
+      
       const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`);
       
       if (!res.ok) {
+        const errorText = await res.text();
+        console.log("7. API error:", res.status, errorText);
         throw new Error(`API returned ${res.status}`);
       }
 
       const data = await res.json();
+      console.log("8. API Data received:", data);
+      
       setStats(data.lecturers || []);
       setCompliance(data.compliance || { total: 0, cleared: 0, atRisk: 0 });
       
@@ -67,6 +82,7 @@ export default function HODPortal() {
       console.error("HOD Load Error:", err);
       setError(err instanceof Error ? err.message : "Failed to load HOD data");
     } finally {
+      console.log("9. Finished HOD Fetch");
       setLoading(false);
     }
   }, [router]);
@@ -81,6 +97,7 @@ export default function HODPortal() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
         <Loader2 className="animate-spin text-[#2563EB] mb-4" size={40} />
         <p className="text-gray-500 font-bold animate-pulse text-lg">Authenticating HOD Clearance...</p>
+        <p className="text-xs text-gray-400 mt-2">Check console (F12) for live logs</p>
       </div>
     );
   }
