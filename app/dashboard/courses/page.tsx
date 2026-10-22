@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown, X
+  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown, X, Star
 } from 'lucide-react';
 
 interface Course {
@@ -44,9 +44,7 @@ interface LogRow {
 
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
-
-// Regex to strictly find Matric Numbers (must contain a slash or hyphen)
-const MATRIC_REGEX = /[\/\-]/; 
+const MATRIC_REGEX = /[\/\-]/;
 
 export default function CourseManagement() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -70,7 +68,13 @@ export default function CourseManagement() {
   const [editPlanned, setEditPlanned] = useState<number | ''>(15);
   const [editMaxScore, setEditMaxScore] = useState<number | ''>(10);
   const [modalStudents, setModalStudents] = useState<string[]>([]);
+  const [repMatric, setRepMatric] = useState<string | null>(null);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+
+  // QUICK DESIGNATE REP STATE (On Main Page)
+  const [repCourseCode, setRepCourseCode] = useState('');
+  const [repMatricInput, setRepMatricInput] = useState('');
+  const [isSettingRep, setIsSettingRep] = useState(false);
 
   // Single Student Add
   const [singleMatric, setSingleMatric] = useState('');
@@ -123,6 +127,7 @@ export default function CourseManagement() {
       setCourses(data);
       if (data.length > 0) {
         setTargetCourseId(data[0].id);
+        setRepCourseCode(data[0].course_code);
         setAuditCourseCode(data[0].course_code);
         await fetchEnrollmentCounts(data.map(c => c.id));
       }
@@ -163,6 +168,71 @@ export default function CourseManagement() {
     setIsCreating(false);
   };
 
+  // QUICK DESIGNATE REP LOGIC
+  const handleQuickSetRep = async () => {
+    const cleanMatric = repMatricInput.trim().toUpperCase();
+    if (!cleanMatric || !repCourseCode) return;
+
+    setIsSettingRep(true);
+
+    try {
+      // 1. Find the course
+      const course = courses.find(c => c.course_code === repCourseCode);
+      if (!course) throw new Error("Course not found.");
+
+      // 2. Check if the student is enrolled in this course
+      const { data: enrollment } = await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('course_id', course.id)
+        .eq('matric_number', cleanMatric)
+        .maybeSingle();
+
+      if (!enrollment) {
+        alert(`❌ ${cleanMatric} is not enrolled in ${repCourseCode}.\n\nUpload the roster first, then make them a Rep.`);
+        setIsSettingRep(false);
+        return;
+      }
+
+      // 3. Check if there is an existing rep for this course (via enrollments) to remove
+      const { data: enrolledStudents } = await supabase
+        .from('enrollments')
+        .select('matric_number')
+        .eq('course_id', course.id);
+      
+      if (enrolledStudents) {
+        const allMatrics = enrolledStudents.map(e => e.matric_number);
+        const { data: existingReps } = await supabase
+          .from('student_profiles')
+          .select('matric_number')
+          .in('matric_number', allMatrics)
+          .eq('is_class_rep', true);
+
+        if (existingReps && existingReps.length > 0) {
+          for (const oldRep of existingReps) {
+            await supabase.from('student_profiles').update({ is_class_rep: false }).eq('matric_number', oldRep.matric_number);
+          }
+        }
+      }
+
+      // 4. Make the new student a Rep
+      const { error: repError } = await supabase.from('student_profiles').upsert(
+        { matric_number: cleanMatric, is_class_rep: true },
+        { onConflict: 'matric_number' }
+      );
+
+      if (repError) throw repError;
+
+      alert(`✅ Success! ${cleanMatric} is now the Class Rep for ${repCourseCode}.`);
+      setRepMatricInput('');
+      
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to set rep.");
+    } finally {
+      setIsSettingRep(false);
+    }
+  };
+
   const handleOpenModal = async (course: Course) => {
     setEditingCourse(course);
     setEditCode(course.course_code);
@@ -170,6 +240,7 @@ export default function CourseManagement() {
     setEditMaxScore(course.max_attendance_score || 10);
     setIsLoadingStudents(true);
     setModalStudents([]);
+    setRepMatric(null);
 
     const { data, error } = await supabase
       .from('enrollments')
@@ -178,7 +249,21 @@ export default function CourseManagement() {
       .order('matric_number');
       
     if (!error && data) {
-      setModalStudents(data.map(d => d.matric_number));
+      const matrics = data.map(d => d.matric_number);
+      setModalStudents(matrics);
+
+      if (matrics.length > 0) {
+        const { data: profiles } = await supabase
+          .from('student_profiles')
+          .select('matric_number, is_class_rep')
+          .in('matric_number', matrics)
+          .eq('is_class_rep', true)
+          .limit(1);
+          
+        if (profiles && profiles.length > 0) {
+          setRepMatric(profiles[0].matric_number);
+        }
+      }
     }
     setIsLoadingStudents(false);
   };
@@ -232,6 +317,7 @@ export default function CourseManagement() {
     if (error) alert("Failed to remove student.");
     else {
       setModalStudents(prev => prev.filter(m => m !== matric));
+      if (repMatric === matric) setRepMatric(null);
       fetchEnrollmentCounts(courses.map(c => c.id));
     }
   };
@@ -259,7 +345,6 @@ export default function CourseManagement() {
           
           jsonData.forEach(row => {
             row.forEach(cell => {
-               // FIX: Only accept strings that look like matric numbers
                if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
                  rawMatrics.push(cell.trim().toUpperCase());
                }
@@ -275,9 +360,8 @@ export default function CourseManagement() {
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
-
         if (uniqueMatrics.length === 0) {
-          alert("No valid matric numbers found. Ensure your file has a format like CSC/2021/001 or CSC-2021-001.");
+          alert("No valid matric numbers found.");
           setUploadingId(null);
           e.target.value = '';
           return;
@@ -461,7 +545,8 @@ export default function CourseManagement() {
           <h2 className="text-lg font-bold text-gray-900">Course Registry & Rosters</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
           {/* Create Course */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
@@ -506,7 +591,6 @@ export default function CourseManagement() {
                   <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-              
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 ml-1">Planned Lectures</label>
@@ -568,6 +652,42 @@ export default function CourseManagement() {
                   className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
                 >
                   {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* QUICK DESIGNATE CLASS REP */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
+              3. Designate Class Rep <Star size={14} className="fill-amber-500 text-amber-500" />
+            </h3>
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <select
+                  value={repCourseCode}
+                  onChange={(e) => setRepCourseCode(e.target.value)}
+                  className="w-full bg-amber-50 border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
+                >
+                  {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-3.5 text-amber-600 pointer-events-none" />
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Student Matric No."
+                  value={repMatricInput}
+                  onChange={(e) => setRepMatricInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickSetRep()}
+                  className="w-full bg-amber-50 border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
+                />
+                <button
+                  onClick={handleQuickSetRep}
+                  disabled={isSettingRep || !repMatricInput.trim()}
+                  className="bg-amber-500 text-white px-5 py-3 rounded-xl font-bold hover:bg-amber-600 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0 gap-2"
+                >
+                  {isSettingRep ? <Loader2 size={18} className="animate-spin" /> : <Star size={18} />}
                 </button>
               </div>
             </div>
@@ -670,7 +790,7 @@ export default function CourseManagement() {
                 </button>
               </div>
 
-              {/* Manage Students */}
+              {/* Manage Students (Read-Only List) */}
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2 flex justify-between items-center">
                   Enrolled Students
@@ -685,10 +805,22 @@ export default function CourseManagement() {
                   <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
                     {modalStudents.map(matric => (
                       <div key={matric} className="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <span className="font-bold text-gray-800 text-sm">{matric}</span>
-                        <button onClick={() => handleRemoveStudent(matric)} className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-800 text-sm">{matric}</span>
+                          {repMatric === matric && (
+                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 uppercase flex items-center gap-1">
+                              <Star size={10} className="fill-amber-500 text-amber-500" /> Rep
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => handleRemoveStudent(matric)} 
+                            className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
