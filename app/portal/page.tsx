@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
+import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -31,13 +32,15 @@ interface AvailableCourse { id: string; course_code: string; department: string;
 
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
+const MATRIC_REGEX = /[\/\-]/;
 
 export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
   
   const [matricNumber, setMatricNumber] = useState('');
   const [studentDept, setStudentDept] = useState('');
   const [studentLevel, setStudentLevel] = useState('');
+  const [isClassRep, setIsClassRep] = useState(false);
   
   const [isVerifying, setIsVerifying] = useState(false);
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
@@ -52,6 +55,12 @@ export default function StudentPortal() {
   
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
+
+  // Rep Desk State
+  const [repCourseId, setRepCourseId] = useState('');
+  const [repBatteryMatric, setRepBatteryMatric] = useState('');
+  const [isLoggingBattery, setIsLoggingBattery] = useState(false);
+  const [isUploadingList, setIsUploadingList] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('campuscheck_student_matric');
@@ -97,7 +106,7 @@ export default function StudentPortal() {
 
       const { data: profile } = await supabase
         .from('student_profiles')
-        .select('nickname, department, level')
+        .select('nickname, department, level, is_class_rep')
         .eq('matric_number', cleanMatric)
         .maybeSingle();
 
@@ -107,6 +116,7 @@ export default function StudentPortal() {
       }
       if (profile?.department) setStudentDept(profile.department);
       if (profile?.level) setStudentLevel(profile.level);
+      if (profile?.is_class_rep) setIsClassRep(profile.is_class_rep);
 
       const { data: feedData } = await supabase
         .from('campus_updates')
@@ -135,6 +145,9 @@ export default function StudentPortal() {
 
       if (courseError) throw courseError;
       const courseCodes = courseRows?.map(c => c.course_code) || [];
+      
+      // Set default rep course if they are a rep
+      if (courseRows && courseRows.length > 0) setRepCourseId(courseRows[0].id);
 
       const { data: sessionRows, error: sessionError } = await supabase
         .from('lecture_sessions')
@@ -315,6 +328,106 @@ export default function StudentPortal() {
     }
   };
 
+  // REP ACTION: Log Dead Battery
+  const handleLogBattery = async () => {
+    if (!activeLiveSession) return alert("No active lecture right now.");
+    if (!repBatteryMatric.trim()) return alert("Enter the student's matric number.");
+    
+    setIsLoggingBattery(true);
+    try {
+      const res = await fetch('/api/rep-action', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'log_dead_battery',
+          sessionId: activeLiveSession.sessionId,
+          matricNumber: repBatteryMatric,
+          repMatric: matricNumber
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Logged! Ask the student to see the lecturer for approval.");
+        setRepBatteryMatric('');
+      } else {
+        alert(data.error || "Failed to log battery dead.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setIsLoggingBattery(false);
+    }
+  };
+
+  // REP ACTION: Upload List
+  const handleRepUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !repCourseId) return;
+    setIsUploadingList(true);
+
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      try {
+        let rawMatrics: string[] = [];
+
+        if (isExcel) {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
+          
+          jsonData.forEach(row => {
+            row.forEach(cell => {
+               if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
+                 rawMatrics.push(cell.trim().toUpperCase());
+               }
+            });
+          });
+        } else {
+          const csvText = event.target?.result as string;
+          const cleanMatrics = csvText
+            .split(/[\n,]+/)
+            .map(m => m.trim().toUpperCase())
+            .filter(m => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
+          rawMatrics = cleanMatrics;
+        }
+
+        const uniqueMatrics = Array.from(new Set(rawMatrics));
+        if (uniqueMatrics.length === 0) {
+          alert("No valid matric numbers found.");
+          setIsUploadingList(false);
+          e.target.value = '';
+          return;
+        }
+
+        const rows = uniqueMatrics.map(matric => ({
+          course_id: repCourseId,
+          matric_number: matric,
+        }));
+
+        const { error } = await supabase
+          .from('enrollments')
+          .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
+
+        if (!error) {
+          alert(`Success! ${uniqueMatrics.length} students synced.`);
+          handleVerifyAndFetch();
+        } else {
+          alert(`Upload failed: ${error.message}`);
+        }
+      } catch {
+        alert("Failed to read file.");
+      }
+      
+      setIsUploadingList(false);
+      e.target.value = '';
+    };
+    
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  };
+
   const getShieldColor = (pct: number) => {
     if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
     if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
@@ -338,7 +451,6 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
-        {/* THE FIX: Pass matric number in URL so student doesn't have to retype it */}
         {activeLiveSession && (
           <a 
             href={`/?sessionId=${activeLiveSession.sessionId}&matric=${matricNumber}`}
@@ -385,6 +497,11 @@ export default function StudentPortal() {
                 <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
                 <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
                 <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
+                
+                {/* REP DESK TAB */}
+                {isClassRep && (
+                  <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
+                )}
               </div>
 
               {activeTab === 'dashboard' && (
@@ -575,6 +692,62 @@ export default function StudentPortal() {
                     ))}
                     {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
                   </div>
+                </div>
+              )}
+
+              {/* REP DESK TAB CONTENT */}
+              {activeTab === 'rep' && isClassRep && (
+                <div className="animate-in fade-in space-y-6">
+                  
+                  {/* Upload List */}
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                    <h3 className="font-bold text-blue-900 text-sm mb-2 flex items-center gap-2"><Upload size={16}/> Upload Class List</h3>
+                    <p className="text-xs text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
+                    
+                    <select 
+                      value={repCourseId} 
+                      onChange={(e) => setRepCourseId(e.target.value)}
+                      className="w-full bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold mb-3"
+                    >
+                      {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
+                    </select>
+
+                    <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white border border-blue-300 rounded-xl font-bold text-sm text-blue-700 hover:bg-blue-100 transition-all shadow-sm">
+                      {isUploadingList ? <Clock size={16} className="animate-spin" /> : <FileText size={16} />}
+                      {isUploadingList ? "Uploading..." : "Select CSV / Excel File"}
+                      <input
+                        type="file"
+                        accept=".csv, .xlsx, .xls"
+                        className="hidden"
+                        onChange={handleRepUpload}
+                        disabled={isUploadingList}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Dead Battery Log */}
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+                    <h3 className="font-bold text-amber-900 text-sm mb-2 flex items-center gap-2"><Zap size={16}/> Log Dead Battery</h3>
+                    <p className="text-xs text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
+                    
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Student's Matric No."
+                        value={repBatteryMatric}
+                        onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())}
+                        className="w-full bg-white border border-amber-200 p-2 rounded-lg text-sm font-bold uppercase"
+                      />
+                      <button
+                        onClick={handleLogBattery}
+                        disabled={isLoggingBattery || !repBatteryMatric}
+                        className="bg-amber-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {isLoggingBattery ? "Logging..." : "Log"}
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               )}
 
