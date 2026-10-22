@@ -31,38 +31,36 @@ function CheckInWrapper() {
             <p className="text-gray-500 mt-2 font-semibold text-lg">Secure Attendance & Clearance</p>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 space-y-4 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+          <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
-            {/* PRIMARY ACTION: Student Portal */}
-            <Link 
-              href="/portal" 
-              className="group relative w-full flex items-center justify-between p-5 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-lg shadow-blue-500/30"
-            >
-              <div className="flex items-center gap-4 relative z-10">
-                <div className="bg-white/20 p-3.5 rounded-xl text-white">
-                  <Search size={22} />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-extrabold text-white text-lg">Enter Student Portal</h3>
-                  <p className="text-xs text-blue-100 font-medium mt-0.5">Check Clearance Shield & records</p>
-                </div>
-              </div>
-              <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all" />
-            </Link>
+            {/* THE FIX: Primary Action is just the Button, Description is below */}
+            <div className="space-y-3">
+              <Link 
+                href="/portal" 
+                className="group relative w-full flex items-center justify-center gap-2 p-4 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-lg shadow-blue-500/30"
+              >
+                <Search size={20} className="text-white" />
+                <span className="font-extrabold text-white text-lg">Enter Student Portal</span>
+                <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all absolute right-4" />
+              </Link>
+              
+              <p className="text-center text-sm font-medium text-gray-500">
+                Check your Clearance Shield & attendance records
+              </p>
+            </div>
 
-            {/* SECONDARY ACTION: Faculty Access (Demoted) */}
-            <div className="pt-2 text-center">
+            {/* Faculty Access is demoted to a quiet text link */}
+            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
               <Link 
                 href="/login" 
-                className="inline-flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors uppercase tracking-wider"
               >
-                <Lock size={14} /> Faculty Sign In
+                <Lock size={12} /> Faculty Sign In
               </Link>
             </div>
             
           </div>
 
-          {/* UPDATED COPY: No more "Check WhatsApp" friction */}
           <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
             <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
               <Zap size={20} className="text-white" />
@@ -70,7 +68,7 @@ function CheckInWrapper() {
             <div>
               <h4 className="font-bold text-sm">Live Class in Session?</h4>
               <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                Log in to the Student Portal with your Matric Number. If your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear for you to instantly check in.
+                Log in with your Matric Number. If your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear.
               </p>
             </div>
           </div>
