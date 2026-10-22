@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     let atRiskStudents = 0;
 
     for (const lec of lecturers) {
-      // Courses
+      // 2. Get Courses
       const { data: courses } = await supabase
         .from('courses')
         .select('id, course_code')
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       const courseIds = courses?.map(c => c.id) || [];
       const courseCodes = courses?.map(c => c.course_code) || [];
 
-      // Sessions
+      // 3. Get Sessions
       const { data: sessions } = await supabase
         .from('lecture_sessions')
         .select('session_id')
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
       const sessionIds = sessions?.map(s => s.session_id) || [];
       const totalSessions = sessionIds.length;
 
-      // Ratings
+      // 4. Get Ratings
       let avgRating = 0;
       let totalRatings = 0;
       if (sessionIds.length > 0) {
@@ -58,20 +58,17 @@ export async function GET(request: Request) {
         }
       }
 
-      // NUC Compliance (if they have courses and sessions)
+      // 5. NUC Compliance using ENROLLMENTS table
       if (totalSessions > 0 && courseIds.length > 0) {
-        // Get all enrollments for these courses
         const { data: enrollments } = await supabase
           .from('enrollments')
           .select('matric_number')
           .in('course_id', courseIds);
 
         if (enrollments) {
-          // Get unique students
           const uniqueMatrics = Array.from(new Set(enrollments.map(e => e.matric_number)));
           
           for (const matric of uniqueMatrics) {
-            // Get their verified logs for these sessions
             const { count } = await supabase
               .from('attendance_logs')
               .select('*', { count: 'exact', head: true })
