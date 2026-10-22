@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, ShieldAlert
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -280,29 +280,6 @@ export default function StudentPortal() {
     }
   };
 
-  const handleDevBypass = async () => {
-    if (matricNumber.length < 5) return;
-    setIsVerifying(true);
-    setError('');
-    setRecords(null);
-    setHistory(null);
-    setActiveLiveSession(null);
-    setIsClassRep(false);
-
-    const cleanMatric = matricNumber.toUpperCase().trim();
-    localStorage.setItem('campuscheck_student_matric', cleanMatric);
-
-    try {
-      await fetchStudentData(cleanMatric);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Dev bypass failed.";
-      setRecords(null);
-      setError(msg);
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
   const saveProfile = async () => {
     if (!matricNumber) return;
     const cleanMatric = matricNumber.toUpperCase().trim();
@@ -312,7 +289,7 @@ export default function StudentPortal() {
       nickname: nickname.trim(),
       department: studentDept,
       level: studentLevel,
-      is_class_rep: isClassRep // <--- PRESERVE THE FLAG
+      is_class_rep: isClassRep 
     });
 
     if (error) {
@@ -361,7 +338,7 @@ export default function StudentPortal() {
       }]);
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
-      handleDevBypass();
+      handleVerifyAndFetch();
       setActiveTab('dashboard');
     } catch {
       alert("Failed to enroll. Please try again.");
@@ -452,7 +429,7 @@ export default function StudentPortal() {
 
         if (!error) {
           alert(`Success! ${uniqueMatrics.length} students synced.`);
-          handleDevBypass();
+          handleVerifyAndFetch();
         } else {
           alert(`Upload failed: ${error.message}`);
         }
@@ -518,13 +495,9 @@ export default function StudentPortal() {
                 <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
               </div>
               
-              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 mb-3">
+              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70">
                 {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
-              </button>
-
-              <button onClick={handleDevBypass} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-600 font-bold text-sm py-3 rounded-2xl hover:bg-gray-200 transition-all disabled:opacity-70">
-                <ShieldAlert size={16} /> Dev Bypass (Test Mode)
               </button>
               
               {error && (
