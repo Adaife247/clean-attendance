@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -70,6 +70,170 @@ export default function StudentPortal() {
     }
   }, []);
 
+  const fetchStudentData = async (cleanMatric: string) => {
+    const { data: profile, error: profileError } = await supabase
+      .from('student_profiles')
+      .select('nickname, department, level, is_class_rep')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    console.log("DB Profile Fetch:", profile, profileError);
+
+    if (profile?.nickname) {
+      setNickname(profile.nickname);
+      setSavedNickname(profile.nickname);
+    }
+    if (profile?.department) setStudentDept(profile.department);
+    if (profile?.level) setStudentLevel(profile.level);
+    
+    if (profile?.is_class_rep === true) {
+      setIsClassRep(true);
+    }
+
+    const { data: feedData } = await supabase
+      .from('campus_updates')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (feedData) setFeed(feedData);
+
+    const { data: enrollmentRows, error: enrollError } = await supabase
+      .from('enrollments')
+      .select('course_id')
+      .eq('matric_number', cleanMatric);
+
+    if (enrollError) throw enrollError;
+
+    if (!enrollmentRows || enrollmentRows.length === 0) {
+      setRecords([]);
+      return;
+    }
+
+    const courseIds = enrollmentRows.map(e => e.course_id);
+    const { data: courseRows, error: courseError } = await supabase
+      .from('courses')
+      .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
+      .in('id', courseIds);
+
+    if (courseError) throw courseError;
+    const courseCodes = courseRows?.map(c => c.course_code) || [];
+    
+    if (courseRows && courseRows.length > 0) setRepCourseId(courseRows[0].id);
+
+    const { data: sessionRows, error: sessionError } = await supabase
+      .from('lecture_sessions')
+      .select('session_id, course_code, created_at, is_active, expires_at')
+      .in('course_code', courseCodes)
+      .order('created_at', { ascending: false });
+
+    if (sessionError) throw sessionError;
+
+    const now = new Date().getTime();
+    const liveSession = sessionRows?.find(s => {
+      if (!s.is_active) return false;
+      const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
+      return !isExpired;
+    });
+    
+    if (liveSession) {
+      setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
+    }
+
+    const sessionIds = (sessionRows || []).map(s => s.session_id);
+    let studentLogs: LogRow[] = [];
+
+    if (sessionIds.length > 0) {
+      const { data: logRows, error: logError } = await supabase
+        .from('attendance_logs')
+        .select('session_id, status')
+        .eq('matric_number', cleanMatric)
+        .in('session_id', sessionIds);
+
+      if (logError) throw logError;
+      studentLogs = logRows || [];
+    }
+
+    const logStatusMap = new Map<string, string>();
+    studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
+
+    const historyData: HistoryRow[] = (sessionRows || []).map(session => {
+      const status = logStatusMap.get(session.session_id) || 'absent';
+      return { ...session, status };
+    });
+    setHistory(historyData);
+
+    const courseStats = new Map<string, { total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
+    
+    courseRows?.forEach(c => {
+      courseStats.set(c.course_code, { 
+        total_held: 0, 
+        total_planned: c.total_planned_classes || 15, 
+        attended: 0, 
+        sessions: [],
+        is_finalized: c.is_finalized,
+        max_score: c.max_attendance_score || 10
+      });
+    });
+
+    (sessionRows as SessionRow[] || []).forEach(session => {
+      const course = session.course_code;
+      const stats = courseStats.get(course);
+      if (stats) {
+        stats.total_held += 1;
+        stats.sessions.push(session);
+        if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
+        courseStats.set(course, stats);
+      }
+    });
+
+    const finalRecords: CourseRecord[] = [];
+    courseStats.forEach((stats, course) => {
+      const total_held = stats.total_held;
+      const attended = stats.attended;
+      
+      const denominator = stats.is_finalized 
+        ? Math.min(stats.total_planned, total_held > 0 ? total_held : 1)
+        : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
+
+      const percentage = Math.round((attended / denominator) * 100);
+      const maxAbsences = Math.floor(denominator * 0.30);
+      const currentAbsences = denominator - attended;
+      const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
+
+      let streak = 0;
+      for (const session of stats.sessions) {
+        if (logStatusMap.get(session.session_id) === 'verified') streak += 1;
+        else break;
+      }
+
+      let tier: CourseRecord['streak_tier'] = 'None';
+      if (streak >= 10) tier = 'Odogwu';
+      else if (streak >= 5) tier = 'Consistent';
+      else if (streak >= 1) tier = 'JJC';
+
+      const ca_score = stats.is_finalized ? ((attended / denominator) * stats.max_score).toFixed(1) : null;
+      const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
+
+      finalRecords.push({
+        course_code: course, 
+        total_held, 
+        total_planned: denominator,
+        attended_classes: attended,
+        percentage, 
+        skips_left: skipsLeft, 
+        streak, 
+        streak_tier: tier,
+        is_finalized: stats.is_finalized,
+        ca_score,
+        max_score: stats.max_score,
+        active_session_id: activeSessionId
+      });
+    });
+
+    finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
+    setRecords(finalRecords);
+  };
+
   const handleVerifyAndFetch = async () => {
     if (matricNumber.length < 5) return;
     setIsVerifying(true);
@@ -77,7 +241,7 @@ export default function StudentPortal() {
     setRecords(null);
     setHistory(null);
     setActiveLiveSession(null);
-    setIsClassRep(false); // Reset on new login
+    setIsClassRep(false);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     localStorage.setItem('campuscheck_student_matric', cleanMatric);
@@ -105,169 +269,7 @@ export default function StudentPortal() {
       const verifyResult = await verifyRes.json();
       if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
 
-      // FETCH PROFILE AND EXPLICITLY LOG IT
-      const { data: profile, error: profileError } = await supabase
-        .from('student_profiles')
-        .select('nickname, department, level, is_class_rep')
-        .eq('matric_number', cleanMatric)
-        .maybeSingle();
-
-      console.log("DB Profile Fetch:", profile, profileError);
-
-      if (profile?.nickname) {
-        setNickname(profile.nickname);
-        setSavedNickname(profile.nickname);
-      }
-      if (profile?.department) setStudentDept(profile.department);
-      if (profile?.level) setStudentLevel(profile.level);
-      
-      // EXPLICIT BOOLEAN CAST
-      if (profile?.is_class_rep === true) {
-        setIsClassRep(true);
-      }
-
-      const { data: feedData } = await supabase
-        .from('campus_updates')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (feedData) setFeed(feedData);
-
-      const { data: enrollmentRows, error: enrollError } = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('matric_number', cleanMatric);
-
-      if (enrollError) throw enrollError;
-
-      if (!enrollmentRows || enrollmentRows.length === 0) {
-        setRecords([]);
-        return;
-      }
-
-      const courseIds = enrollmentRows.map(e => e.course_id);
-      const { data: courseRows, error: courseError } = await supabase
-        .from('courses')
-        .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
-        .in('id', courseIds);
-
-      if (courseError) throw courseError;
-      const courseCodes = courseRows?.map(c => c.course_code) || [];
-      
-      if (courseRows && courseRows.length > 0) setRepCourseId(courseRows[0].id);
-
-      const { data: sessionRows, error: sessionError } = await supabase
-        .from('lecture_sessions')
-        .select('session_id, course_code, created_at, is_active, expires_at')
-        .in('course_code', courseCodes)
-        .order('created_at', { ascending: false });
-
-      if (sessionError) throw sessionError;
-
-      const now = new Date().getTime();
-      const liveSession = sessionRows?.find(s => {
-        if (!s.is_active) return false;
-        const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
-        return !isExpired;
-      });
-      
-      if (liveSession) {
-        setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
-      }
-
-      const sessionIds = (sessionRows || []).map(s => s.session_id);
-      let studentLogs: LogRow[] = [];
-
-      if (sessionIds.length > 0) {
-        const { data: logRows, error: logError } = await supabase
-          .from('attendance_logs')
-          .select('session_id, status')
-          .eq('matric_number', cleanMatric)
-          .in('session_id', sessionIds);
-
-        if (logError) throw logError;
-        studentLogs = logRows || [];
-      }
-
-      const logStatusMap = new Map<string, string>();
-      studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
-
-      const historyData: HistoryRow[] = (sessionRows || []).map(session => {
-        const status = logStatusMap.get(session.session_id) || 'absent';
-        return { ...session, status };
-      });
-      setHistory(historyData);
-
-      const courseStats = new Map<string, { total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
-      
-      courseRows?.forEach(c => {
-        courseStats.set(c.course_code, { 
-          total_held: 0, 
-          total_planned: c.total_planned_classes || 15, 
-          attended: 0, 
-          sessions: [],
-          is_finalized: c.is_finalized,
-          max_score: c.max_attendance_score || 10
-        });
-      });
-
-      (sessionRows as SessionRow[] || []).forEach(session => {
-        const course = session.course_code;
-        const stats = courseStats.get(course);
-        if (stats) {
-          stats.total_held += 1;
-          stats.sessions.push(session);
-          if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
-          courseStats.set(course, stats);
-        }
-      });
-
-      const finalRecords: CourseRecord[] = [];
-      courseStats.forEach((stats, course) => {
-        const total_held = stats.total_held;
-        const attended = stats.attended;
-        
-        const denominator = stats.is_finalized 
-          ? Math.min(stats.total_planned, total_held > 0 ? total_held : 1)
-          : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
-
-        const percentage = Math.round((attended / denominator) * 100);
-        const maxAbsences = Math.floor(denominator * 0.30);
-        const currentAbsences = denominator - attended;
-        const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
-
-        let streak = 0;
-        for (const session of stats.sessions) {
-          if (logStatusMap.get(session.session_id) === 'verified') streak += 1;
-          else break;
-        }
-
-        let tier: CourseRecord['streak_tier'] = 'None';
-        if (streak >= 10) tier = 'Odogwu';
-        else if (streak >= 5) tier = 'Consistent';
-        else if (streak >= 1) tier = 'JJC';
-
-        const ca_score = stats.is_finalized ? ((attended / denominator) * stats.max_score).toFixed(1) : null;
-        const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
-
-        finalRecords.push({
-          course_code: course, 
-          total_held, 
-          total_planned: denominator,
-          attended_classes: attended,
-          percentage, 
-          skips_left: skipsLeft, 
-          streak, 
-          streak_tier: tier,
-          is_finalized: stats.is_finalized,
-          ca_score,
-          max_score: stats.max_score,
-          active_session_id: activeSessionId
-        });
-      });
-
-      finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
-      setRecords(finalRecords);
+      await fetchStudentData(cleanMatric);
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Verification failed.";
@@ -278,14 +280,47 @@ export default function StudentPortal() {
     }
   };
 
+  const handleDevBypass = async () => {
+    if (matricNumber.length < 5) return;
+    setIsVerifying(true);
+    setError('');
+    setRecords(null);
+    setHistory(null);
+    setActiveLiveSession(null);
+    setIsClassRep(false);
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+    localStorage.setItem('campuscheck_student_matric', cleanMatric);
+
+    try {
+      await fetchStudentData(cleanMatric);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Dev bypass failed.";
+      setRecords(null);
+      setError(msg);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const saveProfile = async () => {
     if (!matricNumber) return;
-    await supabase.from('student_profiles').upsert({
-      matric_number: matricNumber.toUpperCase().trim(),
+    const cleanMatric = matricNumber.toUpperCase().trim();
+    
+    const { error } = await supabase.from('student_profiles').upsert({
+      matric_number: cleanMatric,
       nickname: nickname.trim(),
       department: studentDept,
-      level: studentLevel
+      level: studentLevel,
+      is_class_rep: isClassRep // <--- PRESERVE THE FLAG
     });
+
+    if (error) {
+      alert("Failed to save profile: " + error.message);
+      console.error("Profile save error:", error);
+      return;
+    }
+
     setSavedNickname(nickname.trim());
     setIsEditingNickname(false);
     fetchAvailableCourses();
@@ -326,7 +361,7 @@ export default function StudentPortal() {
       }]);
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
-      handleVerifyAndFetch();
+      handleDevBypass();
       setActiveTab('dashboard');
     } catch {
       alert("Failed to enroll. Please try again.");
@@ -417,7 +452,7 @@ export default function StudentPortal() {
 
         if (!error) {
           alert(`Success! ${uniqueMatrics.length} students synced.`);
-          handleVerifyAndFetch();
+          handleDevBypass();
         } else {
           alert(`Upload failed: ${error.message}`);
         }
@@ -482,9 +517,14 @@ export default function StudentPortal() {
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
                 <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
               </div>
-              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70">
+              
+              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70 mb-3">
                 {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
+              </button>
+
+              <button onClick={handleDevBypass} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-600 font-bold text-sm py-3 rounded-2xl hover:bg-gray-200 transition-all disabled:opacity-70">
+                <ShieldAlert size={16} /> Dev Bypass (Test Mode)
               </button>
               
               {error && (
