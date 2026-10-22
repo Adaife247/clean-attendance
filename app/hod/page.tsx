@@ -27,39 +27,48 @@ interface ComplianceData {
 export default function HODPortal() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [stats, setStats] = useState<LecturerStat[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData>({ total: 0, cleared: 0, atRisk: 0 });
 
   const fetchDepartmentData = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      router.push('/login');
-      return;
-    }
+    try {
+      setLoading(true);
+      setError('');
 
-    const { data: profile } = await supabase
-      .from('lecturers')
-      .select('department')
-      .eq('id', session.user.id)
-      .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
 
-    // --- SECLUSION CHECK ---
-    // If the user has no department, they are not authorized to view this page.
-    if (!profile?.department) {
-      router.push('/dashboard');
-      return;
-    }
+      const { data: profile, error: profileError } = await supabase
+        .from('lecturers')
+        .select('department')
+        .eq('id', session.user.id)
+        .single();
 
-    const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`);
-    if (res.ok) {
+      if (profileError || !profile?.department) {
+        router.push('/dashboard');
+        return;
+      }
+
+      const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`);
+      
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}`);
+      }
+
       const data = await res.json();
-      setStats(data.lecturers);
-      setCompliance(data.compliance);
-    } else {
-      router.push('/dashboard');
+      setStats(data.lecturers || []);
+      setCompliance(data.compliance || { total: 0, cleared: 0, atRisk: 0 });
+      
+    } catch (err) {
+      console.error("HOD Load Error:", err);
+      setError(err instanceof Error ? err.message : "Failed to load HOD data");
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }, [router]);
 
   useEffect(() => {
@@ -69,11 +78,22 @@ export default function HODPortal() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="animate-spin text-[#2563EB] mx-auto mb-4" size={32} />
-          <p className="text-gray-500 font-bold animate-pulse">Authenticating HOD Clearance...</p>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={40} />
+        <p className="text-gray-500 font-bold animate-pulse text-lg">Authenticating HOD Clearance...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <AlertTriangle className="text-red-500 mb-4" size={48} />
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to load Dashboard</h2>
+        <p className="text-gray-500 font-medium text-center mb-6 max-w-md">{error}</p>
+        <button onClick={() => fetchDepartmentData()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all">
+          Try Again
+        </button>
       </div>
     );
   }
@@ -181,24 +201,30 @@ export default function HODPortal() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {stats.map((lec) => (
-                  <tr key={lec.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-gray-900">{lec.full_name}</td>
-                    <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.course_count}</td>
-                    <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.session_count}</td>
-                    <td className="px-6 py-4 text-right">
-                      {lec.total_ratings > 0 ? (
-                        <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-200">
-                          <Star size={14} className="fill-amber-400 text-amber-400" />
-                          <span className="font-black">{lec.avg_rating}</span>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600/70">({lec.total_ratings} votes)</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-lg">No ratings yet</span>
-                      )}
-                    </td>
+                {stats.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 font-bold">No lecturers found in this department.</td>
                   </tr>
-                ))}
+                ) : (
+                  stats.map((lec) => (
+                    <tr key={lec.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-gray-900">{lec.full_name}</td>
+                      <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.course_count}</td>
+                      <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.session_count}</td>
+                      <td className="px-6 py-4 text-right">
+                        {lec.total_ratings > 0 ? (
+                          <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-200">
+                            <Star size={14} className="fill-amber-400 text-amber-400" />
+                            <span className="font-black">{lec.avg_rating}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600/70">({lec.total_ratings} votes)</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-lg">No ratings yet</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
