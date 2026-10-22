@@ -10,10 +10,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const courseCodeToSave = body.courseCode || body.course_code;
-
     const durationMinutes = parseInt(body.duration) || 60;
+    const startedBy = body.startedBy || 'lecturer';
 
-    // Per-session check-in window. Defaults to 10 if missing.
     const checkinOpensAfterMinutes = Number.isFinite(parseInt(body.checkinOpensAfter))
       ? Math.max(0, parseInt(body.checkinOpensAfter))
       : 10;
@@ -32,7 +31,8 @@ export async function POST(request: Request) {
         anchor_longitude: body.longitude || body.lng,
         is_active: true,
         expires_at: expiresAt,
-        checkin_opens_after_minutes: checkinOpensAfterMinutes
+        checkin_opens_after_minutes: checkinOpensAfterMinutes,
+        started_by: startedBy
       }])
       .select('session_id')
       .single();

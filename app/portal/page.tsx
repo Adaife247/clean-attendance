@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -61,6 +61,10 @@ export default function StudentPortal() {
   const [repBatteryMatric, setRepBatteryMatric] = useState('');
   const [isLoggingBattery, setIsLoggingBattery] = useState(false);
   const [isUploadingList, setIsUploadingList] = useState(false);
+
+  // Backup Anchor State
+  const [isStartingRepSession, setIsStartingRepSession] = useState(false);
+  const [repSessionError, setRepSessionError] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('campuscheck_student_matric');
@@ -445,6 +449,53 @@ export default function StudentPortal() {
     else reader.readAsText(file);
   };
 
+  const handleStartBackupSession = async () => {
+    if (!repCourseId) return alert("Select a course first.");
+    if (!navigator.geolocation) return alert("Your phone doesn't support GPS.");
+
+    const course = records?.find(r => r.course_code === repCourseId);
+    if (!course) return;
+
+    if (!window.confirm(`Start a backup session for ${course.course_code}? Your phone will become the GPS anchor.`)) return;
+
+    setIsStartingRepSession(true);
+    setRepSessionError('');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const res = await fetch('/api/create-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              courseCode: course.course_code,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              duration: 60, 
+              checkinOpensAfter: 0, 
+              startedBy: 'Class Rep'
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed to start session");
+
+          alert("✅ Backup session started! Students can now check in.");
+          handleVerifyAndFetch(); 
+        } catch (err) {
+          setRepSessionError(err instanceof Error ? err.message : "Failed to start session.");
+        } finally {
+          setIsStartingRepSession(false);
+        }
+      },
+      () => {
+        setRepSessionError("Could not get GPS. Ensure location is on.");
+        setIsStartingRepSession(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
   const getShieldColor = (pct: number) => {
     if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
     if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
@@ -757,6 +808,38 @@ export default function StudentPortal() {
                         {isLoggingBattery ? "Logging..." : "Log"}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
+                    <h3 className="font-bold text-red-900 text-sm mb-2 flex items-center gap-2"><PlayCircle size={16}/> Backup Anchor</h3>
+                    <p className="text-xs text-red-700 font-medium mb-3">
+                      If the lecturer&apos;s phone is dead or missing, start a session from your phone. Your GPS becomes the anchor for the class.
+                    </p>
+
+                    {activeLiveSession ? (
+                       <div className="bg-white border border-red-200 p-3 rounded-lg text-center text-sm font-bold text-red-600">
+                         Session already active: {activeLiveSession.course}
+                       </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select 
+                          value={repCourseId} 
+                          onChange={(e) => setRepCourseId(e.target.value)}
+                          className="w-full bg-white border border-red-200 p-2 rounded-lg text-sm font-bold"
+                        >
+                          {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
+                        </select>
+                        <button
+                          onClick={handleStartBackupSession}
+                          disabled={isStartingRepSession}
+                          className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isStartingRepSession ? <Clock size={16} className="animate-spin" /> : <MapPin size={16} />}
+                          {isStartingRepSession ? "Anchoring GPS..." : "Start Backup Session"}
+                        </button>
+                        {repSessionError && <p className="text-xs text-red-600 font-bold mt-2">{repSessionError}</p>}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
