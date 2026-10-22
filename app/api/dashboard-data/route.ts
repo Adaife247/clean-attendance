@@ -7,7 +7,7 @@ interface AttendanceLogRow {
   matric_number: string;
   status: string;
   check_in_time: string;
-  device_info: string | null; // NEW
+  device_info: string | null;
 }
 
 export async function GET(request: Request) {
@@ -49,12 +49,20 @@ export async function GET(request: Request) {
       createdAt: session?.created_at || null,
       logs: (logs as AttendanceLogRow[] | null || []).map((l) => {
         let reason = null;
-        if (l.status !== 'verified' && l.device_info) {
+        let isBiometric = false;
+        
+        if (l.device_info) {
           try {
             const info = JSON.parse(l.device_info);
             if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
-            else if (info.verificationMethod === 'skipped') reason = "Biometric skipped (iOS/Android)";
-            else if (info.reason) reason = info.reason;
+            else if (info.verificationMethod === 'skipped') {
+              reason = "Biometric skipped (No hardware lock)";
+              isBiometric = false;
+            } else if (info.verificationMethod === 'biometric') {
+              isBiometric = true;
+            } else if (info.reason) {
+              reason = info.reason;
+            }
           } catch {}
         }
         
@@ -64,7 +72,8 @@ export async function GET(request: Request) {
           nickname: nicknameMap.get(l.matric_number) || null,
           status: l.status,
           time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          reason
+          reason,
+          isBiometric
         };
       })
     });

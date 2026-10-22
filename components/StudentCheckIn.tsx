@@ -61,9 +61,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const savedMatric = localStorage.getItem('campuscheck_student_matric');
     
     if (urlMatric) {
-      setMatricNumber(urlMatric.toUpperCase());
+      Promise.resolve().then(() => setMatricNumber(urlMatric.toUpperCase()));
     } else if (savedMatric) {
-      setMatricNumber(savedMatric.toUpperCase());
+      Promise.resolve().then(() => setMatricNumber(savedMatric.toUpperCase()));
     }
   }, [searchParams]);
 

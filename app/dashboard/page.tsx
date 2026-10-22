@@ -1,11 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation'; // ADDED ROUTER
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi
 } from 'lucide-react';
 
 interface Log { 
@@ -15,6 +15,7 @@ interface Log {
   status: string; 
   time: string; 
   reason?: string; 
+  isBiometric?: boolean;
 }
 interface DashboardData { course: string; isActive: boolean; logs: Log[]; }
 interface LecturerProfile { full_name: string; department: string; }
@@ -26,7 +27,7 @@ const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 const ACTIVE_SESSION_KEY = 'active_attendance_session';
 
 export default function LecturerDashboard() {
-  const router = useRouter(); // INITIALIZE ROUTER
+  const router = useRouter();
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
   const [lecturerId, setLecturerId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -75,7 +76,6 @@ export default function LecturerDashboard() {
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      // FIX: Redirect to login, not portal
       if (!session) { router.push('/login'); return; }
       
       setLecturerId(session.user.id);
@@ -256,11 +256,30 @@ export default function LecturerDashboard() {
     } catch { console.error("Failed to fetch data"); }
   }, [activeSessionId]);
 
+  // THE FIX: SUPABASE REALTIME
   useEffect(() => {
     if (!activeSessionId || viewMode !== 'live') return;
+    
+    // Initial fetch
     const immediateId = setTimeout(() => { fetchDashboardData(); }, 0);
-    const interval = setInterval(fetchDashboardData, 3000);
-    return () => { clearTimeout(immediateId); clearInterval(interval); };
+    
+    // Set up realtime listener
+    const channel = supabase
+      .channel(`attendance_${activeSessionId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_logs', filter: `session_id=eq.${activeSessionId}` },
+        (payload) => {
+          console.log('Realtime change received!', payload);
+          fetchDashboardData(); // Instantly refresh the data
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout(immediateId);
+      supabase.removeChannel(channel);
+    };
   }, [activeSessionId, viewMode, fetchDashboardData]);
 
   const handleManualOverride = async (targetMatric: string) => {
@@ -515,6 +534,9 @@ export default function LecturerDashboard() {
               <div className="flex items-center gap-2 mt-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                 <span className="text-gray-500 font-bold text-lg">{data?.course || 'Loading...'}</span>
+                <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 ml-2">
+                  <Wifi size={12} /> Live Sync
+                </span>
               </div>
             </div>
             <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
@@ -587,7 +609,11 @@ export default function LecturerDashboard() {
                         </td>
                         <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm font-medium"><Clock size={14} /> {log.time}</td>
                         <td className="px-4 md:px-6 py-3 md:py-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Verified</span>
+                          {log.isBiometric ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Biometric</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"><MapPin size={12} strokeWidth={2.5} /> GPS Only</span>
+                          )}
                         </td>
                       </tr>
                     ))
