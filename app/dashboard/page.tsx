@@ -46,6 +46,11 @@ export default function LecturerDashboard() {
   const [isOverriding, setIsOverriding] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
+  // Wipe Search State
+  const [wipeSearch, setWipeSearch] = useState('');
+  const [wipeResults, setWipeResults] = useState<string[]>([]);
+  const [showWipeDropdown, setShowWipeDropdown] = useState(false);
+
   const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
   const [ledgerTab, setLedgerTab] = useState<'verified' | 'flagged'>('verified');
   
@@ -256,26 +261,17 @@ export default function LecturerDashboard() {
     } catch { console.error("Failed to fetch data"); }
   }, [activeSessionId]);
 
-  // THE FIX: Realtime Subscription + 10s Fallback Polling
   useEffect(() => {
     if (!activeSessionId || viewMode !== 'live') return;
-    
-    // Initial fetch
     const immediateId = setTimeout(() => { fetchDashboardData(); }, 0);
     
-    // Set up realtime listener
     const channel = supabase
       .channel(`attendance_${activeSessionId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance_logs', filter: `session_id=eq.${activeSessionId}` },
-        () => {
-          fetchDashboardData(); // Instantly refresh the data
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs', filter: `session_id=eq.${activeSessionId}` }, () => {
+          fetchDashboardData(); 
+      })
       .subscribe();
 
-    // Fallback: Poll every 10 seconds just in case Realtime drops on bad Wi-Fi
     const interval = setInterval(fetchDashboardData, 10000);
 
     return () => {
@@ -301,6 +297,30 @@ export default function LecturerDashboard() {
     finally { setIsOverriding(false); }
   };
 
+  // THE WIPE SEARCH LOGIC
+  const handleWipeSearch = async (query: string) => {
+    setWipeSearch(query.toUpperCase());
+    if (query.length < 3) {
+      setWipeResults([]);
+      setShowWipeDropdown(false);
+      return;
+    }
+
+    if (!selectedCourseId) return;
+
+    const { data } = await supabase
+      .from('enrollments')
+      .select('matric_number')
+      .eq('course_id', selectedCourseId)
+      .ilike('matric_number', `%${query}%`)
+      .limit(5);
+
+    if (data) {
+      setWipeResults(data.map(d => d.matric_number));
+      setShowWipeDropdown(true);
+    }
+  };
+
   const handleDeviceReset = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || "").trim();
     if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
@@ -311,7 +331,7 @@ export default function LecturerDashboard() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: safeMatric })
       });
-      if (response.ok) { alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); setManualMatric(''); }
+      if (response.ok) { alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); setWipeSearch(''); }
       else { const errorData = await response.json(); alert(`⚠️ Failed: ${errorData.message}`); }
     } catch { alert("💥 Network Error."); }
     finally { setIsResetting(false); }
@@ -566,9 +586,6 @@ export default function LecturerDashboard() {
               <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
                 {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
               </button>
-              <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
-                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
-              </button>
             </div>
           </div>
         </div>
@@ -661,6 +678,57 @@ export default function LecturerDashboard() {
             )}
           </div>
         </div>
+
+        {/* WIPE DEVICE SECTION (Moved down here for cleaner UI) */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-200">
+          <div className="flex items-center gap-2 mb-4 border-b border-red-100 pb-3">
+            <ShieldCheck className="text-red-500" size={20}/>
+            <h2 className="text-lg font-bold text-red-700">Wipe Device Lock</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.
+          </p>
+
+          <div className="flex max-w-lg gap-2 relative">
+            <div className="relative w-full">
+              <input
+                type="text"
+                placeholder="Search Matric Number..."
+                value={wipeSearch}
+                onChange={(e) => handleWipeSearch(e.target.value)}
+                onFocus={() => { if (wipeSearch.length > 2) setShowWipeDropdown(true); }}
+                className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all"
+              />
+              
+              {showWipeDropdown && wipeResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                  {wipeResults.map(matric => (
+                    <button 
+                      key={matric}
+                      onClick={() => {
+                        setWipeSearch(matric);
+                        setShowWipeDropdown(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm font-bold text-gray-800 hover:bg-gray-100 border-b border-gray-50 last:border-0"
+                    >
+                      {matric}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => handleDeviceReset(wipeSearch)}
+              disabled={isResetting || !wipeSearch.trim()}
+              className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+            >
+              {isResetting ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
+              Wipe Device
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );
