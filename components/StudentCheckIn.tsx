@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin
@@ -33,6 +33,8 @@ function getMeme(minutesLate: number): { title: string; sub: string; emoji: stri
 
 export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
@@ -50,17 +52,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
   
-  // FIX #6 & #7: Lock the transition to avoid shaking/looping
+  // THE FIX: Strict lock to prevent the shaking/infinite loop
   const hasTransitionedRef = useRef(false);
 
   useEffect(() => {
-    // Auto-fill matric from localStorage
-    const saved = localStorage.getItem('campuscheck_student_matric');
-    if (saved) {
-      const id = setTimeout(() => setMatricNumber(saved), 0);
-      return () => clearTimeout(id);
+    // THE FIX: Check URL first, then localStorage
+    const urlMatric = searchParams.get('matric');
+    const savedMatric = localStorage.getItem('campuscheck_student_matric');
+    
+    if (urlMatric) {
+      setMatricNumber(urlMatric.toUpperCase());
+    } else if (savedMatric) {
+      setMatricNumber(savedMatric.toUpperCase());
     }
-  }, []);
+  }, [searchParams]);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -140,6 +145,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
 
+  // THE FIX: Lock the transition to prevent shaking
+  useEffect(() => {
+    if (status !== 'success') return;
+    if (hasTransitionedRef.current) return;
+    
+    const t = setTimeout(() => {
+      hasTransitionedRef.current = true;
+      setStatus('rating');
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [status]);
+
   const syncOfflineQueue = useCallback(async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
     if (queue.length === 0) return;
@@ -171,18 +188,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = setTimeout(() => { syncOfflineQueue(); }, 0);
     return () => { window.removeEventListener('online', syncOfflineQueue); clearTimeout(id); };
   }, [syncOfflineQueue]);
-
-  // FIX: Prevent the shaking by using a ref guard
-  useEffect(() => {
-    if (status !== 'success') return;
-    if (hasTransitionedRef.current) return;
-    
-    const t = setTimeout(() => {
-      hasTransitionedRef.current = true;
-      setStatus('rating');
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [status]);
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
@@ -258,6 +263,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
+        // Save matric so they don't get logged out later
+        localStorage.setItem('campuscheck_student_matric', matricNumber);
       } else if (result.status === 'flagged' || response.status === 403) {
         setErrorMessage(result.message || "Verification failed.");
         setStatus('failed');

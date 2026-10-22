@@ -338,9 +338,10 @@ export default function StudentPortal() {
           <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
         </div>
 
+        {/* THE FIX: Pass matric number in URL so student doesn't have to retype it */}
         {activeLiveSession && (
           <a 
-            href={`/?sessionId=${activeLiveSession.sessionId}`}
+            href={`/?sessionId=${activeLiveSession.sessionId}&matric=${matricNumber}`}
             className="mb-6 bg-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500 hover:bg-green-700 transition-colors"
           >
             <div className="flex items-center gap-3">
