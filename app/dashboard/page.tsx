@@ -256,7 +256,7 @@ export default function LecturerDashboard() {
     } catch { console.error("Failed to fetch data"); }
   }, [activeSessionId]);
 
-  // THE FIX: SUPABASE REALTIME
+  // THE FIX: Realtime Subscription + 10s Fallback Polling
   useEffect(() => {
     if (!activeSessionId || viewMode !== 'live') return;
     
@@ -269,15 +269,18 @@ export default function LecturerDashboard() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'attendance_logs', filter: `session_id=eq.${activeSessionId}` },
-        (payload) => {
-          console.log('Realtime change received!', payload);
+        () => {
           fetchDashboardData(); // Instantly refresh the data
         }
       )
       .subscribe();
 
+    // Fallback: Poll every 10 seconds just in case Realtime drops on bad Wi-Fi
+    const interval = setInterval(fetchDashboardData, 10000);
+
     return () => {
       clearTimeout(immediateId);
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [activeSessionId, viewMode, fetchDashboardData]);
