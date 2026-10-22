@@ -9,9 +9,6 @@ function CheckInWrapper() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('sessionId');
 
-  // ==========================================
-  // STATE 1: THE UNIVERSAL HUB (No active link)
-  // ==========================================
   if (!sessionId) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
@@ -28,12 +25,11 @@ function CheckInWrapper() {
               <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
             </div>
             <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
-            <p className="text-gray-500 mt-2 font-semibold text-lg">Secure Attendance & Clearance</p>
+            <p className="text-gray-600 mt-2 font-semibold text-lg">Secure Attendance & Clearance</p>
           </div>
 
           <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
-            {/* THE FIX: Primary Action is just the Button, Description is below */}
             <div className="space-y-3">
               <Link 
                 href="/portal" 
@@ -44,18 +40,18 @@ function CheckInWrapper() {
                 <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all absolute right-4" />
               </Link>
               
-              <p className="text-center text-sm font-medium text-gray-500">
+              <p className="text-center text-sm font-bold text-gray-500">
                 Check your Clearance Shield & attendance records
               </p>
             </div>
 
-            {/* Faculty Access is demoted to a quiet text link */}
-            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+            {/* FIX: Tailwind class min-h-11 applied */}
+            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
               <Link 
                 href="/login" 
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors uppercase tracking-wider"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-3 min-h-11 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors uppercase tracking-wider rounded-xl hover:bg-gray-100"
               >
-                <Lock size={12} /> Faculty Sign In
+                <Lock size={14} /> Faculty Sign In
               </Link>
             </div>
             
@@ -78,9 +74,6 @@ function CheckInWrapper() {
     );
   }
 
-  // ==========================================
-  // STATE 2: ACTIVE CHECK-IN (Bypasses Hub)
-  // ==========================================
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>

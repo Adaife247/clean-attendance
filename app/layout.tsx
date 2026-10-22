@@ -16,12 +16,11 @@ const geistMono = Geist_Mono({
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5, // FIX: Allow zooming for accessibility
+  userScalable: true, // FIX: Allow zooming
   themeColor: '#2563EB',
 };
 
-// Required Apple PWA configuration and Cache-Busted Icons
 export const metadata: Metadata = {
   title: "CampusCheck",
   description: "Geofenced campus verification system",
@@ -49,7 +48,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <PWARegister />
-        {children}
+        <main>
+          {children}
+        </main>
       </body>
     </html>
   );
