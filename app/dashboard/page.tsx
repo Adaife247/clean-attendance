@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
+import Link from 'next/link';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen
 } from 'lucide-react';
 
 interface Log { 
@@ -386,9 +387,17 @@ export default function LecturerDashboard() {
               <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Ready to start?</h2>
               
               {courses.length === 0 ? (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl mb-4 mt-6">
-                  <AlertTriangle className="mx-auto text-yellow-600 mb-2" size={24} />
-                  <p className="text-sm font-bold text-yellow-800">No courses registered.</p>
+                <div className="text-center py-8 space-y-4 mt-6">
+                  <div className="bg-blue-50 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
+                    <BookOpen size={36} className="text-[#2563EB]" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">No courses yet</h3>
+                    <p className="text-sm text-gray-500 font-medium mt-1">You need to create a course before starting a lecture.</p>
+                  </div>
+                  <Link href="/dashboard/courses" className="inline-block bg-[#2563EB] text-white font-bold px-6 py-3 rounded-xl shadow-md hover:bg-blue-700 transition-all">
+                    Go to Course Management
+                  </Link>
                 </div>
               ) : (
                 <div className="relative mb-4 mt-6">
