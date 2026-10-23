@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -35,7 +35,7 @@ const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
 
 export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'shield' | 'activity' | 'enroll' | 'rep'>('shield');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
   
   const [matricNumber, setMatricNumber] = useState('');
   const [studentDept, setStudentDept] = useState('');
@@ -330,7 +330,7 @@ export default function StudentPortal() {
   }, [studentDept, studentLevel, matricNumber]);
 
   useEffect(() => {
-    if (activeTab === 'enroll') fetchAvailableCourses();
+    if (activeTab === 'register') fetchAvailableCourses();
   }, [activeTab, fetchAvailableCourses]);
 
   const handleEnroll = async (courseId: string, courseCode: string) => {
@@ -343,7 +343,7 @@ export default function StudentPortal() {
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
       handleVerifyAndFetch();
-      setActiveTab('shield');
+      setActiveTab('dashboard');
     } catch {
       alert("Failed to enroll. Please try again.");
     } finally {
@@ -546,8 +546,9 @@ export default function StudentPortal() {
                 <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
               </div>
               
+              {/* THE FIX: Loading Spinner inside the button */}
               <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
-                {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
+                {isVerifying ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
               </button>
               
@@ -562,21 +563,22 @@ export default function StudentPortal() {
           {records && (
             <>
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
-                <button onClick={() => setActiveTab('shield')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'shield' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
-                <button onClick={() => setActiveTab('activity')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'activity' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Activity</button>
-                <button onClick={() => setActiveTab('enroll')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'enroll' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
+                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Status</button>
+                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
+                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
+                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
                 
                 {isClassRep && (
                   <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
                 )}
               </div>
 
-              {activeTab === 'shield' && (
+              {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
+                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
                         {isEditingNickname ? (
                           <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-base font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
                         ) : (
@@ -616,7 +618,7 @@ export default function StudentPortal() {
                         <BookOpen size={32} className="text-gray-400" />
                       </div>
                       <p className="text-base font-bold text-gray-600">You have no courses yet.</p>
-                      <button onClick={() => setActiveTab('enroll')} className="bg-[#2563EB] text-white font-bold text-sm px-6 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all">Enroll in a Course</button>
+                      <button onClick={() => setActiveTab('register')} className="bg-[#2563EB] text-white font-bold text-sm px-6 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all">Enroll in a Course</button>
                     </div>
                   ) : (
                     records.map((record) => {
@@ -665,61 +667,35 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {activeTab === 'activity' && (
-                <div className="animate-in fade-in space-y-6">
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <FileText size={18} className="text-gray-400" />
-                      <h3 className="font-bold text-gray-800 text-base">Attendance History</h3>
-                    </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {history?.map((h, i) => (
-                        <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
-                          <div>
-                            <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
-                            <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
-                          </div>
-                          {h.status === 'verified' ? (
-                            <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
-                          ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                            <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
-                          ) : h.status === 'blocked' ? (
-                            <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
-                          ) : (
-                            <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+              {activeTab === 'records' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FileText size={18} className="text-gray-400" />
+                    <h3 className="font-bold text-gray-800 text-base">Attendance History</h3>
                   </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Megaphone size={18} className="text-[#2563EB]" />
-                      <h3 className="font-bold text-gray-800 text-base">Campus Updates</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {feed.map((post) => (
-                        <div key={post.id} className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
-                            {post.course_code && (
-                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                            <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
-                          </div>
+                  <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
+                    {history?.map((h, i) => (
+                      <div key={i} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
+                          <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
                         </div>
-                      ))}
-                      {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
-                    </div>
+                        {h.status === 'verified' ? (
+                          <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
+                        ) : h.status === 'flagged' || h.status === 'pending_override' ? (
+                          <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                        ) : h.status === 'blocked' ? (
+                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
+                        ) : (
+                          <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {activeTab === 'enroll' && (
+              {activeTab === 'register' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <Plus size={18} className="text-[#2563EB]" />
@@ -760,6 +736,32 @@ export default function StudentPortal() {
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'feed' && (
+                <div className="animate-in fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Megaphone size={18} className="text-[#2563EB]" />
+                    <h3 className="font-bold text-gray-800 text-base">Campus Updates</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {feed.map((post) => (
+                      <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                        <div className="flex justify-between items-start mb-1">
+                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                          {post.course_code && (
+                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                    {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
+                  </div>
                 </div>
               )}
 
