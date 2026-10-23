@@ -1,9 +1,13 @@
 'use client';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
-import StudentCheckInComponent from '../components/StudentCheckIn'; 
 import Link from 'next/link';
+
+// THE FIX: Dynamically import the heavy component.
+// This ensures it is NOT downloaded on the Home Hub, drastically reducing TBT.
+const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
 
 function CheckInWrapper() {
   const searchParams = useSearchParams();
@@ -32,7 +36,6 @@ function CheckInWrapper() {
           <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
             <div className="space-y-4">
-              {/* THE FIX: Changed Search to LogIn, added Loading State */}
               <Link 
                 href="/portal" 
                 onClick={() => setIsNavigating(true)}
@@ -55,7 +58,6 @@ function CheckInWrapper() {
             </div>
 
             <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-              {/* THE FIX: Ghost Button for Faculty Sign In */}
               <Link 
                 href="/login" 
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
@@ -71,7 +73,6 @@ function CheckInWrapper() {
               <Zap size={20} className="text-white" />
             </div>
             <div>
-              {/* THE FIX: Clarified the Live Class box */}
               <p className="font-bold text-sm flex items-center gap-2">
                 <Activity size={14} className="text-green-400" /> Live Classes
               </p>
