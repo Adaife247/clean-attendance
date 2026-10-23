@@ -55,11 +55,17 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      {/* Decorative background gradients */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
       
       <div className="w-full max-w-md relative z-10">
         
+        {/* THE FIX: Back to Hub at the very top */}
+        <div className="mb-4">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
         <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
           <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
             <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
@@ -119,9 +125,7 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-8 text-center animate-in fade-in pb-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-5 py-3 rounded-xl border border-gray-200 shadow-sm min-h-11">
-            <ArrowLeft size={16} /> Back to Hub
-          </Link>
+          <p className="text-xs font-bold text-gray-400">© 2026 CampusCheck. All rights reserved.</p>
         </div>
 
       </div>
