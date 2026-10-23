@@ -1,13 +1,14 @@
 'use client';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, Loader2, Search, Zap, ArrowRight, Lock } from 'lucide-react';
+import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
 import StudentCheckInComponent from '../components/StudentCheckIn'; 
 import Link from 'next/link';
 
 function CheckInWrapper() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('sessionId');
+  const [isNavigating, setIsNavigating] = useState(false);
 
   if (!sessionId) {
     return (
@@ -31,25 +32,33 @@ function CheckInWrapper() {
           <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
             <div className="space-y-4">
-              {/* HIGH CONTRAST BRANDED BUTTON */}
+              {/* THE FIX: Changed Search to LogIn, added Loading State */}
               <Link 
                 href="/portal" 
-                className="group relative w-full flex items-center justify-center gap-2 py-5 px-6 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)]"
+                onClick={() => setIsNavigating(true)}
+                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
               >
-                <Search size={22} className="text-white" strokeWidth={3} />
-                <span className="font-black text-white text-xl tracking-wide">Enter Student Portal</span>
-                <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />
+                {isNavigating ? (
+                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
+                ) : (
+                  <LogIn size={22} className="text-white" strokeWidth={3} />
+                )}
+                <span className="font-black text-white text-xl tracking-wide">
+                  {isNavigating ? "Entering..." : "Enter Student Portal"}
+                </span>
+                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
               </Link>
               
               <p className="text-center text-sm font-bold text-gray-500">
-                Check your Clearance Shield & attendance records
+                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
               </p>
             </div>
 
             <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+              {/* THE FIX: Ghost Button for Faculty Sign In */}
               <Link 
                 href="/login" 
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-3 min-h-11 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors uppercase tracking-wider rounded-xl hover:bg-gray-100"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
               >
                 <Lock size={14} /> Faculty Sign In
               </Link>
@@ -62,9 +71,12 @@ function CheckInWrapper() {
               <Zap size={20} className="text-white" />
             </div>
             <div>
-              <p className="font-bold text-sm">Live Class in Session?</p>
+              {/* THE FIX: Clarified the Live Class box */}
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Activity size={14} className="text-green-400" /> Live Classes
+              </p>
               <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                Log in with your Matric Number. If your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear.
+                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
               </p>
             </div>
           </div>
