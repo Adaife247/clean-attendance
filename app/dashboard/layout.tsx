@@ -48,10 +48,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
+          {/* ACCESSIBILITY FIX: Added aria-label */}
+          <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
             <LogOut size={18} strokeWidth={2.5} />
           </button>
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
+          {/* ACCESSIBILITY FIX: Added aria-label */}
+          <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
             {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -99,7 +101,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
         {children}
       </main>

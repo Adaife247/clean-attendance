@@ -543,10 +543,18 @@ export default function StudentPortal() {
             <>
               <div className="relative mb-4">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
+                {/* ACCESSIBILITY FIX: Added aria-label */}
+                <input 
+                  aria-label="Matric Number"
+                  type="text" 
+                  placeholder="Matric Number (e.g. CSC/2021/001)" 
+                  value={matricNumber} 
+                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
+                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} 
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
+                />
               </div>
               
-              {/* THE FIX: Loading Spinner inside the button */}
               <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
                 {isVerifying ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
@@ -580,29 +588,29 @@ export default function StudentPortal() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
                         {isEditingNickname ? (
-                          <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-base font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
+                          <input aria-label="Nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-base font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
                         ) : (
                           <span className="text-base font-black text-blue-900">{savedNickname || 'Not set'}</span>
                         )}
                       </div>
                       {isEditingNickname ? (
-                        <button onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={18} /></button>
+                        <button aria-label="Save Profile" onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={18} /></button>
                       ) : (
-                        <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={18} /></button>
+                        <button aria-label="Edit Profile" onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={18} /></button>
                       )}
                     </div>
                     
                     {isEditingNickname && (
                       <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
                         <div className="relative">
-                          <select value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select aria-label="Department" value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Dept</option>
                             {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                           </select>
                           <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
                         </div>
                         <div className="relative">
-                          <select value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select aria-label="Level" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Level</option>
                             {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                           </select>
@@ -771,24 +779,14 @@ export default function StudentPortal() {
                     <h3 className="font-bold text-blue-900 text-base mb-2 flex items-center gap-2"><Upload size={18}/> Upload Class List</h3>
                     <p className="text-sm text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
                     
-                    <select 
-                      value={repCourseId} 
-                      onChange={(e) => setRepCourseId(e.target.value)}
-                      className="w-full bg-white border border-blue-200 p-3 rounded-lg text-sm font-bold mb-3"
-                    >
+                    <select aria-label="Course to Upload List" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white border border-blue-200 p-3 rounded-lg text-sm font-bold mb-3">
                       {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                     </select>
 
                     <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white border border-blue-300 rounded-xl font-bold text-sm text-blue-700 hover:bg-blue-100 transition-all shadow-sm">
                       {isUploadingList ? <Clock size={18} className="animate-spin" /> : <FileText size={18} />}
                       {isUploadingList ? "Uploading..." : "Select CSV / Excel File"}
-                      <input
-                        type="file"
-                        accept=".csv, .xlsx, .xls"
-                        className="hidden"
-                        onChange={handleRepUpload}
-                        disabled={isUploadingList}
-                      />
+                      <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleRepUpload} disabled={isUploadingList} />
                     </label>
                   </div>
 
@@ -797,18 +795,8 @@ export default function StudentPortal() {
                     <p className="text-sm text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
                     
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Student's Matric No."
-                        value={repBatteryMatric}
-                        onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())}
-                        className="w-full bg-white border border-amber-200 p-3 rounded-lg text-sm font-bold uppercase"
-                      />
-                      <button
-                        onClick={handleLogBattery}
-                        disabled={isLoggingBattery || !repBatteryMatric}
-                        className="bg-amber-500 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap"
-                      >
+                      <input aria-label="Student Matric Number for Dead Battery" type="text" placeholder="Student's Matric No." value={repBatteryMatric} onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())} className="w-full bg-white border border-amber-200 p-3 rounded-lg text-sm font-bold uppercase" />
+                      <button onClick={handleLogBattery} disabled={isLoggingBattery || !repBatteryMatric} className="bg-amber-500 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap">
                         {isLoggingBattery ? "Logging..." : "Log"}
                       </button>
                     </div>
@@ -826,18 +814,10 @@ export default function StudentPortal() {
                        </div>
                     ) : (
                       <div className="space-y-2">
-                        <select 
-                          value={repCourseId} 
-                          onChange={(e) => setRepCourseId(e.target.value)}
-                          className="w-full bg-white border border-red-200 p-3 rounded-lg text-sm font-bold"
-                        >
+                        <select aria-label="Course for Backup Session" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white border border-red-200 p-3 rounded-lg text-sm font-bold">
                           {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                         </select>
-                        <button
-                          onClick={handleStartBackupSession}
-                          disabled={isStartingRepSession}
-                          className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
+                        <button onClick={handleStartBackupSession} disabled={isStartingRepSession} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
                           {isStartingRepSession ? <Clock size={18} className="animate-spin" /> : <MapPin size={18} />}
                           {isStartingRepSession ? "Anchoring GPS..." : "Start Backup Session"}
                         </button>

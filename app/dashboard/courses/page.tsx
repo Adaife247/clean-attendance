@@ -566,7 +566,7 @@ export default function CourseManagement() {
         </p>
       </div>
 
-      {/* SECTION 1: COURSE REGISTRY (New 2-Column Layout) */}
+      {/* SECTION 1: COURSE REGISTRY */}
       <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
         <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
           <BookOpen className="text-[#2563EB]" size={24}/>
@@ -586,6 +586,7 @@ export default function CourseManagement() {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Course Code</label>
                 <input
+                  aria-label="Course Code"
                   type="text"
                   placeholder="e.g., CSC 301"
                   value={newCourseCode}
@@ -599,6 +600,7 @@ export default function CourseManagement() {
                   <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Department</label>
                   <div className="relative">
                     <select
+                      aria-label="Department"
                       value={newDept}
                       onChange={(e) => setNewDept(e.target.value)}
                       className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
@@ -613,6 +615,7 @@ export default function CourseManagement() {
                   <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Level</label>
                   <div className="relative">
                     <select
+                      aria-label="Level"
                       value={newLevel}
                       onChange={(e) => setNewLevel(e.target.value)}
                       className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
@@ -629,6 +632,7 @@ export default function CourseManagement() {
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Planned Lectures</label>
                   <input
+                    aria-label="Planned Lectures"
                     type="number"
                     placeholder="15"
                     value={plannedClasses}
@@ -639,6 +643,7 @@ export default function CourseManagement() {
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Max CA Marks</label>
                   <input
+                    aria-label="Max CA Marks"
                     type="number"
                     placeholder="10"
                     value={maxScore}
@@ -670,6 +675,7 @@ export default function CourseManagement() {
               <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 space-y-3">
                 <div className="relative">
                   <select
+                    aria-label="Course for Adding Student"
                     value={targetCourseId}
                     onChange={(e) => setTargetCourseId(e.target.value)}
                     className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
@@ -680,6 +686,7 @@ export default function CourseManagement() {
                 </div>
                 <div className="flex gap-2">
                   <input
+                    aria-label="Single Student Matric Number"
                     type="text"
                     placeholder="Matric Number"
                     value={singleMatric}
@@ -687,6 +694,7 @@ export default function CourseManagement() {
                     className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
                   />
                   <button
+                    aria-label="Add Single Student"
                     onClick={handleSingleStudentAdd}
                     disabled={isAddingSingle || !singleMatric.trim()}
                     className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
@@ -706,6 +714,7 @@ export default function CourseManagement() {
               <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 space-y-3">
                 <div className="relative">
                   <select
+                    aria-label="Course for Designating Rep"
                     value={repCourseCode}
                     onChange={(e) => setRepCourseCode(e.target.value)}
                     className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
@@ -716,6 +725,7 @@ export default function CourseManagement() {
                 </div>
                 <div className="flex gap-2">
                   <input
+                    aria-label="Rep Student Matric Number"
                     type="text"
                     placeholder="Student Matric No."
                     value={repMatricInput}
@@ -724,6 +734,7 @@ export default function CourseManagement() {
                     className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
                   />
                   <button
+                    aria-label="Make Class Rep"
                     onClick={handleQuickSetRep}
                     disabled={isSettingRep || !repMatricInput.trim()}
                     className="bg-amber-500 text-white px-5 py-3 rounded-xl font-bold hover:bg-amber-600 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0 gap-2"
@@ -752,7 +763,7 @@ export default function CourseManagement() {
                   </div>
                   
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-2 bg-gray-50 text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
+                    <button aria-label={`Delete ${course.course_code}`} onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-2 bg-gray-50 text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -802,7 +813,7 @@ export default function CourseManagement() {
                   {editingCourse.department || 'N/A'} • {editingCourse.level ? `${editingCourse.level}L` : 'N/A'}
                 </p>
               </div>
-              <button onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
+              <button aria-label="Close Modal" onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
                 <X size={20} />
               </button>
             </div>
@@ -814,17 +825,17 @@ export default function CourseManagement() {
                 
                 <div>
                   <label className="block text-xs font-bold text-gray-500 mb-1">Course Code</label>
-                  <input type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
+                  <input aria-label="Edit Course Code" type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">Planned Lectures</label>
-                    <input type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                    <input aria-label="Edit Planned Lectures" type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Marks</label>
-                    <input type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                    <input aria-label="Edit Max CA Marks" type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                 </div>
 
@@ -858,6 +869,7 @@ export default function CourseManagement() {
                         </div>
                         <div className="flex gap-1">
                           <button 
+                            aria-label={`Remove ${matric}`}
                             onClick={() => handleRemoveStudent(matric)} 
                             className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
                           >
@@ -883,6 +895,7 @@ export default function CourseManagement() {
 
         <div className="flex flex-col md:flex-row gap-3 mb-6">
           <select
+            aria-label="Select Course for Diagnostics"
             value={auditCourseCode}
             onChange={(e) => setAuditCourseCode(e.target.value)}
             className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
@@ -891,6 +904,7 @@ export default function CourseManagement() {
           </select>
           <div className="flex-1 flex gap-2">
             <input
+              aria-label="Search Student Matric Number"
               type="text"
               placeholder="Search Matric Number (e.g., CSC/2021/001)"
               value={auditMatric}
@@ -962,6 +976,7 @@ export default function CourseManagement() {
 
         <div className="flex max-w-lg gap-2">
           <input
+            aria-label="Student Matric Number to Wipe Device"
             type="text"
             placeholder="Matric Number"
             value={wipeMatric}

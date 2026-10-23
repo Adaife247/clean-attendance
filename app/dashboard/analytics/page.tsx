@@ -198,7 +198,9 @@ export default function AnalyticsPage() {
             </h1>
             <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
           </div>
+          {/* ACCESSIBILITY FIX: Added aria-label */}
           <select
+            aria-label="Select Course for Analytics"
             value={selectedCourseCode}
             onChange={handleCourseChange}
             disabled={courses.length === 0}

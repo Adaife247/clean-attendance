@@ -1,0 +1,20 @@
+{
+  "defaults": {
+    "standard": "WCAG2AA",
+    "timeout": 30000,
+    "wait": 1000,
+    "chromeLaunchConfig": {
+      "args": ["--no-sandbox"]
+    }
+  },
+  "urls": [
+    "https://campuscheck-live.vercel.app/",
+    "https://campuscheck-live.vercel.app/portal",
+    "https://campuscheck-live.vercel.app/login",
+    "https://campuscheck-live.vercel.app/dashboard",
+    "https://campuscheck-live.vercel.app/dashboard/courses",
+    "https://campuscheck-live.vercel.app/dashboard/analytics",
+    "https://campuscheck-live.vercel.app/dashboard/broadcast",
+    "https://campuscheck-live.vercel.app/hod"
+  ]
+}
