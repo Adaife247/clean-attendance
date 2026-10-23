@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -35,7 +35,7 @@ const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
 
 export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'shield' | 'activity' | 'enroll' | 'rep'>('shield');
   
   const [matricNumber, setMatricNumber] = useState('');
   const [studentDept, setStudentDept] = useState('');
@@ -330,7 +330,7 @@ export default function StudentPortal() {
   }, [studentDept, studentLevel, matricNumber]);
 
   useEffect(() => {
-    if (activeTab === 'register') fetchAvailableCourses();
+    if (activeTab === 'enroll') fetchAvailableCourses();
   }, [activeTab, fetchAvailableCourses]);
 
   const handleEnroll = async (courseId: string, courseCode: string) => {
@@ -343,7 +343,7 @@ export default function StudentPortal() {
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
       handleVerifyAndFetch();
-      setActiveTab('dashboard');
+      setActiveTab('shield');
     } catch {
       alert("Failed to enroll. Please try again.");
     } finally {
@@ -516,7 +516,7 @@ export default function StudentPortal() {
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">
             {savedNickname ? `Hey, ${savedNickname}!` : 'Survival Companion'}
           </h1>
-          <p className="text-gray-500 mt-1 font-medium text-sm">Track your NUC clearance status</p>
+          <p className="text-gray-500 mt-1 font-medium text-base">Track your NUC clearance status</p>
         </div>
 
         {activeLiveSession && (
@@ -546,7 +546,7 @@ export default function StudentPortal() {
                 <input type="text" placeholder="Matric Number (e.g. CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" />
               </div>
               
-              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-gray-900/20 hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-70">
+              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
                 {isVerifying ? <Clock className="animate-spin" size={20} /> : <Lock size={20} />}
                 {isVerifying ? "Verifying..." : "Unlock Portal"}
               </button>
@@ -562,59 +562,61 @@ export default function StudentPortal() {
           {records && (
             <>
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
-                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
-                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
-                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
-                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
+                <button onClick={() => setActiveTab('shield')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'shield' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Shield</button>
+                <button onClick={() => setActiveTab('activity')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'activity' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Activity</button>
+                <button onClick={() => setActiveTab('enroll')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'enroll' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
                 
                 {isClassRep && (
-                  <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
+                  <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
                 )}
               </div>
 
-              {activeTab === 'dashboard' && (
+              {activeTab === 'shield' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
+                        <span className="text-sm font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
                         {isEditingNickname ? (
-                          <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-sm font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
+                          <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-base font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
                         ) : (
-                          <span className="text-sm font-black text-blue-900">{savedNickname || 'Not set'}</span>
+                          <span className="text-base font-black text-blue-900">{savedNickname || 'Not set'}</span>
                         )}
                       </div>
                       {isEditingNickname ? (
-                        <button onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={16} /></button>
+                        <button onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={18} /></button>
                       ) : (
-                        <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={16} /></button>
+                        <button onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={18} /></button>
                       )}
                     </div>
                     
                     {isEditingNickname && (
                       <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
                         <div className="relative">
-                          <select value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Dept</option>
                             {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                           </select>
-                          <ChevronDown size={12} className="absolute right-2 top-2.5 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
                         </div>
                         <div className="relative">
-                          <select value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-xs font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Level</option>
                             {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                           </select>
-                          <ChevronDown size={12} className="absolute right-2 top-2.5 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
                         </div>
                       </div>
                     )}
                   </div>
 
                   {records.length === 0 ? (
-                    <div className="text-center py-6 bg-gray-50 rounded-2xl border border-gray-200">
-                      <p className="text-sm font-bold text-gray-500">You have no courses yet.</p>
-                      <button onClick={() => setActiveTab('register')} className="mt-3 text-[#2563EB] font-bold text-sm hover:underline">Go to Course Enrollment</button>
+                    <div className="text-center py-8 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
+                      <div className="bg-gray-100 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
+                        <BookOpen size={32} className="text-gray-400" />
+                      </div>
+                      <p className="text-base font-bold text-gray-600">You have no courses yet.</p>
+                      <button onClick={() => setActiveTab('enroll')} className="bg-[#2563EB] text-white font-bold text-sm px-6 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all">Enroll in a Course</button>
                     </div>
                   ) : (
                     records.map((record) => {
@@ -630,7 +632,7 @@ export default function StudentPortal() {
                           <div className="flex justify-between items-start mb-3 mt-1">
                             <div>
                               <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
-                              <p className="text-[11px] text-gray-600 font-semibold mt-0.5">
+                              <p className="text-xs text-gray-600 font-semibold mt-0.5">
                                 {record.attended_classes} / {record.total_planned} Classes
                                 {record.total_held < record.total_planned && !record.is_finalized && ` (${record.total_planned - record.total_held} remaining)`}
                               </p>
@@ -638,7 +640,7 @@ export default function StudentPortal() {
                             <div className="text-right">
                               <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
                               {record.is_finalized && (
-                                <p className="text-xs font-bold text-gray-700 mt-1 bg-white/50 px-2 py-0.5 rounded border border-gray-200">
+                                <p className="text-sm font-bold text-gray-700 mt-1 bg-white/50 px-2 py-0.5 rounded border border-gray-200">
                                   CA: {record.ca_score} / {record.max_score}
                                 </p>
                               )}
@@ -663,44 +665,70 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {activeTab === 'records' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <FileText size={18} className="text-gray-400" />
-                    <h3 className="font-bold text-gray-800">Attendance History</h3>
-                  </div>
-                  <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
-                    {history?.map((h, i) => (
-                      <div key={i} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
-                          <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
+              {activeTab === 'activity' && (
+                <div className="animate-in fade-in space-y-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <FileText size={18} className="text-gray-400" />
+                      <h3 className="font-bold text-gray-800 text-base">Attendance History</h3>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {history?.map((h, i) => (
+                        <div key={i} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center">
+                          <div>
+                            <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
+                            <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
+                          </div>
+                          {h.status === 'verified' ? (
+                            <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
+                          ) : h.status === 'flagged' || h.status === 'pending_override' ? (
+                            <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                          ) : h.status === 'blocked' ? (
+                            <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                          )}
                         </div>
-                        {h.status === 'verified' ? (
-                          <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
-                        ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                          <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
-                        ) : h.status === 'blocked' ? (
-                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
-                        ) : (
-                          <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Megaphone size={18} className="text-[#2563EB]" />
+                      <h3 className="font-bold text-gray-800 text-base">Campus Updates</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {feed.map((post) => (
+                        <div key={post.id} className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
+                          <div className="flex justify-between items-start mb-1">
+                            <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                            {post.course_code && (
+                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      ))}
+                      {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {activeTab === 'register' && (
+              {activeTab === 'enroll' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <Plus size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800">Enroll in Class</h3>
+                    <h3 className="font-bold text-gray-800 text-base">Enroll in Class</h3>
                   </div>
 
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
                     <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                    <p className="text-sm text-amber-800 font-medium leading-relaxed">
                       <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
                     </p>
                   </div>
@@ -723,7 +751,7 @@ export default function StudentPortal() {
                             <button 
                               onClick={() => handleEnroll(course.id, course.course_code)}
                               disabled={isEnrolling === course.id}
-                              className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+                              className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
                               {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
                             </button>
@@ -735,48 +763,22 @@ export default function StudentPortal() {
                 </div>
               )}
 
-              {activeTab === 'feed' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Megaphone size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800">Campus Updates</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {feed.map((post) => (
-                      <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
-                          {post.course_code && (
-                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-600 leading-relaxed mb-2">{post.content}</p>
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                          <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    ))}
-                    {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
-                  </div>
-                </div>
-              )}
-
               {activeTab === 'rep' && isClassRep && (
                 <div className="animate-in fade-in space-y-6">
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-blue-900 text-sm mb-2 flex items-center gap-2"><Upload size={16}/> Upload Class List</h3>
-                    <p className="text-xs text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
+                    <h3 className="font-bold text-blue-900 text-base mb-2 flex items-center gap-2"><Upload size={18}/> Upload Class List</h3>
+                    <p className="text-sm text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
                     
                     <select 
                       value={repCourseId} 
                       onChange={(e) => setRepCourseId(e.target.value)}
-                      className="w-full bg-white border border-blue-200 p-2 rounded-lg text-sm font-bold mb-3"
+                      className="w-full bg-white border border-blue-200 p-3 rounded-lg text-sm font-bold mb-3"
                     >
                       {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                     </select>
 
                     <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white border border-blue-300 rounded-xl font-bold text-sm text-blue-700 hover:bg-blue-100 transition-all shadow-sm">
-                      {isUploadingList ? <Clock size={16} className="animate-spin" /> : <FileText size={16} />}
+                      {isUploadingList ? <Clock size={18} className="animate-spin" /> : <FileText size={18} />}
                       {isUploadingList ? "Uploading..." : "Select CSV / Excel File"}
                       <input
                         type="file"
@@ -789,8 +791,8 @@ export default function StudentPortal() {
                   </div>
 
                   <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-amber-900 text-sm mb-2 flex items-center gap-2"><Zap size={16}/> Log Dead Battery</h3>
-                    <p className="text-xs text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
+                    <h3 className="font-bold text-amber-900 text-base mb-2 flex items-center gap-2"><Zap size={18}/> Log Dead Battery</h3>
+                    <p className="text-sm text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
                     
                     <div className="flex gap-2">
                       <input
@@ -798,12 +800,12 @@ export default function StudentPortal() {
                         placeholder="Student's Matric No."
                         value={repBatteryMatric}
                         onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())}
-                        className="w-full bg-white border border-amber-200 p-2 rounded-lg text-sm font-bold uppercase"
+                        className="w-full bg-white border border-amber-200 p-3 rounded-lg text-sm font-bold uppercase"
                       />
                       <button
                         onClick={handleLogBattery}
                         disabled={isLoggingBattery || !repBatteryMatric}
-                        className="bg-amber-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap"
+                        className="bg-amber-500 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap"
                       >
                         {isLoggingBattery ? "Logging..." : "Log"}
                       </button>
@@ -811,8 +813,8 @@ export default function StudentPortal() {
                   </div>
 
                   <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-red-900 text-sm mb-2 flex items-center gap-2"><PlayCircle size={16}/> Backup Anchor</h3>
-                    <p className="text-xs text-red-700 font-medium mb-3">
+                    <h3 className="font-bold text-red-900 text-base mb-2 flex items-center gap-2"><PlayCircle size={18}/> Backup Anchor</h3>
+                    <p className="text-sm text-red-700 font-medium mb-3">
                       If the lecturer&apos;s phone is dead or missing, start a session from your phone. Your GPS becomes the anchor for the class.
                     </p>
 
@@ -825,7 +827,7 @@ export default function StudentPortal() {
                         <select 
                           value={repCourseId} 
                           onChange={(e) => setRepCourseId(e.target.value)}
-                          className="w-full bg-white border border-red-200 p-2 rounded-lg text-sm font-bold"
+                          className="w-full bg-white border border-red-200 p-3 rounded-lg text-sm font-bold"
                         >
                           {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                         </select>
@@ -834,7 +836,7 @@ export default function StudentPortal() {
                           disabled={isStartingRepSession}
                           className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          {isStartingRepSession ? <Clock size={16} className="animate-spin" /> : <MapPin size={16} />}
+                          {isStartingRepSession ? <Clock size={18} className="animate-spin" /> : <MapPin size={18} />}
                           {isStartingRepSession ? "Anchoring GPS..." : "Start Backup Session"}
                         </button>
                         {repSessionError && <p className="text-xs text-red-600 font-bold mt-2">{repSessionError}</p>}
