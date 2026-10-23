@@ -1,0 +1,9 @@
+# ─── public/robots.txt ───
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /hod
+Disallow: /portal
+Disallow: /api/
+
+Sitemap: https://campuscheck-live.vercel.app/sitemap.xml
