@@ -54,21 +54,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      {/* Decorative background gradients */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
         
         <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+            <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
           </div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Faculty Access</h1>
-          <p className="text-gray-500 mt-2 font-medium">CampusCheck Administration</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Faculty Access</h1>
+          <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+        <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
           
-          <div className="flex bg-gray-50 p-1 rounded-xl mb-8">
+          <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
             <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
             <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
           </div>
@@ -78,45 +81,45 @@ export default function LoginPage() {
               <>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Department" value={department} onChange={(e) => setDepartment(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  <input type="text" required placeholder="Department (e.g., CSC)" value={department} onChange={(e) => setDepartment(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
-                  <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                  <input type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
                 </div>
               </>
             )}
 
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
-              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
             </div>
 
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
-              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 rounded-lg border border-red-100 flex items-start gap-2">
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in">
                 <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-red-700 font-bold text-xs">{error}</p>
+                <p className="text-red-700 font-bold text-sm">{error}</p>
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-3.5 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-6">
               {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
               {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
             </button>
           </form>
         </div>
 
-        <div className="mt-6 text-center animate-in fade-in">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors">
+        <div className="mt-8 text-center animate-in fade-in pb-8">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-5 py-3 rounded-xl border border-gray-200 shadow-sm min-h-11">
             <ArrowLeft size={16} /> Back to Hub
           </Link>
         </div>
