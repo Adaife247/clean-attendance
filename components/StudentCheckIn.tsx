@@ -51,12 +51,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
-  
-  // THE FIX: Strict lock to prevent the shaking/infinite loop
   const hasTransitionedRef = useRef(false);
 
   useEffect(() => {
-    // Check URL first, then localStorage
     const urlMatric = searchParams.get('matric');
     const savedMatric = localStorage.getItem('campuscheck_student_matric');
     
@@ -144,18 +141,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
-
-  // THE FIX for ESLint: Wrap the setState in a Promise
-  useEffect(() => {
-    if (status !== 'success') return;
-    if (hasTransitionedRef.current) return;
-    
-    const t = setTimeout(() => {
-      hasTransitionedRef.current = true;
-      Promise.resolve().then(() => setStatus('rating'));
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [status]);
 
   const syncOfflineQueue = useCallback(async () => {
     const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
@@ -263,8 +248,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
-        // Save matric so they don't get logged out later
         localStorage.setItem('campuscheck_student_matric', matricNumber);
+        
+        if (!hasTransitionedRef.current) {
+          hasTransitionedRef.current = true;
+          setTimeout(() => {
+            setStatus('rating');
+          }, 2500);
+        }
       } else if (result.status === 'flagged' || response.status === 403) {
         setErrorMessage(result.message || "Verification failed.");
         setStatus('failed');
@@ -420,7 +411,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="w-full">
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-hidden">
+      {/* THE FIX: Added overflow-y-auto and max-h to ensure the card scrolls on small phones */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
         {gpsStatus === 'denied' && (
           <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
@@ -448,8 +440,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><User size={18} /></div>
               <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase" />
             </div>
-            <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all disabled:opacity-50">
-              Continue <ArrowRight size={20} className="text-gray-300" />
+            <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
+              Continue <ArrowRight size={20} className="text-white/70" />
             </button>
           </div>
         )}
@@ -579,7 +571,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
       </div>
 
-      <div className="mt-8 text-center space-y-4">
+      <div className="mt-6 text-center space-y-4">
         <p className="text-xs font-semibold text-gray-400">Make sure you are physically inside the lecture hall before checking in.</p>
       </div>
     </div>
