@@ -28,20 +28,20 @@ function CheckInWrapper() {
             <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+          <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
             <div className="space-y-4">
-              {/* THE ULTIMATE HIGH-CONTRAST BUTTON */}
+              {/* HIGH CONTRAST BRANDED BUTTON */}
               <Link 
                 href="/portal" 
-                className="group relative w-full flex items-center justify-center gap-2 py-5 px-6 bg-gray-900 hover:bg-black rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:shadow-[0_15px_40px_rgba(0,0,0,0.5)] border border-gray-800"
+                className="group relative w-full flex items-center justify-center gap-2 py-5 px-6 bg-[#2563EB] hover:bg-blue-700 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)]"
               >
                 <Search size={22} className="text-white" strokeWidth={3} />
                 <span className="font-black text-white text-xl tracking-wide">Enter Student Portal</span>
                 <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />
               </Link>
               
-              <p className="text-center text-sm font-bold text-gray-600">
+              <p className="text-center text-sm font-bold text-gray-500">
                 Check your Clearance Shield & attendance records
               </p>
             </div>
@@ -62,7 +62,6 @@ function CheckInWrapper() {
               <Zap size={20} className="text-white" />
             </div>
             <div>
-              {/* FIX: Changed h4 to p for heading accessibility order */}
               <p className="font-bold text-sm">Live Class in Session?</p>
               <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
                 Log in with your Matric Number. If your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear.

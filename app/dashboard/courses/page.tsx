@@ -71,7 +71,7 @@ export default function CourseManagement() {
   const [repMatric, setRepMatric] = useState<string | null>(null);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
-  // QUICK DESIGNATE REP STATE (On Main Page)
+  // QUICK DESIGNATE REP STATE
   const [repCourseCode, setRepCourseCode] = useState('');
   const [repMatricInput, setRepMatricInput] = useState('');
   const [isSettingRep, setIsSettingRep] = useState(false);
@@ -176,11 +176,9 @@ export default function CourseManagement() {
     setIsSettingRep(true);
 
     try {
-      // 1. Find the course
       const course = courses.find(c => c.course_code === repCourseCode);
       if (!course) throw new Error("Course not found.");
 
-      // 2. Check if the student is enrolled in this course
       const { data: enrollment } = await supabase
         .from('enrollments')
         .select('id')
@@ -194,7 +192,6 @@ export default function CourseManagement() {
         return;
       }
 
-      // 3. Check if there is an existing rep for this course (via enrollments) to remove
       const { data: enrolledStudents } = await supabase
         .from('enrollments')
         .select('matric_number')
@@ -215,7 +212,6 @@ export default function CourseManagement() {
         }
       }
 
-      // 4. Make the new student a Rep
       const { error: repError } = await supabase.from('student_profiles').upsert(
         { matric_number: cleanMatric, is_class_rep: true },
         { onConflict: 'matric_number' }
@@ -545,11 +541,11 @@ export default function CourseManagement() {
           <h2 className="text-lg font-bold text-gray-900">Course Registry & Rosters</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
           {/* Create Course */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+          <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 space-y-3">
+            <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider flex items-center gap-1">
               1. Establish New Course
               <div className="group relative cursor-pointer">
                 <Info size={14} className="text-gray-400 hover:text-[#2563EB]" />
@@ -565,14 +561,14 @@ export default function CourseManagement() {
                 placeholder="Course Code (e.g., MTH 101)"
                 value={newCourseCode}
                 onChange={(e) => setNewCourseCode(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+                className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
               />
               <div className="grid grid-cols-2 gap-2">
                 <div className="relative">
                   <select
                     value={newDept}
                     onChange={(e) => setNewDept(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                   >
                     <option value="" disabled>Select Dept</option>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -583,7 +579,7 @@ export default function CourseManagement() {
                   <select
                     value={newLevel}
                     onChange={(e) => setNewLevel(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                   >
                     <option value="" disabled>Select Level</option>
                     {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
@@ -599,7 +595,7 @@ export default function CourseManagement() {
                     placeholder="15"
                     value={plannedClasses}
                     onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
                   />
                 </div>
                 <div>
@@ -609,7 +605,7 @@ export default function CourseManagement() {
                     placeholder="10"
                     value={maxScore}
                     onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
                   />
                 </div>
               </div>
@@ -617,7 +613,7 @@ export default function CourseManagement() {
               <button
                 onClick={createCourse}
                 disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel}
-                className="w-full bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-md mt-2"
+                className="w-full bg-[#2563EB] text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-md mt-2"
               >
                 {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />} Create Course
               </button>
@@ -625,14 +621,14 @@ export default function CourseManagement() {
           </div>
 
           {/* Add Single Student */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">2. Add Single Student (Late Reg)</h3>
+          <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 space-y-3">
+            <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider">2. Add Single Student</h3>
             <div className="flex flex-col gap-2">
               <div className="relative">
                 <select
                   value={targetCourseId}
                   onChange={(e) => setTargetCourseId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                  className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                 >
                   {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
                 </select>
@@ -644,12 +640,12 @@ export default function CourseManagement() {
                   placeholder="Matric Number"
                   value={singleMatric}
                   onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
-                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+                  className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
                 />
                 <button
                   onClick={handleSingleStudentAdd}
                   disabled={isAddingSingle || !singleMatric.trim()}
-                  className="bg-[#2563EB] text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
+                  className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
                 >
                   {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
                 </button>
@@ -658,8 +654,8 @@ export default function CourseManagement() {
           </div>
 
           {/* QUICK DESIGNATE CLASS REP */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
+          <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 space-y-3 shadow-inner">
+            <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">
               3. Designate Class Rep <Star size={14} className="fill-amber-500 text-amber-500" />
             </h3>
             <div className="flex flex-col gap-2">
@@ -667,7 +663,7 @@ export default function CourseManagement() {
                 <select
                   value={repCourseCode}
                   onChange={(e) => setRepCourseCode(e.target.value)}
-                  className="w-full bg-amber-50 border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
+                  className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
                 >
                   {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
                 </select>
@@ -680,7 +676,7 @@ export default function CourseManagement() {
                   value={repMatricInput}
                   onChange={(e) => setRepMatricInput(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && handleQuickSetRep()}
-                  className="w-full bg-amber-50 border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
+                  className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
                 />
                 <button
                   onClick={handleQuickSetRep}
@@ -698,7 +694,7 @@ export default function CourseManagement() {
         {courses.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-8 pt-6 border-t border-gray-100">
             {courses.map(course => (
-              <div key={course.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 relative group flex flex-col justify-between">
+              <div key={course.id} className="bg-white p-4 rounded-xl border border-gray-200 relative group flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
                 
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -709,7 +705,7 @@ export default function CourseManagement() {
                   </div>
                   
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-white text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
+                    <button onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-1.5 bg-gray-50 text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -723,7 +719,7 @@ export default function CourseManagement() {
                 <div className="flex gap-2">
                   <button 
                     onClick={() => handleOpenModal(course)} 
-                    className="flex-1 bg-white border border-gray-200 text-gray-700 py-2 rounded-lg font-bold text-xs hover:bg-gray-100 transition-all shadow-sm flex items-center justify-center gap-1"
+                    className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 py-2 rounded-lg font-bold text-xs hover:bg-gray-100 transition-all shadow-sm flex items-center justify-center gap-1"
                   >
                     <Edit3 size={12} /> Manage
                   </button>
