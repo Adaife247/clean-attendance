@@ -91,6 +91,19 @@ export default function CourseManagement() {
   const [wipeMatric, setWipeMatric] = useState('');
   const [isWiping, setIsWiping] = useState(false);
 
+  // CUSTOM CONFIRM MODAL STATE
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDangerous: boolean;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDangerous: false });
+
+  const askConfirmation = (title: string, message: string, onConfirm: () => void, isDangerous = true) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm, isDangerous });
+  };
+
   const fetchEnrollmentCounts = useCallback(async (courseIds: string[]) => {
     if (courseIds.length === 0) {
       setCourseCounts({});
@@ -168,7 +181,6 @@ export default function CourseManagement() {
     setIsCreating(false);
   };
 
-  // QUICK DESIGNATE REP LOGIC
   const handleQuickSetRep = async () => {
     const cleanMatric = repMatricInput.trim().toUpperCase();
     if (!cleanMatric || !repCourseCode) return;
@@ -285,37 +297,45 @@ export default function CourseManagement() {
     setActioningId(null);
   };
 
-  const handleDeleteCourse = async (courseId: string, courseCode: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${courseCode}?\n\nWARNING: This will permanently delete all enrollments, sessions, and attendance logs tied to this course. This cannot be undone.`)) return;
-    
-    setActioningId(courseId);
-    const { error } = await supabase
-      .from('courses')
-      .delete()
-      .eq('id', courseId);
-      
-    if (error) alert(`Failed to delete course: ${error.message}`);
-    else await fetchCourses();
-    
-    setActioningId(null);
+  const handleDeleteCourse = (courseId: string, courseCode: string) => {
+    askConfirmation(
+      `Delete ${courseCode}?`,
+      "WARNING: This will permanently delete all enrollments, sessions, and attendance logs tied to this course. This cannot be undone.",
+      async () => {
+        setActioningId(courseId);
+        const { error } = await supabase
+          .from('courses')
+          .delete()
+          .eq('id', courseId);
+          
+        if (error) alert(`Failed to delete course: ${error.message}`);
+        else await fetchCourses();
+        
+        setActioningId(null);
+      }
+    );
   };
 
-  const handleRemoveStudent = async (matric: string) => {
+  const handleRemoveStudent = (matric: string) => {
     if (!editingCourse) return;
-    if (!window.confirm(`Remove ${matric} from this course? Their past attendance logs will not be deleted.`)) return;
-    
-    const { error } = await supabase
-      .from('enrollments')
-      .delete()
-      .eq('course_id', editingCourse.id)
-      .eq('matric_number', matric);
+    askConfirmation(
+      `Remove ${matric}?`,
+      "Their past attendance logs will not be deleted, but they will no longer be able to check in to this course.",
+      async () => {
+        const { error } = await supabase
+          .from('enrollments')
+          .delete()
+          .eq('course_id', editingCourse.id)
+          .eq('matric_number', matric);
 
-    if (error) alert("Failed to remove student.");
-    else {
-      setModalStudents(prev => prev.filter(m => m !== matric));
-      if (repMatric === matric) setRepMatric(null);
-      fetchEnrollmentCounts(courses.map(c => c.id));
-    }
+        if (error) alert("Failed to remove student.");
+        else {
+          setModalStudents(prev => prev.filter(m => m !== matric));
+          if (repMatric === matric) setRepMatric(null);
+          fetchEnrollmentCounts(courses.map(c => c.id));
+        }
+      }
+    );
   };
 
   const handleFileUpload = async (
@@ -466,52 +486,64 @@ export default function CourseManagement() {
 
   const grantMedicalWaiver = async (record: AuditRecord) => {
     const cleanMatric = auditMatric.trim().toUpperCase();
-    if (!window.confirm(`Grant Medical/Excused Waiver for ${cleanMatric} on ${record.date}? This will count them as present.`)) return;
-
-    try {
-      if (record.logId) {
-        await supabase.from('attendance_logs').update({
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
-        }).eq('id', record.logId);
-      } else {
-        await supabase.from('attendance_logs').insert([{
-          session_id: record.sessionId,
-          matric_number: cleanMatric,
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
-          device_hash: 'admin-waiver',
-        }]);
-      }
-      alert("Waiver Granted successfully!");
-      handleStudentAudit();
-    } catch {
-      alert("Failed to grant waiver.");
-    }
+    
+    askConfirmation(
+      `Grant Waiver?`,
+      `Grant Medical/Excused Waiver for ${cleanMatric} on ${record.date}? This will count them as present.`,
+      async () => {
+        try {
+          if (record.logId) {
+            await supabase.from('attendance_logs').update({
+              status: 'verified',
+              device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
+            }).eq('id', record.logId);
+          } else {
+            await supabase.from('attendance_logs').insert([{
+              session_id: record.sessionId,
+              matric_number: cleanMatric,
+              status: 'verified',
+              device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
+              device_hash: 'admin-waiver',
+            }]);
+          }
+          alert("Waiver Granted successfully!");
+          handleStudentAudit();
+        } catch {
+          alert("Failed to grant waiver.");
+        }
+      },
+      false // Not dangerous
+    );
   };
 
   const handleDeviceReset = async () => {
     const safeMatric = String(wipeMatric || "").trim();
     if (!safeMatric) return;
-    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}? They will need to re-register on a new phone.`)) return;
-    setIsWiping(true);
-    try {
-      const response = await fetch('/api/reset-device', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber: safeMatric }),
-      });
-      if (response.ok) {
-        alert(`✅ Hardware binding completely wiped for ${safeMatric}.`);
-        setWipeMatric('');
-      } else {
-        alert("⚠️ Failed to wipe device.");
+    
+    askConfirmation(
+      `Wipe device lock for ${safeMatric}?`,
+      "They will need to re-register their biometrics on a new phone. Their attendance history will remain intact.",
+      async () => {
+        setIsWiping(true);
+        try {
+          const response = await fetch('/api/reset-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricNumber: safeMatric }),
+          });
+          if (response.ok) {
+            alert(`✅ Hardware binding completely wiped for ${safeMatric}.`);
+            setWipeMatric('');
+          } else {
+            alert("⚠️ Failed to wipe device.");
+          }
+        } catch {
+          alert("💥 Network Error.");
+        } finally {
+          setIsWiping(false);
+        }
       }
-    } catch {
-      alert("💥 Network Error.");
-    } finally {
-      setIsWiping(false);
-    }
+    );
   };
 
   if (isLoading) {
@@ -690,7 +722,7 @@ export default function CourseManagement() {
           </div>
         </div>
 
-        {/* Course Cards with CSV Upload & Edit/Delete */}
+        {/* Course Cards */}
         {courses.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-8 pt-6 border-t border-gray-100">
             {courses.map(course => (
@@ -786,7 +818,7 @@ export default function CourseManagement() {
                 </button>
               </div>
 
-              {/* Manage Students (Read-Only List) */}
+              {/* Manage Students */}
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2 flex justify-between items-center">
                   Enrolled Students
@@ -931,6 +963,35 @@ export default function CourseManagement() {
           </button>
         </div>
       </div>
+
+      {/* CUSTOM CONFIRMATION MODAL */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${confirmModal.isDangerous ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                {confirmModal.isDangerous ? <AlertTriangle size={32} /> : <Info size={32} />}
+              </div>
+              <h3 className="text-xl font-extrabold text-gray-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-sm text-gray-500 font-medium leading-relaxed">{confirmModal.message}</p>
+            </div>
+            <div className="p-4 bg-gray-50 flex gap-2">
+              <button onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-all text-sm">
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                  confirmModal.onConfirm();
+                }} 
+                className={`flex-1 font-bold py-3 rounded-xl text-sm shadow-md transition-all ${confirmModal.isDangerous ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-[#2563EB] text-white hover:bg-blue-700'}`}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
