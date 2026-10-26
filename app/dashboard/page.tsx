@@ -103,12 +103,7 @@ export default function LecturerDashboard() {
       const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
       if (savedSession) {
         // Only set it if it's still valid in the DB
-        const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', savedSession).single();
-        if (data && data.is_active) {
-           setActiveSessionId(savedSession);
-        } else {
-           localStorage.removeItem(ACTIVE_SESSION_KEY);
-        }
+        await checkSessionValidity(savedSession);
       }
     }, 0);
     return () => window.clearTimeout(timeoutId);
