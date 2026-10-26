@@ -1,221 +1,126 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/utils/supabase';
-import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
+import Link from 'next/link';
 
-interface Course { id: string; course_code: string; }
-interface LecturerProfile { full_name: string; }
-interface BroadcastPost {
-  id: string;
-  title: string;
-  content: string;
-  course_code: string;
-  created_at: string;
-}
+const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
 
-export default function BroadcastPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [profile, setProfile] = useState<LecturerProfile | null>(null);
-  
-  const [feedTitle, setFeedTitle] = useState('');
-  const [feedContent, setFeedContent] = useState('');
-  const [feedCourseCode, setFeedCourseCode] = useState('');
-  const [feedLink, setFeedLink] = useState('');
-  const [feedExpiry, setFeedExpiry] = useState('');
-  
-  const [isPosting, setIsPosting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [history, setHistory] = useState<BroadcastPost[]>([]);
+function CheckInWrapper() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+  const [isNavigating, setIsNavigating] = useState(false);
 
-  const fetchData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data: profileData } = await supabase
-      .from('lecturers')
-      .select('full_name')
-      .eq('id', session.user.id)
-      .single();
-    if (profileData) setProfile(profileData);
-
-    const { data: courseData } = await supabase
-      .from('courses')
-      .select('id, course_code')
-      .eq('lecturer_id', session.user.id)
-      .order('created_at', { ascending: false });
-    if (courseData) {
-      setCourses(courseData);
-      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
-    }
-
-    if (profileData) {
-      const courseCodes = courseData?.map(c => c.course_code) || [];
-      if (courseCodes.length > 0) {
-        const { data: posts } = await supabase
-          .from('campus_updates')
-          .select('id, title, content, course_code, created_at')
-          .in('course_code', courseCodes)
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (posts) setHistory(posts);
-      }
-    }
-    
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    const id = setTimeout(() => { fetchData(); }, 0);
-    return () => clearTimeout(id);
-  }, []);
-
-  const handlePostFeed = async () => {
-    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
-      alert("Please fill all fields and select a course.");
-      return;
-    }
-    setIsPosting(true);
-    try {
-      const response = await fetch('/api/post-feed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: feedTitle,
-          content: feedContent,
-          author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode,
-          link_url: feedLink.trim() || null,
-          expires_at: feedExpiry || null
-        })
-      });
-      if (response.ok) {
-        alert(`Announcement posted to ${feedCourseCode} students!`);
-        setFeedTitle('');
-        setFeedContent('');
-        setFeedLink('');
-        setFeedExpiry('');
-        fetchData();
-      } else {
-        alert("Failed to post announcement.");
-      }
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIsPosting(false);
-    }
-  };
-
-  if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
-
-  return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans space-y-6">
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-        <div className="bg-[#2563EB] p-6 text-white">
-          <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
-          <p className="text-blue-100 font-medium mt-1">Send announcements and updates to your students.</p>
-        </div>
+  if (!sessionId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
         
-        <div className="p-6 md:p-8 space-y-5">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Target Class</label>
-            <select 
-              value={feedCourseCode} 
-              onChange={e => setFeedCourseCode(e.target.value)} 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
-            >
-              <option value="">-- Select a Course --</option>
-              {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-            </select>
-          </div>
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Announcement Title</label>
-            <input 
-              type="text" 
-              value={feedTitle} 
-              onChange={e => setFeedTitle(e.target.value)} 
-              placeholder="e.g., Venue Change for Mid-Term Exam" 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Message</label>
-            <textarea 
-              value={feedContent} 
-              onChange={e => setFeedContent(e.target.value)} 
-              placeholder="Type your announcement here..." 
-              rows={3} 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" 
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Link (Optional)</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><LinkIcon size={16} className="text-gray-400" /></div>
-                <input 
-                  type="url" 
-                  value={feedLink} 
-                  onChange={e => setFeedLink(e.target.value)} 
-                  placeholder="https://..." 
-                  className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-                />
-              </div>
+        <div className="w-full max-w-md relative z-10">
+          
+          <div className="text-center mb-10 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="bg-[#2563EB] w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-6 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+              <ShieldCheck className="w-12 h-12 text-white z-10" strokeWidth={2.5} />
+              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Expiry Date (Optional)</label>
-              <input 
-                type="datetime-local" 
-                value={feedExpiry} 
-                onChange={e => setFeedExpiry(e.target.value)} 
-                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-600 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-              />
-            </div>
+            <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
+            <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
           </div>
 
-          <button 
-            onClick={handlePostFeed} 
-            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} 
-            className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2 mt-4"
-          >
-            {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
-        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {history.length === 0 ? (
-            <div className="p-10 text-center">
-              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Megaphone size={36} className="text-[#2563EB]" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-lg mb-1">No broadcasts yet</h3>
-              <p className="text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
-                Your announcements to students will appear here after you publish your first one.
+          <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+            
+            <div className="space-y-4">
+              <Link 
+                href="/portal" 
+                onClick={() => setIsNavigating(true)}
+                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+              >
+                {isNavigating ? (
+                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
+                ) : (
+                  <LogIn size={22} className="text-white" strokeWidth={3} />
+                )}
+                <span className="font-black text-white text-xl tracking-wide">
+                  {isNavigating ? "Entering..." : "Enter Student Portal"}
+                </span>
+                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
+              </Link>
+              
+              <p className="text-center text-sm font-bold text-gray-500">
+                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
               </p>
             </div>
-          ) : (
-            history.map((post) => (
-              <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">
-                <div className="flex justify-between items-start mb-1">
-                  <h4 className="font-extrabold text-gray-900">{post.title}</h4>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{post.course_code}</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1 mb-2">{post.content}</p>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  Sent {new Date(post.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))
-          )}
+
+            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+              <Link 
+                href="/login" 
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
+              >
+                <Lock size={14} /> Faculty Sign In
+              </Link>
+            </div>
+            
+          </div>
+
+          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
+            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
+              <Zap size={20} className="text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Activity size={14} className="text-green-400" /> Live Classes
+              </p>
+              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
+                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-center items-center gap-4 text-xs font-bold text-gray-400 pb-8">
+            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
+          </div>
+
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-1 font-medium text-sm">Live Student Check-In</p>
+        </div>
+
+        <StudentCheckInComponent sessionId={sessionId} />
+
+      </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={32}/>
+        <p className="text-gray-500 font-bold animate-pulse">Loading CampusCheck...</p>
+      </div>
+    }>
+      <CheckInWrapper />
+    </Suspense>
   );
 }
