@@ -9,6 +9,8 @@ import {
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
+import { safeStorage } from '@/utils/safe-storage';
+import { STORAGE_KEYS } from '@/utils/constants';
 
 interface CourseRecord {
   course_code: string;
@@ -70,7 +72,7 @@ export default function StudentPortal() {
   const confirm = useConfirmModal();
 
   useEffect(() => {
-    const saved = localStorage.getItem('campuscheck_student_matric');
+    const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
     if (saved) {
       const id = setTimeout(() => { setMatricNumber(saved); }, 0);
       return () => clearTimeout(id);
@@ -78,13 +80,11 @@ export default function StudentPortal() {
   }, []);
 
   const fetchStudentData = async (cleanMatric: string) => {
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('student_profiles')
       .select('nickname, department, level, is_class_rep')
       .eq('matric_number', cleanMatric)
       .maybeSingle();
-
-    console.log("DB Profile Fetch:", profile, profileError);
 
     if (profile?.nickname) {
       setNickname(profile.nickname);
@@ -251,7 +251,7 @@ export default function StudentPortal() {
     setIsClassRep(false);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
-    localStorage.setItem('campuscheck_student_matric', cleanMatric);
+    safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
 
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {

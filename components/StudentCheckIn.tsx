@@ -7,9 +7,20 @@ import {
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
+import { safeStorage } from '@/utils/safe-storage';
+import { STORAGE_KEYS } from '@/utils/constants';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
+
+interface OfflineQueueItem {
+  session: string;
+  matric: string;
+  telemetry: Telemetry[];
+  fingerprint: string | null;
+  verificationMethod: string;
+  timestamp: number;
+}
 
 type Status =
   | 'idle' | 'checking' | 'needs_setup' | 'ready'
@@ -55,7 +66,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   useEffect(() => {
     const urlMatric = searchParams.get('matric');
-    const savedMatric = localStorage.getItem('campuscheck_student_matric');
+    const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
     
     if (urlMatric) {
       Promise.resolve().then(() => setMatricNumber(urlMatric.toUpperCase()));
@@ -143,10 +154,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
   }, [sessionId]);
 
   const syncOfflineQueue = useCallback(async () => {
-    const queue = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+    const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
     if (queue.length === 0) return;
     setStatus('syncing');
-    const remainingQueue: typeof queue = [];
+    const remainingQueue: OfflineQueueItem[] = [];
     let successCount = 0;
 
     for (const item of queue) {
@@ -159,7 +170,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         else remainingQueue.push(item);
       } catch { remainingQueue.push(item); }
     }
-    localStorage.setItem('attendance_offline_queue', JSON.stringify(remainingQueue));
+    safeStorage.setJSON(STORAGE_KEYS.offlineQueue, remainingQueue);
     if (successCount > 0 && remainingQueue.length === 0) {
       triggerSuccessVibration();
       setStatus('success');
@@ -193,7 +204,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const registerDevice = async () => {
     try {
-      const existingAnchor = localStorage.getItem('campuscheck_device_anchor');
+      const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
       if (existingAnchor && existingAnchor !== matricNumber) {
         setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
         setStatus('failed');
@@ -215,7 +226,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const verifyResult = await verifyRes.json();
       
       if (verifyResult.verified) {
-        localStorage.setItem('campuscheck_device_anchor', matricNumber);
+        safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
         setStatus('ready');
       } else {
         throw new Error("Hardware binding failed.");
@@ -248,7 +259,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
-        localStorage.setItem('campuscheck_student_matric', matricNumber);
+        safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
         
         if (!hasTransitionedRef.current) {
           hasTransitionedRef.current = true;
@@ -266,9 +277,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     } catch (error) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
-        const existing = JSON.parse(localStorage.getItem('attendance_offline_queue') || '[]');
+        const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
         existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
-        localStorage.setItem('attendance_offline_queue', JSON.stringify(existing));
+        safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
         setStatus('offline-queued');
       } else {
         setErrorMessage("Server connection lost.");

@@ -6,7 +6,7 @@ export default function PWARegister() {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
-        .then(() => console.log('✅ PWA Engine Activated'))
+        .then(() => {}) // Silent success
         .catch((err) => console.error('⚠️ PWA Engine Failed:', err));
     }
   }, []);
