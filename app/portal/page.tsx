@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
@@ -38,6 +38,8 @@ const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
 const POLL_INTERVAL_MS = 30000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
+const PORTAL_UNLOCK_GRACE_MS = 30 * 60 * 1000; // 30 minutes
+const getCurrentTimestamp = () => Date.now();
 
 const TABS = [
   { id: 'dashboard' as const, label: 'Status',   Icon: Zap },
@@ -60,12 +62,15 @@ export default function StudentPortal() {
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const [error, setError] = useState('');
   const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string } | null>(null);
+  const [liveSessionCheckedIn, setLiveSessionCheckedIn] = useState<boolean>(false);
+  const [liveSessionCheckedInAt, setLiveSessionCheckedInAt] = useState<string | null>(null);
 
   const [nickname, setNickname] = useState('');
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [feed, setFeed] = useState<CampusUpdate[]>([]);
   const [lastSeenTimestamp, setLastSeenTimestamp] = useState<number>(0);
+  const [now, setNow] = useState<number>(0);
   
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
@@ -81,6 +86,7 @@ export default function StudentPortal() {
   const [repSessionError, setRepSessionError] = useState('');
 
   const confirm = useConfirmModal();
+  const autoLoadAttempted = useRef(false);
 
   const fetchStudentData = useCallback(async (cleanMatric: string) => {
     const { data: profile } = await supabase
@@ -138,18 +144,12 @@ export default function StudentPortal() {
 
     if (sessionError) throw sessionError;
 
-    const now = new Date().getTime();
+    const nowTime = new Date().getTime();
     const liveSession = sessionRows?.find(s => {
       if (!s.is_active) return false;
-      const isExpired = s.expires_at && new Date(s.expires_at).getTime() < now;
+      const isExpired = s.expires_at && new Date(s.expires_at).getTime() < nowTime;
       return !isExpired;
     });
-    
-    if (liveSession) {
-      setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
-    } else {
-      setActiveLiveSession(null);
-    }
 
     const sessionIds = (sessionRows || []).map(s => s.session_id);
     let studentLogs: LogRow[] = [];
@@ -167,6 +167,26 @@ export default function StudentPortal() {
 
     const logStatusMap = new Map<string, string>();
     studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
+
+    if (liveSession) {
+      setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
+      
+      const existingLog = studentLogs.find(l => 
+        l.session_id === liveSession.session_id && l.status === 'verified'
+      );
+      
+      if (existingLog) {
+        setLiveSessionCheckedIn(true);
+        setLiveSessionCheckedInAt(liveSession.created_at);
+      } else {
+        setLiveSessionCheckedIn(false);
+        setLiveSessionCheckedInAt(null);
+      }
+    } else {
+      setActiveLiveSession(null);
+      setLiveSessionCheckedIn(false);
+      setLiveSessionCheckedInAt(null);
+    }
 
     const historyData: HistoryRow[] = (sessionRows || []).map(session => {
       const status = logStatusMap.get(session.session_id) || 'absent';
@@ -248,16 +268,30 @@ export default function StudentPortal() {
 
   useEffect(() => {
     const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
-    if (saved) {
+    const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
+    const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
+
+    if (saved && Date.now() - lastUnlockedTime < PORTAL_UNLOCK_GRACE_MS && !autoLoadAttempted.current) {
+      autoLoadAttempted.current = true;
+      const id = setTimeout(() => {
+        setMatricNumber(saved);
+        setIsVerifying(true);
+        fetchStudentData(saved.toUpperCase().trim())
+          .catch(() => {})
+          .finally(() => setIsVerifying(false));
+      }, 0);
+      return () => clearTimeout(id);
+    } else if (saved) {
       const id = setTimeout(() => { setMatricNumber(saved); }, 0);
       return () => clearTimeout(id);
     }
-  }, []);
+  }, [fetchStudentData]);
 
   useEffect(() => {
     const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
     const id = setTimeout(() => {
       setLastSeenTimestamp(saved ? parseInt(saved, 10) || 0 : 0);
+      setNow(Date.now());
     }, 0);
     return () => clearTimeout(id);
   }, []);
@@ -292,18 +326,22 @@ export default function StudentPortal() {
 
   useEffect(() => {
     if (activeTab === 'feed' && feed.length > 0) {
-      const now = Date.now();
-      safeStorage.setString(FEED_LAST_SEEN_KEY, String(now));
+      const currentTime = Date.now();
+      safeStorage.setString(FEED_LAST_SEEN_KEY, String(currentTime));
       const id = setTimeout(() => {
-        setLastSeenTimestamp(now);
+        setLastSeenTimestamp(currentTime);
+        setNow(currentTime);
       }, 0);
       return () => clearTimeout(id);
     }
   }, [activeTab, feed]);
 
   const unreadCount = useMemo(() => {
-    return feed.filter(post => new Date(post.created_at).getTime() > lastSeenTimestamp).length;
-  }, [feed, lastSeenTimestamp]);
+    return feed.filter(post => {
+      const postTime = new Date(post.created_at).getTime();
+      return postTime > lastSeenTimestamp && postTime <= now;
+    }).length;
+  }, [feed, lastSeenTimestamp, now]);
 
   const handleVerifyAndFetch = async () => {
     if (matricNumber.length < 5) return;
@@ -340,6 +378,7 @@ export default function StudentPortal() {
       const verifyResult = await verifyRes.json();
       if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
 
+      safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
       await fetchStudentData(cleanMatric);
 
     } catch (err) {
@@ -607,21 +646,38 @@ export default function StudentPortal() {
         </div>
 
         {activeLiveSession && (
-          <a 
-            href={`/?sessionId=${activeLiveSession.sessionId}&matric=${matricNumber}`}
-            className="mb-6 bg-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500 hover:bg-green-700 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-full animate-pulse"><Zap size={20} /></div>
+          liveSessionCheckedIn ? (
+            <div className="mb-6 bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-500">
+              <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                <CheckCircle size={20} />
+              </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Class Now</p>
-                <p className="font-extrabold text-lg">{activeLiveSession.course}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Class is live: {activeLiveSession.course}</p>
+                <p className="font-bold text-emerald-900">You&apos;re checked in.</p>
+                {liveSessionCheckedInAt && (
+                  <p className="text-[10px] text-emerald-600 font-semibold">
+                    Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
               </div>
             </div>
-            <span className="text-sm font-black bg-white text-green-700 px-3 py-1.5 rounded-lg shadow-sm">
-              Tap to Check In
-            </span>
-          </a>
+          ) : (
+            <a 
+              href={`/?sessionId=${activeLiveSession.sessionId}&matric=${matricNumber}`}
+              className="mb-6 bg-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500 hover:bg-green-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-2 rounded-full animate-pulse"><Zap size={20} /></div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-green-100">Live Class Now</p>
+                  <p className="font-extrabold text-lg">{activeLiveSession.course}</p>
+                </div>
+              </div>
+              <span className="text-sm font-black bg-white text-green-700 px-3 py-1.5 rounded-lg shadow-sm">
+                Tap to Check In
+              </span>
+            </a>
+          )
         )}
 
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
@@ -941,6 +997,7 @@ export default function StudentPortal() {
                     'Lock the portal?',
                     'You will need your biometrics again to unlock.',
                     () => {
+                      safeStorage.remove('campuscheck_portal_unlocked_at');
                       setRecords(null);
                       setHistory(null);
                       setNickname('');
