@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -36,7 +36,16 @@ interface AvailableCourse { id: string; course_code: string; department: string;
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
-const POLL_INTERVAL_MS = 30000; // Poll every 30 seconds for session status
+const POLL_INTERVAL_MS = 30000;
+const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
+
+const TABS = [
+  { id: 'dashboard' as const, label: 'Status',   Icon: Zap },
+  { id: 'records'   as const, label: 'Records',  Icon: FileText },
+  { id: 'register'  as const, label: 'Enroll',   Icon: Plus },
+  { id: 'feed'      as const, label: 'Feed',     Icon: Megaphone },
+  { id: 'rep'       as const, label: 'Rep Desk', Icon: BookOpen },
+];
 
 export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
@@ -56,6 +65,7 @@ export default function StudentPortal() {
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [feed, setFeed] = useState<CampusUpdate[]>([]);
+  const [lastSeenTimestamp, setLastSeenTimestamp] = useState<number>(0);
   
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
@@ -72,45 +82,7 @@ export default function StudentPortal() {
 
   const confirm = useConfirmModal();
 
-  useEffect(() => {
-    const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
-    if (saved) {
-      const id = setTimeout(() => { setMatricNumber(saved); }, 0);
-      return () => clearTimeout(id);
-    }
-  }, []);
-
-  // ✅ NEW: Poll the DB every 30 seconds to auto-clear the "Live Now" banner
-  useEffect(() => {
-    if (!activeLiveSession) return;
-
-    const checkSessionStatus = async () => {
-      const { data, error } = await supabase
-        .from('lecture_sessions')
-        .select('is_active, expires_at')
-        .eq('session_id', activeLiveSession.sessionId)
-        .single();
-
-      if (error || !data) {
-        setActiveLiveSession(null);
-        return;
-      }
-
-      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
-      if (!data.is_active || isExpired) {
-        setActiveLiveSession(null);
-        // Silent refresh — pull latest state so records update
-        if (matricNumber) {
-          fetchStudentData(matricNumber.toUpperCase().trim());
-        }
-      }
-    };
-
-    const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [activeLiveSession, matricNumber]);
-
-  async function fetchStudentData(cleanMatric: string) {
+  const fetchStudentData = useCallback(async (cleanMatric: string) => {
     const { data: profile } = await supabase
       .from('student_profiles')
       .select('nickname, department, level, is_class_rep')
@@ -132,7 +104,7 @@ export default function StudentPortal() {
       .from('campus_updates')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
     if (feedData) setFeed(feedData);
 
     const { data: enrollmentRows, error: enrollError } = await supabase
@@ -272,7 +244,66 @@ export default function StudentPortal() {
 
     finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
     setRecords(finalRecords);
-  }
+  }, []);
+
+  useEffect(() => {
+    const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
+    if (saved) {
+      const id = setTimeout(() => { setMatricNumber(saved); }, 0);
+      return () => clearTimeout(id);
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
+    const id = setTimeout(() => {
+      setLastSeenTimestamp(saved ? parseInt(saved, 10) || 0 : 0);
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!activeLiveSession) return;
+
+    const checkSessionStatus = async () => {
+      const { data, error } = await supabase
+        .from('lecture_sessions')
+        .select('is_active, expires_at')
+        .eq('session_id', activeLiveSession.sessionId)
+        .single();
+
+      if (error || !data) {
+        setActiveLiveSession(null);
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+      if (!data.is_active || isExpired) {
+        setActiveLiveSession(null);
+        if (matricNumber) {
+          fetchStudentData(matricNumber.toUpperCase().trim());
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeLiveSession, matricNumber, fetchStudentData]);
+
+  useEffect(() => {
+    if (activeTab === 'feed' && feed.length > 0) {
+      const now = Date.now();
+      safeStorage.setString(FEED_LAST_SEEN_KEY, String(now));
+      const id = setTimeout(() => {
+        setLastSeenTimestamp(now);
+      }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [activeTab, feed]);
+
+  const unreadCount = useMemo(() => {
+    return feed.filter(post => new Date(post.created_at).getTime() > lastSeenTimestamp).length;
+  }, [feed, lastSeenTimestamp]);
 
   const handleVerifyAndFetch = async () => {
     if (matricNumber.length < 5) return;
@@ -334,7 +365,6 @@ export default function StudentPortal() {
 
     if (error) {
       alert("Failed to save profile: " + error.message);
-      console.error("Profile save error:", error);
       return;
     }
 
@@ -366,7 +396,10 @@ export default function StudentPortal() {
   }, [studentDept, studentLevel, matricNumber]);
 
   useEffect(() => {
-    if (activeTab === 'register') fetchAvailableCourses();
+    if (activeTab === 'register') {
+      const id = setTimeout(() => fetchAvailableCourses(), 0);
+      return () => clearTimeout(id);
+    }
   }, [activeTab, fetchAvailableCourses]);
 
   const handleEnroll = async (courseId: string, courseCode: string) => {
@@ -538,13 +571,31 @@ export default function StudentPortal() {
     return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
   };
 
+  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="w-full max-w-md relative z-10 pt-4">
         
-        <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4">
+        <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 relative">
+          
+          {records && (
+            <button
+              onClick={() => setActiveTab('feed')}
+              aria-label={unreadCount > 0 ? `${unreadCount} unread updates` : 'Open updates feed'}
+              className="absolute top-0 right-0 w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB]' : 'text-gray-400'} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white animate-in zoom-in duration-200">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
@@ -605,15 +656,30 @@ export default function StudentPortal() {
 
           {records && (
             <>
-              <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto">
-                <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Status</button>
-                <button onClick={() => setActiveTab('records')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'records' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Records</button>
-                <button onClick={() => setActiveTab('register')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'register' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Enroll</button>
-                <button onClick={() => setActiveTab('feed')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'feed' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Feed</button>
-                
-                {isClassRep && (
-                  <button onClick={() => setActiveTab('rep')} className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap border border-blue-200 ${activeTab === 'rep' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}>Rep Desk</button>
-                )}
+              <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto gap-1">
+                {visibleTabs.map(({ id, label, Icon }) => {
+                  const isActive = activeTab === id;
+                  const hasBadge = id === 'feed' && unreadCount > 0;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id)}
+                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 px-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap relative ${
+                        isActive
+                          ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <div className="relative">
+                        <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+                        {hasBadge && (
+                          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white animate-in zoom-in duration-200" />
+                        )}
+                      </div>
+                      <span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {activeTab === 'dashboard' && (
@@ -789,20 +855,26 @@ export default function StudentPortal() {
                     <h3 className="font-bold text-gray-800 text-base">Campus Updates</h3>
                   </div>
                   <div className="space-y-4">
-                    {feed.map((post) => (
-                      <div key={post.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
-                          {post.course_code && (
-                            <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
-                          )}
+                    {feed.map((post) => {
+                      const isUnread = new Date(post.created_at).getTime() > lastSeenTimestamp;
+                      return (
+                        <div key={post.id} className={`bg-gray-50 border p-4 rounded-xl ${isUnread ? 'border-blue-200 ring-1 ring-blue-100' : 'border-gray-200'}`}>
+                          <div className="flex justify-between items-start mb-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
+                              {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />}
+                            </div>
+                            {post.course_code && (
+                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                          <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
                   </div>
                 </div>
