@@ -27,6 +27,7 @@ interface PastSession { session_id: string; created_at: string; course_code: str
 const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
 const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 const ACTIVE_SESSION_KEY = 'active_attendance_session';
+const SESSION_EXPIRY_POLL_MS = 30000; // 30 seconds
 
 export default function LecturerDashboard() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function LecturerDashboard() {
   const [isStarting, setIsStarting] = useState(false);
   const [isUpdatingGeofence, setIsUpdatingGeofence] = useState(false);
   const [setupError, setSetupError] = useState('');
+  const [expiredMessage, setExpiredMessage] = useState<string>('');
   const [data, setData] = useState<DashboardData | null>(null);
 
   const [sessionDuration, setSessionDuration] = useState<number>(60);
@@ -61,12 +63,13 @@ export default function LecturerDashboard() {
 
   const confirm = useConfirmModal();
 
-  const clearStaleSession = () => {
+  const clearStaleSession = useCallback((reason?: string) => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setActiveSessionId(null);
     setData(null);
     setSetupError('');
-  };
+    if (reason) setExpiredMessage(reason);
+  }, []);
 
   useEffect(() => {
     const securePageAndFetchProfile = async () => {
@@ -88,20 +91,68 @@ export default function LecturerDashboard() {
     return () => clearTimeout(id);
   }, [router]);
 
+  // ✅ FIX: On mount, check BOTH is_active AND expires_at
   useEffect(() => {
     const timeoutId = window.setTimeout(async () => {
       const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
-      if (savedSession) {
-        const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', savedSession).single();
-        if (data && data.is_active) {
-           setActiveSessionId(savedSession);
-        } else {
-           localStorage.removeItem(ACTIVE_SESSION_KEY);
+      if (!savedSession) return;
+
+      const { data } = await supabase
+        .from('lecture_sessions')
+        .select('is_active, expires_at')
+        .eq('session_id', savedSession)
+        .single();
+
+      if (!data) {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+
+      if (data.is_active && !isExpired) {
+        setActiveSessionId(savedSession);
+      } else {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        if (isExpired) {
+          setExpiredMessage('The previous session expired while you were away.');
         }
       }
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  // ✅ FIX: Poll every 30s to auto-expire the session
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    const checkExpiry = async () => {
+      const { data } = await supabase
+        .from('lecture_sessions')
+        .select('is_active, expires_at')
+        .eq('session_id', activeSessionId)
+        .single();
+
+      if (!data) {
+        clearStaleSession('This session no longer exists.');
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+      const isManuallyEnded = !data.is_active;
+
+      if (isExpired || isManuallyEnded) {
+        clearStaleSession(
+          isManuallyEnded 
+            ? 'This session was ended.' 
+            : 'Time is up. The session expired.'
+        );
+      }
+    };
+
+    const intervalId = setInterval(checkExpiry, SESSION_EXPIRY_POLL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeSessionId, clearStaleSession]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
@@ -135,6 +186,7 @@ export default function LecturerDashboard() {
     if (!selectedCourseId) { setSetupError("Please register a course first."); return; }
     setIsStarting(true);
     setSetupError("");
+    setExpiredMessage('');
     if (!navigator.geolocation) { setSetupError("Location services not supported by your browser."); setIsStarting(false); return; }
 
     const executeSessionCreation = async (lat: number, lng: number) => {
@@ -256,7 +308,7 @@ export default function LecturerDashboard() {
         } catch (e) {
           console.error('Failed to notify server', e);
         }
-        clearStaleSession();
+        clearStaleSession('Session ended. Ready for the next one.');
       },
       { isDangerous: true, confirmLabel: 'End Lecture' }
     );
@@ -417,6 +469,22 @@ export default function LecturerDashboard() {
     return (
       <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans">
         <div className="max-w-4xl mx-auto">
+          {expiredMessage && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="font-bold text-amber-900 text-sm">{expiredMessage}</p>
+                <p className="text-xs text-amber-700 font-medium mt-1">Start a new session below, or review past records.</p>
+              </div>
+              <button
+                onClick={() => setExpiredMessage('')}
+                className="text-amber-600 hover:text-amber-800 text-xs font-bold"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
