@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
 import { 
   Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
@@ -9,18 +9,23 @@ import Link from 'next/link';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isHod, setIsHod] = useState(false);
 
   useEffect(() => {
-    const checkHodStatus = async () => {
+    const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+      
       const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
       if (data?.department) setIsHod(true);
     };
-    checkHodStatus();
-  }, []);
+    checkAuth();
+  }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -48,11 +53,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* ACCESSIBILITY FIX: Added aria-label */}
           <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
             <LogOut size={18} strokeWidth={2.5} />
           </button>
-          {/* ACCESSIBILITY FIX: Added aria-label */}
           <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
             {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -75,6 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
+            // Explicitly check if the path matches exactly
             const isActive = pathname === item.href;
             return (
               <Link 

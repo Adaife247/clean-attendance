@@ -4,30 +4,24 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Check for the Supabase auth cookie (this is how Supabase handles sessions)
+  // Check if the user is logged in
   const hasAuthCookie = request.cookies.getAll().some((cookie) => 
     cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token')
   );
 
-  // 1. If they are on the homepage AND logged in -> send to dashboard
+  // If they hit the root URL and are logged in, send them to /dashboard (which loads Live Radar)
   if (path === '/' && hasAuthCookie) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // 2. If they try to access the dashboard BUT are not logged in -> send to login
+  // Protect dashboard routes
   if (path.startsWith('/dashboard') && !hasAuthCookie) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
-  // 3. If they try to access the HOD portal BUT are not logged in -> send to login
-  if (path.startsWith('/hod') && !hasAuthCookie) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
 }
 
-// Only run middleware on these routes
 export const config = {
   matcher: ['/', '/dashboard/:path*', '/hod/:path*'],
 };
