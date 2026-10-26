@@ -9,7 +9,6 @@ import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
 export async function POST(request: Request) {
   try {
-    // 1. Rate Limiting (15 attempts per minute per IP)
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['webauthn-auth-generate'];
     const rateCheck = checkRateLimit(`auth-gen:${ip}`, limit);
@@ -29,6 +28,24 @@ export async function POST(request: Request) {
 
     const cleanMatric = matricNumber.toUpperCase().trim();
 
+    // 1. Check if the student exists in the DB at all (enrolled in any course)
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('matric_number', cleanMatric)
+      .limit(1);
+
+    const isEnrolled = enrollments && enrollments.length > 0;
+
+    if (!isEnrolled) {
+      // Distinct error so client can show "Ask your lecturer to add you"
+      return NextResponse.json(
+        { error: "NOT_ENROLLED", message: "This matric number isn't on any class roster yet. Ask your lecturer to upload your name." },
+        { status: 404, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    // 2. Check if they have a registered device
     const { data: device, error } = await supabase
       .from('user_devices')
       .select('credential_id, transports')
@@ -36,17 +53,19 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !device) {
-      return NextResponse.json({ error: "Device not registered" }, { status: 404, headers: rateLimitHeaders(rateCheck) });
+      // Enrolled but no biometrics yet — needs setup
+      return NextResponse.json(
+        { error: "NEEDS_SETUP", message: "This matric is enrolled but no phone is linked. Let's set it up." },
+        { status: 404, headers: rateLimitHeaders(rateCheck) }
+      );
     }
 
+    // 3. Student is enrolled AND has biometrics — normal login
     let safeTransports = device.transports;
     if (typeof safeTransports === 'string') {
       try { safeTransports = JSON.parse(safeTransports); } catch { safeTransports = []; }
     }
-
-    if (!Array.isArray(safeTransports)) {
-      safeTransports = ['internal'];
-    }
+    if (!Array.isArray(safeTransports)) safeTransports = ['internal'];
 
     const options = await generateAuthenticationOptions({
       rpID,

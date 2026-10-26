@@ -4,10 +4,10 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint
 } from 'lucide-react';
 import Link from 'next/link';
-import { startAuthentication } from '@simplewebauthn/browser';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
@@ -38,7 +38,7 @@ const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
 const POLL_INTERVAL_MS = 30000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
-const PORTAL_UNLOCK_GRACE_MS = 30 * 60 * 1000; // 30 minutes
+const PORTAL_UNLOCK_GRACE_MS = 30 * 60 * 1000;
 const getCurrentTimestamp = () => Date.now();
 
 const TABS = [
@@ -49,6 +49,9 @@ const TABS = [
   { id: 'rep'       as const, label: 'Rep Desk', Icon: BookOpen },
 ];
 
+// New: track the state machine for the unlock flow
+type UnlockState = 'idle' | 'checking' | 'not_enrolled' | 'needs_setup' | 'authenticating' | 'unlocked';
+
 export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
   
@@ -57,10 +60,11 @@ export default function StudentPortal() {
   const [studentLevel, setStudentLevel] = useState('');
   const [isClassRep, setIsClassRep] = useState(false);
   
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [unlockState, setUnlockState] = useState<UnlockState>('idle');
+  const [unlockError, setUnlockError] = useState('');
+  
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
-  const [error, setError] = useState('');
   const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string } | null>(null);
   const [liveSessionCheckedIn, setLiveSessionCheckedIn] = useState<boolean>(false);
   const [liveSessionCheckedInAt, setLiveSessionCheckedInAt] = useState<string | null>(null);
@@ -101,10 +105,7 @@ export default function StudentPortal() {
     }
     if (profile?.department) setStudentDept(profile.department);
     if (profile?.level) setStudentLevel(profile.level);
-    
-    if (profile?.is_class_rep === true) {
-      setIsClassRep(true);
-    }
+    if (profile?.is_class_rep === true) setIsClassRep(true);
 
     const { data: feedData } = await supabase
       .from('campus_updates')
@@ -170,11 +171,7 @@ export default function StudentPortal() {
 
     if (liveSession) {
       setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
-      
-      const existingLog = studentLogs.find(l => 
-        l.session_id === liveSession.session_id && l.status === 'verified'
-      );
-      
+      const existingLog = studentLogs.find(l => l.session_id === liveSession.session_id && l.status === 'verified');
       if (existingLog) {
         setLiveSessionCheckedIn(true);
         setLiveSessionCheckedInAt(liveSession.created_at);
@@ -222,7 +219,6 @@ export default function StudentPortal() {
     courseStats.forEach((stats, course) => {
       const total_held = stats.total_held;
       const attended = stats.attended;
-      
       const denominator = stats.is_finalized 
         ? Math.min(stats.total_planned, total_held > 0 ? total_held : 1)
         : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
@@ -275,10 +271,10 @@ export default function StudentPortal() {
       autoLoadAttempted.current = true;
       const id = setTimeout(() => {
         setMatricNumber(saved);
-        setIsVerifying(true);
+        setUnlockState('authenticating');
         fetchStudentData(saved.toUpperCase().trim())
-          .catch(() => {})
-          .finally(() => setIsVerifying(false));
+          .then(() => setUnlockState('unlocked'))
+          .catch(() => setUnlockState('idle'));
       }, 0);
       return () => clearTimeout(id);
     } else if (saved) {
@@ -343,10 +339,62 @@ export default function StudentPortal() {
     }).length;
   }, [feed, lastSeenTimestamp, now]);
 
+  // NEW: registration flow — separate from login
+  const handleRegister = async () => {
+    if (matricNumber.length < 5) return;
+    setUnlockState('authenticating');
+    setUnlockError('');
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    try {
+      const genRes = await fetch('/api/webauthn/register/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric })
+      });
+
+      const options = await genRes.json();
+      if (!genRes.ok) {
+        if (options.error === 'NOT_ENROLLED') {
+          setUnlockState('not_enrolled');
+          setUnlockError(options.message || "Your matric isn't on any roster yet.");
+          return;
+        }
+        if (options.error === 'ALREADY_REGISTERED') {
+          // They're already registered — just trigger login instead
+          await handleVerifyAndFetch();
+          return;
+        }
+        throw new Error(options.error || "Registration failed.");
+      }
+
+      const attResp = await startRegistration(options);
+      const verifyRes = await fetch('/api/webauthn/register/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber: cleanMatric, authResponse: attResp })
+      });
+      const verifyResult = await verifyRes.json();
+
+      if (!verifyResult.verified) throw new Error("Biometric registration failed.");
+
+      // Success! Store matric + grace timestamp + fetch data
+      safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
+      safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
+
+      await fetchStudentData(cleanMatric);
+      setUnlockState('unlocked');
+
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Registration failed.";
+      setUnlockError(msg);
+      setUnlockState('needs_setup');
+    }
+  };
+
   const handleVerifyAndFetch = async () => {
     if (matricNumber.length < 5) return;
-    setIsVerifying(true);
-    setError('');
+    setUnlockState('authenticating');
+    setUnlockError('');
     setRecords(null);
     setHistory(null);
     setActiveLiveSession(null);
@@ -361,32 +409,38 @@ export default function StudentPortal() {
         body: JSON.stringify({ matricNumber: cleanMatric })
       });
 
-      if (genRes.status === 404) {
-        throw new Error("You haven't linked your biometrics yet. You must check into a lecture first.");
+      const options = await genRes.json();
+
+      if (!genRes.ok) {
+        if (options.error === 'NOT_ENROLLED') {
+          setUnlockState('not_enrolled');
+          setUnlockError(options.message || "Your matric isn't on any class roster yet.");
+          return;
+        }
+        if (options.error === 'NEEDS_SETUP') {
+          setUnlockState('needs_setup');
+          return;
+        }
+        throw new Error(options.message || options.error || "Login failed.");
       }
 
-      const options = await genRes.json();
-      if (options.error) throw new Error(options.error);
-
       const asseResp = await startAuthentication(options);
-
       const verifyRes = await fetch('/api/webauthn/auth/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber: cleanMatric, authResponse: asseResp })
       });
 
       const verifyResult = await verifyRes.json();
-      if (!verifyResult.verified) throw new Error("Biometric verification failed. Access denied.");
+      if (!verifyResult.verified) throw new Error("Biometric verification failed.");
 
       safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
       await fetchStudentData(cleanMatric);
+      setUnlockState('unlocked');
 
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Verification failed.";
-      setRecords(null);
-      setError(msg);
-    } finally {
-      setIsVerifying(false);
+      const msg = err instanceof Error ? err.message : "Login failed.";
+      setUnlockError(msg);
+      setUnlockState('idle');
     }
   };
 
@@ -612,6 +666,111 @@ export default function StudentPortal() {
 
   const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
 
+  // Render the unlock form depending on state
+  const renderUnlockForm = () => {
+    if (unlockState === 'not_enrolled') {
+      return (
+        <div className="space-y-4 text-center animate-in fade-in">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto border border-red-100">
+            <AlertTriangle className="text-red-600" size={32} />
+          </div>
+          <h3 className="text-xl font-extrabold text-gray-900">Not on any roster yet</h3>
+          <p className="text-sm text-gray-600 font-medium leading-relaxed">
+            Your matric <span className="font-black text-gray-900">{matricNumber}</span> isn&apos;t enrolled in any course yet.
+          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
+            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2">What to do:</p>
+            <p className="text-sm text-amber-800 font-medium leading-relaxed">
+              Ask your lecturer to upload the class roster with your matric number. Once they do, come back here and try again.
+            </p>
+          </div>
+          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all">
+            Try a Different Matric
+          </button>
+        </div>
+      );
+    }
+
+    if (unlockState === 'needs_setup') {
+      return (
+        <div className="space-y-4 text-center animate-in fade-in">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto border border-blue-100">
+            <Smartphone className="text-[#2563EB]" size={32} />
+          </div>
+          <h3 className="text-xl font-extrabold text-gray-900">Let&apos;s set up this phone</h3>
+          <p className="text-sm text-gray-600 font-medium leading-relaxed">
+            We&apos;ll link this phone to <span className="font-black text-gray-900">{matricNumber}</span> so only you can check in from it.
+          </p>
+
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-left space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">📱</span>
+              <p className="text-xs text-blue-900 font-medium">One-time setup — you won&apos;t do this again on this phone.</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-lg">🔒</span>
+              <p className="text-xs text-blue-900 font-medium">Your fingerprint never leaves your device. We only store a security key.</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-lg">🔄</span>
+              <p className="text-xs text-blue-900 font-medium">Changing phones later? Ask your lecturer to reset your device.</p>
+            </div>
+          </div>
+
+          {unlockError && (
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+              <p className="text-red-700 font-bold text-sm">{unlockError}</p>
+            </div>
+          )}
+
+          <button onClick={handleRegister} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
+            <Fingerprint size={20} /> Link This Phone
+          </button>
+          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full text-gray-500 font-bold py-2 hover:text-gray-800 transition-all text-sm">
+            Cancel
+          </button>
+        </div>
+      );
+    }
+
+    if (unlockState === 'authenticating') {
+      return (
+        <div className="py-8 flex flex-col items-center">
+          <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
+          <p className="text-gray-700 font-bold text-center">Verifying...</p>
+        </div>
+      );
+    }
+
+    // Default: idle — show matric input
+    return (
+      <>
+        <div className="relative mb-4">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+          <input 
+            aria-label="Matric Number"
+            type="text" 
+            placeholder="Matric Number (e.g. CSC/2021/001)" 
+            value={matricNumber} 
+            onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
+            onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} 
+            className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
+          />
+        </div>
+        
+        <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
+          <Lock size={20} /> Unlock Portal
+        </button>
+
+        {unlockError && (
+          <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
+            <p className="text-red-700 font-bold text-sm">{unlockError}</p>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -682,33 +841,7 @@ export default function StudentPortal() {
 
         <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
           
-          {!records && (
-            <>
-              <div className="relative mb-4">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                <input 
-                  aria-label="Matric Number"
-                  type="text" 
-                  placeholder="Matric Number (e.g. CSC/2021/001)" 
-                  value={matricNumber} 
-                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
-                  onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} 
-                  className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
-                />
-              </div>
-              
-              <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5 || isVerifying} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
-                {isVerifying ? <Loader2 className="animate-spin" size={20} /> : <Lock size={20} />}
-                {isVerifying ? "Verifying..." : "Unlock Portal"}
-              </button>
-              
-              {error && (
-                <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
-                  <p className="text-red-700 font-bold text-sm">{error}</p>
-                </div>
-              )}
-            </>
-          )}
+          {!records && renderUnlockForm()}
 
           {records && (
             <>
@@ -1002,6 +1135,7 @@ export default function StudentPortal() {
                       setHistory(null);
                       setNickname('');
                       setSavedNickname('');
+                      setUnlockState('idle');
                     },
                     { isDangerous: false, confirmLabel: 'Lock' }
                   )
