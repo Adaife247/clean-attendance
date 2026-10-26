@@ -25,9 +25,17 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
-        window.location.href = '/dashboard';
+        
+        if (data.session) {
+          // Wait a tiny bit for the cookies to be written to the browser before redirecting
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 500);
+        } else {
+          throw new Error("Login successful, but no session was created.");
+        }
       } else {
         if (secretKey !== FACULTY_SECRET_KEY) {
           throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
@@ -48,7 +56,6 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Authentication failed';
       setError(msg);
-    } finally {
       setLoading(false);
     }
   };
