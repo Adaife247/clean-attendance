@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -7,6 +8,7 @@ import Link from 'next/link';
 const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   
   const [email, setEmail] = useState('');
@@ -26,13 +28,17 @@ export default function LoginPage() {
     try {
       if (isLogin) {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        
         if (signInError) throw signInError;
         
         if (data.session) {
-          // Wait a tiny bit for the cookies to be written to the browser before redirecting
+          // 1. Tell Next.js to refresh the router cache so it picks up the new cookies
+          router.refresh();
+          
+          // 2. Wait 800ms for the browser to securely store the cookies
           setTimeout(() => {
             window.location.href = '/dashboard';
-          }, 500);
+          }, 800);
         } else {
           throw new Error("Login successful, but no session was created.");
         }
@@ -52,6 +58,7 @@ export default function LoginPage() {
         }
         alert('Registration successful! You can now log in.');
         setIsLogin(true);
+        setLoading(false);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Authentication failed';
