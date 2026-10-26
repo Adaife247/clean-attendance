@@ -36,6 +36,7 @@ interface AvailableCourse { id: string; course_code: string; department: string;
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
+const POLL_INTERVAL_MS = 30000; // Poll every 30 seconds for session status
 
 export default function StudentPortal() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
@@ -79,7 +80,37 @@ export default function StudentPortal() {
     }
   }, []);
 
-  const fetchStudentData = async (cleanMatric: string) => {
+  // ✅ NEW: Poll the DB every 30 seconds to auto-clear the "Live Now" banner
+  useEffect(() => {
+    if (!activeLiveSession) return;
+
+    const checkSessionStatus = async () => {
+      const { data, error } = await supabase
+        .from('lecture_sessions')
+        .select('is_active, expires_at')
+        .eq('session_id', activeLiveSession.sessionId)
+        .single();
+
+      if (error || !data) {
+        setActiveLiveSession(null);
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+      if (!data.is_active || isExpired) {
+        setActiveLiveSession(null);
+        // Silent refresh — pull latest state so records update
+        if (matricNumber) {
+          fetchStudentData(matricNumber.toUpperCase().trim());
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeLiveSession, matricNumber]);
+
+  async function fetchStudentData(cleanMatric: string) {
     const { data: profile } = await supabase
       .from('student_profiles')
       .select('nickname, department, level, is_class_rep')
@@ -144,6 +175,8 @@ export default function StudentPortal() {
     
     if (liveSession) {
       setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
+    } else {
+      setActiveLiveSession(null);
     }
 
     const sessionIds = (sessionRows || []).map(s => s.session_id);
@@ -239,7 +272,7 @@ export default function StudentPortal() {
 
     finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
     setRecords(finalRecords);
-  };
+  }
 
   const handleVerifyAndFetch = async () => {
     if (matricNumber.length < 5) return;
