@@ -371,15 +371,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const requestAppeal = async () => {
     setIsAppealing(true);
+    setErrorMessage('');
     try {
       const response = await fetch('/api/request-override', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, matricNumber })
       });
-      if (response.ok) { alert("Appeal sent! Please look at the lecturer for visual confirmation."); setStatus('idle'); }
-      else alert("Failed to send appeal. Check network.");
-    } catch { alert("Network error."); }
-    finally { setIsAppealing(false); }
+      if (response.ok) {
+        setErrorMessage("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setStatus('idle');
+      } else {
+        setErrorMessage("Failed to send appeal. Check network.");
+      }
+    } catch {
+      setErrorMessage("Network error.");
+    } finally {
+      setIsAppealing(false);
+    }
   };
 
   const toggleTag = (tag: string) => {
@@ -411,7 +419,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="w-full">
-      {/* THE FIX: Added overflow-y-auto and max-h to ensure the card scrolls on small phones */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
         {gpsStatus === 'denied' && (
@@ -436,6 +443,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'idle' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {errorMessage && (
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2 animate-in fade-in">
+                <CheckCircle size={16} className="text-[#2563EB] shrink-0 mt-0.5" />
+                <p className="text-blue-800 font-bold text-sm">{errorMessage}</p>
+              </div>
+            )}
             <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
               <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><User size={18} /></div>
               <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase" />
@@ -549,14 +562,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
             </p>
             <div className="mt-6 space-y-3">
               {!errorMessage.includes("out of bounds") && (
-                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
+                <>
+                  <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+                    {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
+                  </button>
+                  <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
+                </>
               )}
               <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
-              {!errorMessage.includes("out of bounds") && (
-                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100 mt-4">
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
-                </button>
-              )}
             </div>
           </div>
         )}

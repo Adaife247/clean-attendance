@@ -48,7 +48,6 @@ export default function BroadcastPage() {
       if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
     }
 
-    // Fetch their previous broadcasts
     if (profileData) {
       const courseCodes = courseData?.map(c => c.course_code) || [];
       if (courseCodes.length > 0) {
@@ -66,7 +65,6 @@ export default function BroadcastPage() {
   };
 
   useEffect(() => {
-    // Defer to next tick to fix React 19 setState warning
     const id = setTimeout(() => { fetchData(); }, 0);
     return () => clearTimeout(id);
   }, []);
@@ -96,7 +94,7 @@ export default function BroadcastPage() {
         setFeedContent('');
         setFeedLink('');
         setFeedExpiry('');
-        fetchData(); // Refresh the history list
+        fetchData();
       } else {
         alert("Failed to post announcement.");
       }
@@ -187,15 +185,21 @@ export default function BroadcastPage() {
         </div>
       </div>
 
-      {/* RECENT BROADCASTS HISTORY */}
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
         <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
         </div>
         <div className="divide-y divide-gray-50">
           {history.length === 0 ? (
-            /* Fixed the apostrophe escape here */
-            <div className="p-8 text-center text-gray-500 font-medium">You haven&apos;t posted any announcements yet.</div>
+            <div className="p-10 text-center">
+              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Megaphone size={36} className="text-[#2563EB]" />
+              </div>
+              <h3 className="font-extrabold text-gray-900 text-lg mb-1">No broadcasts yet</h3>
+              <p className="text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
+                Your announcements to students will appear here after you publish your first one.
+              </p>
+            </div>
           ) : (
             history.map((post) => (
               <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">

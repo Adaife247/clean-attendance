@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication } from '@simplewebauthn/browser';
+import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 
 interface CourseRecord {
   course_code: string;
@@ -65,6 +66,8 @@ export default function StudentPortal() {
   // Backup Anchor State
   const [isStartingRepSession, setIsStartingRepSession] = useState(false);
   const [repSessionError, setRepSessionError] = useState('');
+
+  const confirm = useConfirmModal();
 
   useEffect(() => {
     const saved = localStorage.getItem('campuscheck_student_matric');
@@ -543,7 +546,6 @@ export default function StudentPortal() {
             <>
               <div className="relative mb-4">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                {/* ACCESSIBILITY FIX: Added aria-label */}
                 <input 
                   aria-label="Matric Number"
                   type="text" 
@@ -829,7 +831,19 @@ export default function StudentPortal() {
               )}
 
               <button
-                onClick={() => { setRecords(null); setHistory(null); }}
+                onClick={() =>
+                  confirm.ask(
+                    'Lock the portal?',
+                    'You will need your biometrics again to unlock.',
+                    () => {
+                      setRecords(null);
+                      setHistory(null);
+                      setNickname('');
+                      setSavedNickname('');
+                    },
+                    { isDangerous: false, confirmLabel: 'Lock' }
+                  )
+                }
                 className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
               >
                 <Lock size={16} /> Lock Portal
@@ -838,12 +852,18 @@ export default function StudentPortal() {
           )}
         </div>
 
-        <div className="mt-8 text-center animate-in fade-in pb-8">
+        <div className="mt-8 text-center animate-in fade-in pb-8 space-y-3">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <ArrowLeft size={16} /> Back to Hub
           </Link>
+          <div className="flex justify-center items-center gap-3 text-xs font-bold text-gray-400">
+            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
+          </div>
         </div>
       </div>
+      <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>
   );
 }

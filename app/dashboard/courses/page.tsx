@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
+import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck, Edit3, Info, ChevronDown, X, Star
+  CheckCircle, AlertTriangle, ShieldCheck, Edit3, ChevronDown, X, Star
 } from 'lucide-react';
 
 interface Course {
@@ -91,17 +92,10 @@ export default function CourseManagement() {
   const [wipeMatric, setWipeMatric] = useState('');
   const [isWiping, setIsWiping] = useState(false);
 
-  // CUSTOM CONFIRM MODAL STATE
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    isDangerous: boolean;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDangerous: false });
-
+  // SHARED CONFIRM MODAL
+  const confirm = useConfirmModal();
   const askConfirmation = (title: string, message: string, onConfirm: () => void, isDangerous = true) => {
-    setConfirmModal({ isOpen: true, title, message, onConfirm, isDangerous });
+    confirm.ask(title, message, onConfirm, { isDangerous });
   };
 
   const fetchEnrollmentCounts = useCallback(async (courseIds: string[]) => {
@@ -175,7 +169,7 @@ export default function CourseManagement() {
         setNewLevel('');
         await fetchCourses();
       } else {
-        alert("Failed to create course.");
+        confirm.ask('Error', 'Failed to create course.', () => {}, { isDangerous: false });
       }
     }
     setIsCreating(false);
@@ -199,7 +193,7 @@ export default function CourseManagement() {
         .maybeSingle();
 
       if (!enrollment) {
-        alert(`❌ ${cleanMatric} is not enrolled in ${repCourseCode}.\n\nUpload the roster first, then make them a Rep.`);
+        confirm.ask('Not Enrolled', `❌ ${cleanMatric} is not enrolled in ${repCourseCode}.\n\nUpload the roster first, then make them a Rep.`, () => {}, { isDangerous: false });
         setIsSettingRep(false);
         return;
       }
@@ -231,11 +225,11 @@ export default function CourseManagement() {
 
       if (repError) throw repError;
 
-      alert(`✅ Success! ${cleanMatric} is now the Class Rep for ${repCourseCode}.`);
+      confirm.ask('Success', `✅ Success! ${cleanMatric} is now the Class Rep for ${repCourseCode}.`, () => {}, { isDangerous: false });
       setRepMatricInput('');
       
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to set rep.");
+      confirm.ask('Error', err instanceof Error ? err.message : "Failed to set rep.", () => {}, { isDangerous: false });
     } finally {
       setIsSettingRep(false);
     }
@@ -289,8 +283,9 @@ export default function CourseManagement() {
       })
       .eq('id', editingCourse.id);
       
-    if (error) alert(`Failed to update course: ${error.message}`);
-    else {
+    if (error) {
+      confirm.ask('Error', `Failed to update course: ${error.message}`, () => {}, { isDangerous: false });
+    } else {
       await fetchCourses();
       setEditingCourse(null);
     }
@@ -308,8 +303,11 @@ export default function CourseManagement() {
           .delete()
           .eq('id', courseId);
           
-        if (error) alert(`Failed to delete course: ${error.message}`);
-        else await fetchCourses();
+        if (error) {
+          confirm.ask('Error', `Failed to delete course: ${error.message}`, () => {}, { isDangerous: false });
+        } else {
+          await fetchCourses();
+        }
         
         setActioningId(null);
       }
@@ -328,8 +326,9 @@ export default function CourseManagement() {
           .eq('course_id', editingCourse.id)
           .eq('matric_number', matric);
 
-        if (error) alert("Failed to remove student.");
-        else {
+        if (error) {
+          confirm.ask('Error', 'Failed to remove student.', () => {}, { isDangerous: false });
+        } else {
           setModalStudents(prev => prev.filter(m => m !== matric));
           if (repMatric === matric) setRepMatric(null);
           fetchEnrollmentCounts(courses.map(c => c.id));
@@ -377,7 +376,7 @@ export default function CourseManagement() {
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
         if (uniqueMatrics.length === 0) {
-          alert("No valid matric numbers found.");
+          confirm.ask('Invalid File', 'No valid matric numbers found.', () => {}, { isDangerous: false });
           setUploadingId(null);
           e.target.value = '';
           return;
@@ -393,16 +392,16 @@ export default function CourseManagement() {
           .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
 
         if (!error) {
-          alert(`Success! ${uniqueMatrics.length} students synced.`);
+          confirm.ask('Success', `Success! ${uniqueMatrics.length} students synced.`, () => {}, { isDangerous: false });
           await fetchCourses();
           if (editingCourse?.id === courseId) {
             handleOpenModal(editingCourse);
           }
         } else {
-          alert(`Upload failed: ${error.message}`);
+          confirm.ask('Error', `Upload failed: ${error.message}`, () => {}, { isDangerous: false });
         }
       } catch {
-        alert("Failed to read file. Ensure it is a valid CSV or Excel file.");
+        confirm.ask('Error', 'Failed to read file. Ensure it is a valid CSV or Excel file.', () => {}, { isDangerous: false });
       }
       
       setUploadingId(null);
@@ -429,11 +428,11 @@ export default function CourseManagement() {
       );
 
     if (!error) {
-      alert(`${cleanMatric} added successfully!`);
+      confirm.ask('Success', `${cleanMatric} added successfully!`, () => {}, { isDangerous: false });
       setSingleMatric('');
       await fetchCourses();
     } else {
-      alert(`Failed to add student: ${error.message}`);
+      confirm.ask('Error', `Failed to add student: ${error.message}`, () => {}, { isDangerous: false });
     }
     setIsAddingSingle(false);
   };
@@ -479,10 +478,10 @@ export default function CourseManagement() {
       setAuditRecords(trail);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Audit failed.";
-      alert(msg);
+      confirm.ask('Audit Failed', msg, () => {}, { isDangerous: false });
     }
     setIsAuditing(false);
-  }, [auditMatric, auditCourseCode]);
+  }, [auditMatric, auditCourseCode, confirm]);
 
   const grantMedicalWaiver = async (record: AuditRecord) => {
     const cleanMatric = auditMatric.trim().toUpperCase();
@@ -506,10 +505,10 @@ export default function CourseManagement() {
               device_hash: 'admin-waiver',
             }]);
           }
-          alert("Waiver Granted successfully!");
+          confirm.ask('Success', 'Waiver Granted successfully!', () => {}, { isDangerous: false });
           handleStudentAudit();
         } catch {
-          alert("Failed to grant waiver.");
+          confirm.ask('Error', 'Failed to grant waiver.', () => {}, { isDangerous: false });
         }
       },
       false
@@ -532,13 +531,13 @@ export default function CourseManagement() {
             body: JSON.stringify({ matricNumber: safeMatric }),
           });
           if (response.ok) {
-            alert(`✅ Hardware binding completely wiped for ${safeMatric}.`);
+            confirm.ask('Success', `✅ Hardware binding completely wiped for ${safeMatric}.`, () => {}, { isDangerous: false });
             setWipeMatric('');
           } else {
-            alert("⚠️ Failed to wipe device.");
+            confirm.ask('Error', '⚠️ Failed to wipe device.', () => {}, { isDangerous: false });
           }
         } catch {
-          alert("💥 Network Error.");
+          confirm.ask('Error', '💥 Network Error.', () => {}, { isDangerous: false });
         } finally {
           setIsWiping(false);
         }
@@ -994,35 +993,7 @@ export default function CourseManagement() {
         </div>
       </div>
 
-      {/* CUSTOM CONFIRMATION MODAL */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 z-100 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 ${confirmModal.isDangerous ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                {confirmModal.isDangerous ? <AlertTriangle size={32} /> : <Info size={32} />}
-              </div>
-              <h3 className="text-xl font-extrabold text-gray-900 mb-2">{confirmModal.title}</h3>
-              <p className="text-sm text-gray-500 font-medium leading-relaxed">{confirmModal.message}</p>
-            </div>
-            <div className="p-4 bg-gray-50 flex gap-2">
-              <button onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-all text-sm">
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                  confirmModal.onConfirm();
-                }} 
-                className={`flex-1 font-bold py-3 rounded-xl text-sm shadow-md transition-all ${confirmModal.isDangerous ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-[#2563EB] text-white hover:bg-blue-700'}`}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>
   );
 }

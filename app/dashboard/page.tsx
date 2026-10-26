@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
 import Link from 'next/link';
+import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
@@ -57,6 +58,8 @@ export default function LecturerDashboard() {
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+
+  const confirm = useConfirmModal();
 
   const clearStaleSession = () => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -201,52 +204,66 @@ export default function LecturerDashboard() {
 
   const updateGeofence = async () => {
     if (!activeSessionId) return;
-    if (!window.confirm("Update the geofence to your current location? Ensure you are in the lecture hall.")) return;
     
-    setIsUpdatingGeofence(true);
-    try {
-      if (!navigator.geolocation) throw new Error("No geolocation support");
-      
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { error } = await supabase
-            .from('lecture_sessions')
-            .update({ 
-              anchor_latitude: position.coords.latitude, 
-              anchor_longitude: position.coords.longitude 
-            })
-            .eq('session_id', activeSessionId);
-            
-          if (error) alert("Failed to update geofence.");
-          else alert("✅ Geofence updated to your current location!");
+    confirm.ask(
+      'Update Geofence?',
+      'Update the geofence to your current location? Ensure you are in the lecture hall.',
+      async () => {
+        setIsUpdatingGeofence(true);
+        try {
+          if (!navigator.geolocation) throw new Error("No geolocation support");
+          
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const { error } = await supabase
+                .from('lecture_sessions')
+                .update({ 
+                  anchor_latitude: position.coords.latitude, 
+                  anchor_longitude: position.coords.longitude 
+                })
+                .eq('session_id', activeSessionId);
+                
+              if (error) {
+                confirm.ask('Error', 'Failed to update geofence.', () => {}, { isDangerous: false });
+              } else {
+                confirm.ask('Success', 'Geofence updated to your current location!', () => {}, { isDangerous: false });
+              }
+              setIsUpdatingGeofence(false);
+            },
+            () => {
+              confirm.ask('Error', 'Could not get your GPS location. Ensure location is on.', () => {}, { isDangerous: false });
+              setIsUpdatingGeofence(false);
+            },
+            { enableHighAccuracy: true, timeout: 15000 }
+          );
+        } catch {
+          confirm.ask('Error', 'Error updating location.', () => {}, { isDangerous: false });
           setIsUpdatingGeofence(false);
-        },
-        () => {
-          alert("Could not get your GPS location. Ensure location is on.");
-          setIsUpdatingGeofence(false);
-        },
-        { enableHighAccuracy: true, timeout: 15000 }
-      );
-    } catch {
-      alert("Error updating location.");
-      setIsUpdatingGeofence(false);
-    }
+        }
+      },
+      { isDangerous: false, confirmLabel: 'Update GPS' }
+    );
   };
 
-  const endSession = async () => {
+  const endSession = () => {
     if (!activeSessionId) return;
-    if (window.confirm("Are you sure you want to close this session? Students will no longer be able to check in.")) {
-      try {
-        await fetch('/api/end-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: activeSessionId })
-        });
-      } catch (e) {
-        console.error("Failed to notify server", e);
-      }
-      clearStaleSession();
-    }
+    confirm.ask(
+      'End this lecture?',
+      'Students will no longer be able to check in. This cannot be undone.',
+      async () => {
+        try {
+          await fetch('/api/end-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: activeSessionId }),
+          });
+        } catch (e) {
+          console.error('Failed to notify server', e);
+        }
+        clearStaleSession();
+      },
+      { isDangerous: true, confirmLabel: 'End Lecture' }
+    );
   };
 
   const fetchDashboardData = useCallback(async () => {
@@ -278,39 +295,78 @@ export default function LecturerDashboard() {
   }, [activeSessionId, viewMode, fetchDashboardData]);
 
   const handleManualOverride = async (targetMatric: string) => {
+    const safeMatric = String(targetMatric || '').trim();
+    if (!activeSessionId) {
+      confirm.ask('Session Missing', 'No active session found. Refresh and try again.', () => {}, { isDangerous: false });
+      return;
+    }
+    if (!safeMatric) {
+      confirm.ask('Matric Required', 'Enter a matric number first.', () => {}, { isDangerous: false });
+      return;
+    }
+
+    setIsOverriding(true);
     try {
-      if (!activeSessionId) { alert("❌ Error: Missing Session ID"); return; }
-      const safeMatric = String(targetMatric || "").trim();
-      if (!safeMatric) { alert("❌ Error: Matric number is empty!"); return; }
-      setIsOverriding(true);
       const response = await fetch('/api/override-attendance', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric, lecturerId })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          matricNumber: safeMatric,
+          lecturerId,
+        }),
       });
-      if (response.ok) { setManualMatric(''); fetchDashboardData(); }
-      else { alert(`⚠️ SERVER REJECTED IT! Status: ${response.status}`); }
-    } catch (err) { alert("💥 CRITICAL CRASH: " + (err instanceof Error ? err.message : "Unknown error")); }
-    finally { setIsOverriding(false); }
+      if (response.ok) {
+        setManualMatric('');
+        fetchDashboardData();
+      } else {
+        confirm.ask('Server Rejected', `Status ${response.status}. Could not verify ${safeMatric}.`, () => {}, { isDangerous: false });
+      }
+    } catch (err) {
+      confirm.ask('Network Error', err instanceof Error ? err.message : 'Unknown error', () => {}, { isDangerous: false });
+    } finally {
+      setIsOverriding(false);
+    }
   };
 
-  const handleDeviceReset = async (targetMatric: string) => {
-    const safeMatric = String(targetMatric || "").trim();
-    if (!safeMatric) { alert("❌ Please enter a matric number first."); return; }
-    if (!window.confirm(`Wipe biometric hardware lock for ${safeMatric}?`)) return;
-    setIsResetting(true);
-    try {
-      const response = await fetch('/api/reset-device', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber: safeMatric })
-      });
-      if (response.ok) { alert(`✅ Hardware binding completely wiped for ${safeMatric}.`); setManualMatric(''); }
-      else { const errorData = await response.json(); alert(`⚠️ Failed: ${errorData.message}`); }
-    } catch { alert("💥 Network Error."); }
-    finally { setIsResetting(false); }
+  const handleDeviceReset = (targetMatric: string) => {
+    const safeMatric = String(targetMatric || '').trim();
+    if (!safeMatric) {
+      confirm.ask('Missing Matric', 'Please enter a matric number first.', () => {}, { isDangerous: false });
+      return;
+    }
+
+    confirm.ask(
+      `Wipe device lock for ${safeMatric}?`,
+      'They will need to re-register their biometrics on a new phone. Their attendance history will remain intact.',
+      async () => {
+        setIsResetting(true);
+        try {
+          const response = await fetch('/api/reset-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matricNumber: safeMatric }),
+          });
+          if (response.ok) {
+            confirm.ask('Device Wiped', `Hardware binding completely wiped for ${safeMatric}.`, () => setManualMatric(''), { isDangerous: false });
+          } else {
+            const errorData = await response.json();
+            confirm.ask('Wipe Failed', errorData.message || 'The server rejected the request.', () => {}, { isDangerous: false });
+          }
+        } catch {
+          confirm.ask('Network Error', 'Could not reach the server. Check your connection.', () => {}, { isDangerous: false });
+        } finally {
+          setIsResetting(false);
+        }
+      }
+    );
   };
 
   const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
-    if (!logsToExport || logsToExport.length === 0) { alert("No check-ins recorded."); return; }
+    if (!logsToExport || logsToExport.length === 0) {
+      confirm.ask('No Data', 'No check-ins recorded to export.', () => {}, { isDangerous: false });
+      return;
+    }
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
     const header = [
       [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
@@ -337,7 +393,9 @@ export default function LecturerDashboard() {
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
       generateAndDownloadCSV(pastData.logs, courseCode, dateString, true);
-    } catch { alert("Failed to download. Check network."); }
+    } catch { 
+      confirm.ask('Download Failed', 'Failed to download. Check network.', () => {}, { isDangerous: false });
+    }
     finally { setDownloadingId(null); }
   };
 
@@ -356,7 +414,7 @@ export default function LecturerDashboard() {
     const courseName = data?.course || 'Active Class';
     const clipboardText = `📌 *CampusCheck Attendance Link*\n\n📚 Class: ${courseName}\n⏱ Opens: ${checkinOpensAfter === 0 ? 'Immediately' : `In ${checkinOpensAfter} minutes`}\n\n🔗 ${link}\n\n_Open this link on your phone to check in. You must be inside the lecture hall._`;
     navigator.clipboard.writeText(clipboardText);
-    alert("Attendance link copied! Share it with your students.");
+    confirm.ask('Link Copied', 'Attendance link copied! Share it with your students.', () => {}, { isDangerous: false });
   };
 
   if (!activeSessionId || viewMode === 'history') {
@@ -514,6 +572,7 @@ export default function LecturerDashboard() {
             </div>
           )}
         </div>
+        <ConfirmModal config={confirm.config} onClose={confirm.close} />
       </div>
     );
   }
@@ -669,6 +728,8 @@ export default function LecturerDashboard() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>
   );
 }
