@@ -97,11 +97,18 @@ export default function LecturerDashboard() {
     return () => clearTimeout(id);
   }, [router]);
 
+  // Do NOT auto-redirect. Just check if a session exists and put it in state if the user is already viewing the dashboard.
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(async () => {
       const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
       if (savedSession) {
-        checkSessionValidity(savedSession);
+        // Only set it if it's still valid in the DB
+        const { data } = await supabase.from('lecture_sessions').select('is_active').eq('session_id', savedSession).single();
+        if (data && data.is_active) {
+           setActiveSessionId(savedSession);
+        } else {
+           localStorage.removeItem(ACTIVE_SESSION_KEY);
+        }
       }
     }, 0);
     return () => window.clearTimeout(timeoutId);
