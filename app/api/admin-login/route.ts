@@ -1,35 +1,66 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import crypto from 'crypto';
+import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
+import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export async function POST(request: Request) {
   try {
-    const { password } = await request.json();
+    // 1. Rate Limiting (5 attempts per minute per IP)
+    const ip = getClientIp(request);
+    const limit = RATE_LIMIT_DEFAULTS['admin-login'];
+    const rateCheck = checkRateLimit(`admin-login:${ip}`, limit);
 
-    // SECURED: Pulled dynamically from Vercel parameters
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { message: "Too many login attempts. Please try again in a minute." },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    const { password } = await request.json();
     const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
 
     if (!CORRECT_PASSWORD) {
       return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
     }
 
-    if (password === CORRECT_PASSWORD) {
-      // Next.js 15 requires awaiting the cookies API before setting them
+    if (!password || typeof password !== 'string') {
+      return NextResponse.json({ message: "Password required." }, { status: 400 });
+    }
+
+    if (safeCompare(password, CORRECT_PASSWORD)) {
       const cookieStore = await cookies();
       
-      // Give them the secure HTTP-only cookie that lasts for 8 hours
       cookieStore.set({
         name: 'attendance_admin_token',
         value: 'verified',
         httpOnly: true,
         path: '/',
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * 60 * 8, // 8 hours
+        maxAge: 60 * 60 * 8,
       });
 
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true }, { headers: rateLimitHeaders(rateCheck) });
     }
 
-    return NextResponse.json({ message: "Invalid password" }, { status: 401 });
+    return NextResponse.json(
+      { message: "Invalid password" }, 
+      { status: 401, headers: rateLimitHeaders(rateCheck) }
+    );
+
   } catch (error) {
     console.error("Login API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
