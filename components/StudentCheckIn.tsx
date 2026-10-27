@@ -59,20 +59,36 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isIosFallback, setIsIosFallback] = useState(false);
+  const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const urlMatric = searchParams.get('matric');
-    const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
+    // Wrap initial state updates in setTimeout to avoid React hydration warnings
+    const id = setTimeout(() => {
+      const urlMatric = searchParams.get('matric');
+      const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
+      
+      if (urlMatric) {
+        setMatricNumber(urlMatric.toUpperCase());
+      } else if (savedMatric) {
+        setMatricNumber(savedMatric.toUpperCase());
+      }
+
+      // Detect Device Type for Location Instructions
+      const ua = navigator.userAgent;
+      if (/iPad|iPhone|iPod/.test(ua)) {
+        setDeviceType('ios');
+      } else if (/android/i.test(ua)) {
+        setDeviceType('android');
+      } else {
+        setDeviceType('other');
+      }
+    }, 0);
     
-    if (urlMatric) {
-      Promise.resolve().then(() => setMatricNumber(urlMatric.toUpperCase()));
-    } else if (savedMatric) {
-      Promise.resolve().then(() => setMatricNumber(savedMatric.toUpperCase()));
-    }
+    return () => clearTimeout(id);
   }, [searchParams]);
 
   const triggerSuccessVibration = () => {
@@ -93,19 +109,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
       return;
     }
 
-    // FORCE iOS to check by doing a dummy read
     navigator.geolocation.getCurrentPosition(
       () => setGpsStatus('granted'),
       (error) => {
         if (error.code === 1) setGpsStatus('denied');
-        else setGpsStatus('granted'); // If it times out, the permission is actually granted
+        else setGpsStatus('granted'); 
       },
       { timeout: 1000, maximumAge: 0 }
     );
   }, []);
 
   useEffect(() => {
-    // Wrap in setTimeout to prevent React "setState in effect" warning
     const id = setTimeout(() => checkPermission(), 0);
     return () => clearTimeout(id);
   }, [checkPermission]);
@@ -450,17 +464,50 @@ export default function StudentCheckIn({ sessionId }: Props) {
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
         {gpsStatus === 'denied' && (
-          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex flex-col gap-2 animate-in slide-in-from-top-4">
+          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
             <div className="flex items-start gap-3">
               <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
               <div>
                 <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
-                <p className="text-xs text-red-700 font-medium mt-1">Please allow location access in your browser settings to check in.</p>
+                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
+                  Your browser is currently blocking location access. Please follow these steps to enable it:
+                </p>
+                
+                <div className="text-xs text-red-800 space-y-1.5 bg-white/50 p-3 rounded-lg border border-red-100">
+                  {deviceType === 'ios' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
+                      <p>1. Open your iPhone <strong>Settings</strong>.</p>
+                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
+                      <p>3. Tap <strong>Location</strong> and select <strong>Allow</strong>.</p>
+                      <p>4. Come back here and tap the button below.</p>
+                    </>
+                  ) : deviceType === 'android' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
+                      <p>1. Tap the <strong>lock icon</strong> next to the website address.</p>
+                      <p>2. Tap <strong>Permissions</strong>.</p>
+                      <p>3. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
+                      <p>4. Refresh this page.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-[13px]">On Desktop Browser:</p>
+                      <p>1. Click the <strong>lock icon</strong> next to the website address.</p>
+                      <p>2. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
+                      <p>3. Refresh this page.</p>
+                    </>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => { setGpsStatus('prompt'); checkPermission(); }} 
+                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                >
+                  I have turned it on, check again
+                </button>
               </div>
             </div>
-            <button onClick={() => { setGpsStatus('prompt'); checkPermission(); }} className="mt-2 text-xs font-bold text-red-700 underline text-left">
-              I have turned it on, check again
-            </button>
           </div>
         )}
 
