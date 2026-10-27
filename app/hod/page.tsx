@@ -92,12 +92,16 @@ export default function HODPortal() {
         <AlertTriangle className="text-red-500 mb-4" size={48} />
         <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to load Dashboard</h2>
         <p className="text-gray-500 font-medium text-center mb-6 max-w-md">{error}</p>
-        <button onClick={() => fetchDepartmentData()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all">Try Again</button>
+        <button onClick={() => fetchDepartmentData()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all">
+          Try Again
+        </button>
       </div>
     );
   }
 
-  const complianceRate = compliance.total > 0 ? Math.round((compliance.cleared / compliance.total) * 100) : 0;
+  const complianceRate = compliance.total > 0 
+    ? Math.round((compliance.cleared / compliance.total) * 100) 
+    : 0;
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
@@ -106,7 +110,9 @@ export default function HODPortal() {
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="bg-[#2563EB] p-2 rounded-lg"><ShieldCheck className="text-white" size={24} /></div>
+              <div className="bg-[#2563EB] p-2 rounded-lg">
+                <ShieldCheck className="text-white" size={24} />
+              </div>
               <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">HOD Command Center</h1>
             </div>
             <p className="text-gray-500 font-medium">Department-wide analytics and NUC compliance.</p>
@@ -118,7 +124,9 @@ export default function HODPortal() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-blue-50 text-[#2563EB] p-4 rounded-xl"><Users size={24} /></div>
+            <div className="bg-blue-50 text-[#2563EB] p-4 rounded-xl">
+              <Users size={24} />
+            </div>
             <div>
               <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Lecturers</p>
               <p className="text-3xl font-black text-gray-900">{stats.length}</p>
@@ -126,15 +134,21 @@ export default function HODPortal() {
           </div>
           
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-emerald-50 text-emerald-600 p-4 rounded-xl"><TrendingUp size={24} /></div>
+            <div className="bg-emerald-50 text-emerald-600 p-4 rounded-xl">
+              <TrendingUp size={24} />
+            </div>
             <div>
               <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Dept. Avg Rating</p>
-              <p className="text-3xl font-black text-gray-900">{(stats.reduce((acc, s) => acc + s.avg_rating, 0) / (stats.length || 1)).toFixed(1)} <span className="text-lg text-gray-400">/ 5</span></p>
+              <p className="text-3xl font-black text-gray-900">
+                {(stats.reduce((acc, s) => acc + s.avg_rating, 0) / (stats.length || 1)).toFixed(1)} <span className="text-lg text-gray-400">/ 5</span>
+              </p>
             </div>
           </div>
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-purple-50 text-purple-600 p-4 rounded-xl"><BookOpen size={24} /></div>
+            <div className="bg-purple-50 text-purple-600 p-4 rounded-xl">
+              <BookOpen size={24} />
+            </div>
             <div>
               <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sessions</p>
               <p className="text-3xl font-black text-gray-900">{stats.reduce((acc, s) => acc + s.session_count, 0)}</p>
@@ -145,7 +159,9 @@ export default function HODPortal() {
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2"><CheckCircle className="text-[#2563EB]" size={20} /> NUC Exam Compliance</h3>
+              <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="text-[#2563EB]" size={20} /> NUC Exam Compliance
+              </h3>
               <p className="text-sm text-gray-500 font-medium mt-1">Percentage of enrolled students with ≥70% attendance.</p>
             </div>
             <div className="text-right">
@@ -155,7 +171,10 @@ export default function HODPortal() {
           </div>
           
           <div className="relative w-full h-6 bg-gray-100 rounded-full overflow-hidden border border-gray-200 shadow-inner">
-            <div className="absolute top-0 left-0 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-1000" style={{ width: `${complianceRate}%` }} />
+            <div 
+              className="absolute top-0 left-0 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-1000"
+              style={{ width: `${complianceRate}%` }}
+            />
             <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
           </div>
           
@@ -168,7 +187,9 @@ export default function HODPortal() {
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2"><BarChart3 size={18} className="text-[#2563EB]" /> Lecturer Performance</h3>
+            <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
+              <BarChart3 size={18} className="text-[#2563EB]" /> Lecturer Performance
+            </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -182,7 +203,9 @@ export default function HODPortal() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {stats.length === 0 ? (
-                  <tr><td colSpan={4} className="px-6 py-12 text-center text-gray-500 font-bold">No lecturers found in this department.</td></tr>
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 font-bold">No lecturers found in this department.</td>
+                  </tr>
                 ) : (
                   stats.map((lec) => (
                     <tr key={lec.id} className="hover:bg-gray-50/50 transition-colors">

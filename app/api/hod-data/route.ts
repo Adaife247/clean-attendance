@@ -92,7 +92,7 @@ export async function GET(request: Request) {
       compliance: { total: totalStudents, cleared: clearedStudents, atRisk: atRiskStudents }
     });
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

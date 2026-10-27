@@ -15,7 +15,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Missing data" }, { status: 400 });
     }
 
-    // Verify ownership
     const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
     if (!session) return NextResponse.json({ message: "Session not found" }, { status: 404 });
 
@@ -57,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ message: "Success" });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ message: "Override failed" }, { status: 500 });
   }
 }
