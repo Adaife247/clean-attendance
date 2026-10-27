@@ -1355,6 +1355,230 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/dashboard/broadcast/page.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/utils/supabase';
+import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
+
+interface Course { id: string; course_code: string; }
+interface LecturerProfile { full_name: string; }
+interface BroadcastPost {
+  id: string;
+  title: string;
+  content: string;
+  course_code: string;
+  created_at: string;
+}
+
+export default function BroadcastPage() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [profile, setProfile] = useState<LecturerProfile | null>(null);
+  
+  const [feedTitle, setFeedTitle] = useState('');
+  const [feedContent, setFeedContent] = useState('');
+  const [feedCourseCode, setFeedCourseCode] = useState('');
+  const [feedLink, setFeedLink] = useState('');
+  const [feedExpiry, setFeedExpiry] = useState('');
+  
+  const [isPosting, setIsPosting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState<BroadcastPost[]>([]);
+
+  const fetchData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: profileData } = await supabase
+      .from('lecturers')
+      .select('full_name')
+      .eq('id', session.user.id)
+      .single();
+    if (profileData) setProfile(profileData);
+
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('id, course_code')
+      .eq('lecturer_id', session.user.id)
+      .order('created_at', { ascending: false });
+    if (courseData) {
+      setCourses(courseData);
+      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
+    }
+
+    if (profileData) {
+      const courseCodes = courseData?.map(c => c.course_code) || [];
+      if (courseCodes.length > 0) {
+        const { data: posts } = await supabase
+          .from('campus_updates')
+          .select('id, title, content, course_code, created_at')
+          .in('course_code', courseCodes)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (posts) setHistory(posts);
+      }
+    }
+    
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    const id = setTimeout(() => { fetchData(); }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  const handlePostFeed = async () => {
+    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
+      alert("Please fill all fields and select a course.");
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/post-feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: feedTitle,
+          content: feedContent,
+          author: profile?.full_name || 'Lecturer',
+          course_code: feedCourseCode,
+          link_url: feedLink.trim() || null,
+          expires_at: feedExpiry || null
+        })
+      });
+      if (response.ok) {
+        alert(`Announcement posted to ${feedCourseCode} students!`);
+        setFeedTitle('');
+        setFeedContent('');
+        setFeedLink('');
+        setFeedExpiry('');
+        fetchData();
+      } else {
+        alert("Failed to post announcement.");
+      }
+    } catch {
+      alert("Network error.");
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans space-y-6">
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+        <div className="bg-[#2563EB] p-6 text-white">
+          <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
+          <p className="text-blue-100 font-medium mt-1">Send announcements and updates to your students.</p>
+        </div>
+        
+        <div className="p-6 md:p-8 space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Target Class</label>
+            <select 
+              value={feedCourseCode} 
+              onChange={e => setFeedCourseCode(e.target.value)} 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
+            >
+              <option value="">-- Select a Course --</option>
+              {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Announcement Title</label>
+            <input 
+              type="text" 
+              value={feedTitle} 
+              onChange={e => setFeedTitle(e.target.value)} 
+              placeholder="e.g., Venue Change for Mid-Term Exam" 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Message</label>
+            <textarea 
+              value={feedContent} 
+              onChange={e => setFeedContent(e.target.value)} 
+              placeholder="Type your announcement here..." 
+              rows={3} 
+              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" 
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Link (Optional)</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><LinkIcon size={16} className="text-gray-400" /></div>
+                <input 
+                  type="url" 
+                  value={feedLink} 
+                  onChange={e => setFeedLink(e.target.value)} 
+                  placeholder="https://..." 
+                  className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Expiry Date (Optional)</label>
+              <input 
+                type="datetime-local" 
+                value={feedExpiry} 
+                onChange={e => setFeedExpiry(e.target.value)} 
+                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-600 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+              />
+            </div>
+          </div>
+
+          <button 
+            onClick={handlePostFeed} 
+            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} 
+            className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2 mt-4"
+          >
+            {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {history.length === 0 ? (
+            <div className="p-10 text-center">
+              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Megaphone size={36} className="text-[#2563EB]" />
+              </div>
+              <h3 className="font-extrabold text-gray-900 text-lg mb-1">No broadcasts yet</h3>
+              <p className="text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
+                Your announcements to students will appear here after you publish your first one.
+              </p>
+            </div>
+          ) : (
+            history.map((post) => (
+              <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className="font-extrabold text-gray-900">{post.title}</h4>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{post.course_code}</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1 mb-2">{post.content}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Sent {new Date(post.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
 <file path="app/dashboard/loading.tsx">
 // ─── app/dashboard/loading.tsx ───
 export default function DashboardLoading() {
@@ -2098,83 +2322,6 @@ export const logger = {
 };
 </file>
 
-<file path="utils/rate-limit.ts">
-// ─── utils/rate-limit.ts ───
-// In-memory sliding-window rate limiter.
-//
-// Works: single Vercel instance, small user base.
-// Fails: multi-region scaling (each instance has its own memory).
-//
-// To upgrade to Redis (Upstash): replace `hits` Map with a Redis call.
-// Signature and behavior stay identical — only the storage layer changes.
-
-import { RATE_LIMIT_WINDOW_MS } from './constants';
-
-type Bucket = { count: number; resetAt: number };
-
-const hits = new Map<string, Bucket>();
-
-// Periodic cleanup so the Map doesn't grow forever
-let cleanupScheduled = false;
-function scheduleCleanup() {
-  if (cleanupScheduled || typeof setInterval === 'undefined') return;
-  cleanupScheduled = true;
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, bucket] of hits.entries()) {
-      if (bucket.resetAt < now) hits.delete(key);
-    }
-  }, 5 * 60 * 1000).unref?.();
-}
-
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
-}
-
-export function checkRateLimit(
-  identifier: string,
-  limit: number,
-  windowMs: number = RATE_LIMIT_WINDOW_MS
-): RateLimitResult {
-  scheduleCleanup();
-
-  const now = Date.now();
-  const existing = hits.get(identifier);
-
-  if (!existing || existing.resetAt < now) {
-    const bucket: Bucket = { count: 1, resetAt: now + windowMs };
-    hits.set(identifier, bucket);
-    return { allowed: true, remaining: limit - 1, resetAt: bucket.resetAt };
-  }
-
-  if (existing.count >= limit) {
-    return { allowed: false, remaining: 0, resetAt: existing.resetAt };
-  }
-
-  existing.count += 1;
-  return {
-    allowed: true,
-    remaining: limit - existing.count,
-    resetAt: existing.resetAt,
-  };
-}
-
-export function getClientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  return request.headers.get('x-real-ip') || 'unknown';
-}
-
-export function rateLimitHeaders(result: RateLimitResult): Record<string, string> {
-  return {
-    'X-RateLimit-Remaining': String(result.remaining),
-    'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
-  };
-}
-</file>
-
 <file path="utils/safe-storage.ts">
 // ─── utils/safe-storage.ts ───
 // localStorage can throw (Safari private mode, quota exceeded, disabled).
@@ -2810,6 +2957,86 @@ export interface DashboardData {
 }
 </file>
 
+<file path="utils/rate-limit.ts">
+// ─── utils/rate-limit.ts ───
+// In-memory sliding-window rate limiter.
+
+import { RATE_LIMIT_WINDOW_MS } from './constants';
+
+type Bucket = { count: number; resetAt: number };
+
+const hits = new Map<string, Bucket>();
+
+// Hard cap to prevent memory exhaustion from fake IP floods
+const MAX_MAP_SIZE = 5000;
+
+// Periodic cleanup so the Map doesn't grow forever
+let cleanupScheduled = false;
+function scheduleCleanup() {
+  if (cleanupScheduled || typeof setInterval === 'undefined') return;
+  cleanupScheduled = true;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of hits.entries()) {
+      if (bucket.resetAt < now) hits.delete(key);
+    }
+  }, 5 * 60 * 1000).unref?.();
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+}
+
+export function checkRateLimit(
+  identifier: string,
+  limit: number,
+  windowMs: number = RATE_LIMIT_WINDOW_MS
+): RateLimitResult {
+  scheduleCleanup();
+
+  const now = Date.now();
+  const existing = hits.get(identifier);
+
+  if (!existing || existing.resetAt < now) {
+    // NEW: If the map is getting too large, force-delete the oldest 1000 entries
+    if (hits.size >= MAX_MAP_SIZE) {
+      const keysToDelete = Array.from(hits.keys()).slice(0, 1000);
+      keysToDelete.forEach(k => hits.delete(k));
+    }
+
+    const bucket: Bucket = { count: 1, resetAt: now + windowMs };
+    hits.set(identifier, bucket);
+    return { allowed: true, remaining: limit - 1, resetAt: bucket.resetAt };
+  }
+
+  if (existing.count >= limit) {
+    return { allowed: false, remaining: 0, resetAt: existing.resetAt };
+  }
+
+  existing.count += 1;
+  return {
+    allowed: true,
+    remaining: limit - existing.count,
+    resetAt: existing.resetAt,
+  };
+}
+
+export function getClientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return request.headers.get('x-real-ip') || 'unknown';
+}
+
+export function rateLimitHeaders(result: RateLimitResult): Record<string, string> {
+  return {
+    'X-RateLimit-Remaining': String(result.remaining),
+    'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
+  };
+}
+</file>
+
 <file path="package.json">
 {
   "name": "clean-attendance",
@@ -2942,230 +3169,6 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
   }
-}
-</file>
-
-<file path="app/dashboard/broadcast/page.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/utils/supabase';
-import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
-
-interface Course { id: string; course_code: string; }
-interface LecturerProfile { full_name: string; }
-interface BroadcastPost {
-  id: string;
-  title: string;
-  content: string;
-  course_code: string;
-  created_at: string;
-}
-
-export default function BroadcastPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [profile, setProfile] = useState<LecturerProfile | null>(null);
-  
-  const [feedTitle, setFeedTitle] = useState('');
-  const [feedContent, setFeedContent] = useState('');
-  const [feedCourseCode, setFeedCourseCode] = useState('');
-  const [feedLink, setFeedLink] = useState('');
-  const [feedExpiry, setFeedExpiry] = useState('');
-  
-  const [isPosting, setIsPosting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [history, setHistory] = useState<BroadcastPost[]>([]);
-
-  const fetchData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const { data: profileData } = await supabase
-      .from('lecturers')
-      .select('full_name')
-      .eq('id', session.user.id)
-      .single();
-    if (profileData) setProfile(profileData);
-
-    const { data: courseData } = await supabase
-      .from('courses')
-      .select('id, course_code')
-      .eq('lecturer_id', session.user.id)
-      .order('created_at', { ascending: false });
-    if (courseData) {
-      setCourses(courseData);
-      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
-    }
-
-    if (profileData) {
-      const courseCodes = courseData?.map(c => c.course_code) || [];
-      if (courseCodes.length > 0) {
-        const { data: posts } = await supabase
-          .from('campus_updates')
-          .select('id, title, content, course_code, created_at')
-          .in('course_code', courseCodes)
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (posts) setHistory(posts);
-      }
-    }
-    
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    const id = setTimeout(() => { fetchData(); }, 0);
-    return () => clearTimeout(id);
-  }, []);
-
-  const handlePostFeed = async () => {
-    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
-      alert("Please fill all fields and select a course.");
-      return;
-    }
-    setIsPosting(true);
-    try {
-      const response = await fetch('/api/post-feed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: feedTitle,
-          content: feedContent,
-          author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode,
-          link_url: feedLink.trim() || null,
-          expires_at: feedExpiry || null
-        })
-      });
-      if (response.ok) {
-        alert(`Announcement posted to ${feedCourseCode} students!`);
-        setFeedTitle('');
-        setFeedContent('');
-        setFeedLink('');
-        setFeedExpiry('');
-        fetchData();
-      } else {
-        alert("Failed to post announcement.");
-      }
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIsPosting(false);
-    }
-  };
-
-  if (isLoading) return <div className="p-8 text-center text-gray-500">Loading...</div>;
-
-  return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto font-sans space-y-6">
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-        <div className="bg-[#2563EB] p-6 text-white">
-          <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
-          <p className="text-blue-100 font-medium mt-1">Send announcements and updates to your students.</p>
-        </div>
-        
-        <div className="p-6 md:p-8 space-y-5">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Target Class</label>
-            <select 
-              value={feedCourseCode} 
-              onChange={e => setFeedCourseCode(e.target.value)} 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
-            >
-              <option value="">-- Select a Course --</option>
-              {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Announcement Title</label>
-            <input 
-              type="text" 
-              value={feedTitle} 
-              onChange={e => setFeedTitle(e.target.value)} 
-              placeholder="e.g., Venue Change for Mid-Term Exam" 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-bold text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Message</label>
-            <textarea 
-              value={feedContent} 
-              onChange={e => setFeedContent(e.target.value)} 
-              placeholder="Type your announcement here..." 
-              rows={3} 
-              className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all resize-none" 
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Link (Optional)</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><LinkIcon size={16} className="text-gray-400" /></div>
-                <input 
-                  type="url" 
-                  value={feedLink} 
-                  onChange={e => setFeedLink(e.target.value)} 
-                  placeholder="https://..." 
-                  className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 rounded-xl outline-none font-medium text-gray-900 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Expiry Date (Optional)</label>
-              <input 
-                type="datetime-local" 
-                value={feedExpiry} 
-                onChange={e => setFeedExpiry(e.target.value)} 
-                className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none font-medium text-gray-600 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
-              />
-            </div>
-          </div>
-
-          <button 
-            onClick={handlePostFeed} 
-            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} 
-            className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2 mt-4"
-          >
-            {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-6">
-        <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Clock size={18} /> Recent Broadcasts</h2>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {history.length === 0 ? (
-            <div className="p-10 text-center">
-              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Megaphone size={36} className="text-[#2563EB]" />
-              </div>
-              <h3 className="font-extrabold text-gray-900 text-lg mb-1">No broadcasts yet</h3>
-              <p className="text-sm text-gray-500 font-medium max-w-sm mx-auto leading-relaxed">
-                Your announcements to students will appear here after you publish your first one.
-              </p>
-            </div>
-          ) : (
-            history.map((post) => (
-              <div key={post.id} className="p-5 hover:bg-gray-50/50 transition-colors">
-                <div className="flex justify-between items-start mb-1">
-                  <h4 className="font-extrabold text-gray-900">{post.title}</h4>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">{post.course_code}</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1 mb-2">{post.content}</p>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  Sent {new Date(post.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 </file>
 
@@ -3534,207 +3537,123 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/api/dashboard-data/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
+<file path="app/dashboard/layout.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { 
+  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
+} from 'lucide-react';
+import Link from 'next/link';
 
-interface AttendanceLogRow {
-  id: string;
-  matric_number: string;
-  status: string;
-  check_in_time: string;
-  device_info: string | null;
-}
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHod, setIsHod] = useState(false);
 
-export async function GET(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-
-    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
-
-    const { data: session } = await supabase
-      .from('lecture_sessions')
-      .select('is_active, course_code, created_at')
-      .eq('session_id', sessionId)
-      .single();
-
-    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
-    if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
-    const courseName = session?.course_code || "Unknown Course";
-
-    const { data: logs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('check_in_time', { ascending: false });
-
-    const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
-    const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
-
-    const matrics = visibleLogs.map(l => l.matric_number);
-    const { data: profiles } = await supabase
-      .from('student_profiles')
-      .select('matric_number, nickname')
-      .in('matric_number', matrics);
-
-    const nicknameMap = new Map();
-    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
-
-    return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true,
-      createdAt: session?.created_at || null,
-      hiddenDisqualifiedCount: disqualifiedCount,
-      logs: visibleLogs.map((l) => {
-        let reason = null;
-        let isBiometric = false;
-        
-        if (l.device_info) {
-          try {
-            const info = JSON.parse(l.device_info);
-            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
-            else if (info.verificationMethod === 'skipped') {
-              reason = "Biometric skipped (No hardware lock)";
-              isBiometric = false;
-            } else if (info.verificationMethod === 'biometric') {
-              isBiometric = true;
-            } else if (info.reason) {
-              reason = info.reason;
-            }
-          } catch {}
-        }
-        
-        // FIX: Force formatting to West Africa Time (or your local timezone) to prevent 1-hour offset
-        const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Africa/Lagos' // Adjust this if your university is in a different timezone
-        });
-
-        return {
-          id: l.id,
-          matricNumber: l.matric_number,
-          nickname: nicknameMap.get(l.matric_number) || null,
-          status: l.status,
-          time: localTimeString,
-          reason,
-          isBiometric
-        };
-      })
-    });
-  } catch {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/hod-data/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
-
-export const dynamic = 'force-dynamic';
-
-export async function GET(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
-    const { searchParams } = new URL(request.url);
-    const department = searchParams.get('department');
-
-    if (!department) {
-      return NextResponse.json({ error: 'Missing department' }, { status: 400 });
-    }
-
-    if (auth.user.department !== department) {
-       return NextResponse.json({ error: 'Unauthorized: You can only view your own department' }, { status: 403 });
-    }
-
-    const { data: lecturers } = await supabase
-      .from('lecturers')
-      .select('id, full_name, department')
-      .eq('department', department);
-
-    if (!lecturers || lecturers.length === 0) {
-      return NextResponse.json({ lecturers: [], compliance: { total: 0, cleared: 0, atRisk: 0 } });
-    }
-
-    const lecturerStats = [];
-    let totalStudents = 0;
-    let clearedStudents = 0;
-    let atRiskStudents = 0;
-
-    for (const lec of lecturers) {
-      const { data: courses } = await supabase.from('courses').select('id, course_code').eq('lecturer_id', lec.id);
-      const courseIds = courses?.map(c => c.id) || [];
-      const courseCodes = courses?.map(c => c.course_code) || [];
-
-      const { data: sessions } = await supabase.from('lecture_sessions').select('session_id').in('course_code', courseCodes);
-      const sessionIds = sessions?.map(s => s.session_id) || [];
-      const totalSessions = sessionIds.length;
-
-      let avgRating = 0;
-      let totalRatings = 0;
-      if (sessionIds.length > 0) {
-        const { data: ratings } = await supabase.from('session_ratings').select('rating').in('session_id', sessionIds);
-        if (ratings && ratings.length > 0) {
-          totalRatings = ratings.length;
-          const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
-          avgRating = Number((sum / totalRatings).toFixed(1));
-        }
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
       }
+      
+      const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
+      if (data?.department) setIsHod(true);
+    };
+    checkAuth();
+  }, [router]);
 
-      if (totalSessions > 0 && courseIds.length > 0) {
-        const { data: enrollments } = await supabase.from('enrollments').select('matric_number').in('course_id', courseIds);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
 
-        if (enrollments && enrollments.length > 0) {
-          const uniqueMatrics = Array.from(new Set(enrollments.map(e => e.matric_number)));
-          const { data: allLogs } = await supabase.from('attendance_logs').select('matric_number').in('session_id', sessionIds).eq('status', 'verified');
+  const navItems = [
+    { name: 'Live Radar', href: '/dashboard', icon: Radio },
+    { name: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
+    { name: 'Course & Student Management', href: '/dashboard/courses', icon: Users },
+    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
+  ];
 
-          const attendanceCounts: Record<string, number> = {};
-          (allLogs || []).forEach(log => {
-            attendanceCounts[log.matric_number] = (attendanceCounts[log.matric_number] || 0) + 1;
-          });
-
-          for (const matric of uniqueMatrics) {
-            const attended = attendanceCounts[matric] || 0;
-            const percentage = (attended / totalSessions) * 100;
-            totalStudents++;
-            if (percentage >= 70) clearedStudents++;
-            else atRiskStudents++;
-          }
-        }
-      }
-
-      lecturerStats.push({
-        id: lec.id,
-        full_name: lec.full_name,
-        department: lec.department,
-        course_count: courses?.length || 0,
-        session_count: totalSessions,
-        avg_rating: avgRating,
-        total_ratings: totalRatings,
-      });
-    }
-
-    return NextResponse.json({
-      lecturers: lecturerStats,
-      compliance: { total: totalStudents, cleared: clearedStudents, atRisk: atRiskStudents }
-    });
-
-  } catch {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  if (isHod) {
+    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
   }
+
+  return (
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+      
+      {/* Mobile Top Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
+          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
+            <LogOut size={18} strokeWidth={2.5} />
+          </button>
+          <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Sidebar */}
+      <aside className={`
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 transition-transform duration-300 ease-in-out
+        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
+        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
+      `}>
+        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100 shrink-0">
+          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+            <ShieldCheck size={22} strokeWidth={2.5} />
+          </div>
+          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            // Explicitly check if the path matches exactly
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
+            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
+        {children}
+      </main>
+
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+    </div>
+  );
 }
 </file>
 
@@ -3978,123 +3897,251 @@ export default function HODPortal() {
 }
 </file>
 
-<file path="app/dashboard/layout.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { 
-  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
-} from 'lucide-react';
-import Link from 'next/link';
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isHod, setIsHod] = useState(false);
+interface AttendanceLogRow {
+  id: string;
+  matric_number: string;
+  status: string;
+  check_in_time: string;
+  device_info: string | null;
+}
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-      
-      const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
-      if (data?.department) setIsHod(true);
-    };
-    checkAuth();
-  }, [router]);
+export async function GET(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
+    const { searchParams } = new URL(request.url);
+    const sessionId = searchParams.get('sessionId');
+    
+    // NEW: Get the timezone from the client (fallback to West Africa Time if missing)
+    const clientTimeZone = searchParams.get('timeZone') || 'Africa/Lagos';
 
-  const navItems = [
-    { name: 'Live Radar', href: '/dashboard', icon: Radio },
-    { name: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
-    { name: 'Course & Student Management', href: '/dashboard/courses', icon: Users },
-    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
-  ];
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-  if (isHod) {
-    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code, created_at')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+
+    const courseName = session?.course_code || "Unknown Course";
+
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
+
+    const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
+    const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
+
+    const matrics = visibleLogs.map(l => l.matric_number);
+    const { data: profiles } = await supabase
+      .from('student_profiles')
+      .select('matric_number, nickname')
+      .in('matric_number', matrics);
+
+    const nicknameMap = new Map();
+    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
+
+    return NextResponse.json({
+      course: courseName,
+      isActive: session?.is_active === true,
+      createdAt: session?.created_at || null,
+      hiddenDisqualifiedCount: disqualifiedCount,
+      logs: visibleLogs.map((l) => {
+        let reason = null;
+        let isBiometric = false;
+        
+        if (l.device_info) {
+          try {
+            const info = JSON.parse(l.device_info);
+            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
+            else if (info.verificationMethod === 'skipped') {
+              reason = "Biometric skipped (No hardware lock)";
+              isBiometric = false;
+            } else if (info.verificationMethod === 'biometric') {
+              isBiometric = true;
+            } else if (info.reason) {
+              reason = info.reason;
+            }
+          } catch {}
+        }
+        
+        // Use the dynamic client timezone
+        const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: clientTimeZone
+        });
+
+        return {
+          id: l.id,
+          matricNumber: l.matric_number,
+          nickname: nicknameMap.get(l.matric_number) || null,
+          status: l.status,
+          time: localTimeString,
+          reason,
+          isBiometric
+        };
+      })
+    });
+  } catch {
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
+}
+</file>
 
-  return (
-    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+<file path="app/api/hod-data/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const { searchParams } = new URL(request.url);
+    const department = searchParams.get('department');
+
+    if (!department) {
+      return NextResponse.json({ error: 'Missing department' }, { status: 400 });
+    }
+
+    if (auth.user.department !== department) {
+       return NextResponse.json({ error: 'Unauthorized: You can only view your own department' }, { status: 403 });
+    }
+
+    // 1. Get all lecturers in the department
+    const { data: lecturers } = await supabase
+      .from('lecturers')
+      .select('id, full_name, department')
+      .eq('department', department);
+
+    if (!lecturers || lecturers.length === 0) {
+      return NextResponse.json({ lecturers: [], compliance: { total: 0, cleared: 0, atRisk: 0 } });
+    }
+
+    const lecturerIds = lecturers.map(l => l.id);
+
+    // 2. Get ALL courses for these lecturers in one query
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('id, course_code, lecturer_id')
+      .in('lecturer_id', lecturerIds);
+
+    const courseIds = allCourses?.map(c => c.id) || [];
+    const courseCodes = allCourses?.map(c => c.course_code) || [];
+
+    // 3. Get ALL sessions for these courses in one query
+    const { data: allSessions } = await supabase
+      .from('lecture_sessions')
+      .select('session_id, course_code')
+      .in('course_code', courseCodes);
+
+    const sessionIds = allSessions?.map(s => s.session_id) || [];
+
+    // 4. Get ALL ratings for these sessions in one query
+    const { data: allRatings } = await supabase
+      .from('session_ratings')
+      .select('session_id, rating')
+      .in('session_id', sessionIds);
+
+    // 5. Get ALL enrollments and attendance logs in one query
+    const { data: allEnrollments } = await supabase
+      .from('enrollments')
+      .select('course_id, matric_number')
+      .in('course_id', courseIds);
+
+    const { data: allLogs } = await supabase
+      .from('attendance_logs')
+      .select('matric_number, session_id')
+      .in('session_id', sessionIds)
+      .eq('status', 'verified');
+
+    // ─── NOW WE CALCULATE EVERYTHING IN MEMORY (SUPER FAST) ───
+
+    let totalStudents = 0;
+    let clearedStudents = 0;
+    let atRiskStudents = 0;
+
+    const lecturerStats = lecturers.map(lec => {
+      // Filter courses for this lecturer
+      const lecCourses = allCourses?.filter(c => c.lecturer_id === lec.id) || [];
+      const lecCourseCodes = lecCourses.map(c => c.course_code);
       
-      {/* Mobile Top Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
-          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
-            <LogOut size={18} strokeWidth={2.5} />
-          </button>
-          <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
-            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-      </div>
+      // Filter sessions for this lecturer's courses
+      const lecSessions = allSessions?.filter(s => lecCourseCodes.includes(s.course_code)) || [];
+      const lecSessionIds = lecSessions.map(s => s.session_id);
+      const lecTotalSessions = lecSessions.length;
 
-      {/* Sidebar */}
-      <aside className={`
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 transition-transform duration-300 ease-in-out
-        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
-        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
-      `}>
-        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100 shrink-0">
-          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
-            <ShieldCheck size={22} strokeWidth={2.5} />
-          </div>
-          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
-        </div>
+      // Calculate ratings
+      let avgRating = 0;
+      let totalRatings = 0;
+      const lecRatings = allRatings?.filter(r => lecSessionIds.includes(r.session_id)) || [];
+      
+      if (lecRatings.length > 0) {
+        totalRatings = lecRatings.length;
+        const sum = lecRatings.reduce((acc, r) => acc + r.rating, 0);
+        avgRating = Number((sum / totalRatings).toFixed(1));
+      }
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            // Explicitly check if the path matches exactly
-            const isActive = pathname === item.href;
-            return (
-              <Link 
-                key={item.name} 
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
+      // Calculate NUC compliance for this lecturer's courses
+      const lecCourseIds = lecCourses.map(c => c.id);
+      const lecEnrollments = allEnrollments?.filter(e => lecCourseIds.includes(e.course_id)) || [];
+      const uniqueMatrics = Array.from(new Set(lecEnrollments.map(e => e.matric_number)));
 
-        <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
-            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
-          </button>
-        </div>
-      </aside>
+      if (lecTotalSessions > 0 && uniqueMatrics.length > 0) {
+        const lecLogs = allLogs?.filter(l => lecSessionIds.includes(l.session_id)) || [];
+        
+        const attendanceCounts: Record<string, number> = {};
+        lecLogs.forEach(log => {
+          attendanceCounts[log.matric_number] = (attendanceCounts[log.matric_number] || 0) + 1;
+        });
 
-      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
-        {children}
-      </main>
+        for (const matric of uniqueMatrics) {
+          const attended = attendanceCounts[matric] || 0;
+          const percentage = (attended / lecTotalSessions) * 100;
+          totalStudents++;
+          if (percentage >= 70) clearedStudents++;
+          else atRiskStudents++;
+        }
+      }
 
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
-      )}
-    </div>
-  );
+      return {
+        id: lec.id,
+        full_name: lec.full_name,
+        department: lec.department,
+        course_count: lecCourses.length,
+        session_count: lecTotalSessions,
+        avg_rating: avgRating,
+        total_ratings: totalRatings,
+      };
+    });
+
+    return NextResponse.json({
+      lecturers: lecturerStats,
+      compliance: { total: totalStudents, cleared: clearedStudents, atRisk: atRiskStudents }
+    });
+
+  } catch (error) {
+    console.error("HOD API Error:", error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }
 </file>
 
@@ -6851,8 +6898,6 @@ export default function LecturerDashboard() {
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
-  
-  // NEW: Ref to prevent overlapping API polls
   const isFetchingRef = useRef(false);
 
   const confirm = useConfirmModal();
@@ -7117,7 +7162,8 @@ export default function LecturerDashboard() {
     isFetchingRef.current = true;
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`, { headers });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
       if (response.ok) { 
         setData(await response.json()); 
       } else if (response.status === 401) {
@@ -7264,7 +7310,8 @@ export default function LecturerDashboard() {
     setDownloadingId(sessionId);
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
       if (!response.ok) {
         if (response.status === 401) router.push('/login');
         throw new Error("Failed to fetch");
@@ -7280,7 +7327,8 @@ export default function LecturerDashboard() {
   const viewPastLedger = async (session: PastSession) => {
     setViewingPastSession(session);
     const headers = await getHeaders();
-    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}`, { headers });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}&timeZone=${encodeURIComponent(tz)}`, { headers });
     if (response.ok) {
       const result = await response.json();
       setPastSessionLogs(result.logs);
@@ -7396,7 +7444,6 @@ export default function LecturerDashboard() {
             <div className="animate-in fade-in slide-in-from-bottom-4">
               {!viewingPastSession ? (
                 <div className="space-y-4">
-                  {/* NEW: Search Bar */}
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Search size={18} className="text-gray-400" />
@@ -7521,7 +7568,6 @@ export default function LecturerDashboard() {
                   <Wifi size={12} /> Live Sync
                 </span>
 
-                {/* NEW: Disqualified Count Badge */}
                 {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
                   <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">
                     <ShieldAlert size={12} /> {data.hiddenDisqualifiedCount} attempts disqualified
@@ -7940,7 +7986,30 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
-  // REMOVED: visibilitychange auto-lock. The student can now freely switch tabs.
+  // NEW: Active 15-minute countdown timer
+  useEffect(() => {
+    if (!records) return;
+
+    const checkLockTimer = () => {
+      const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
+      const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
+      
+      // If the time has passed, lock the portal
+      if (Date.now() - lastUnlockedTime >= PORTAL_UNLOCK_GRACE_MS) {
+        safeStorage.remove('campuscheck_portal_unlocked_at');
+        setRecords(null);
+        setHistory(null);
+        setNickname('');
+        setSavedNickname('');
+        setUnlockState('idle');
+        setUnlockError('Your portal session expired for security reasons. Please unlock again.');
+      }
+    };
+
+    // Check every 30 seconds
+    const interval = setInterval(checkLockTimer, 30000);
+    return () => clearInterval(interval);
+  }, [records]);
 
   useEffect(() => {
     const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
@@ -8468,9 +8537,9 @@ export default function StudentPortal() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Class is live: {activeLiveSession.course}</p>
                 <p className="font-bold text-emerald-900">You&apos;re checked in.</p>
-                {liveSessionCheckedInAt && (
+                                {liveSessionCheckedInAt && (
                   <p className="text-[10px] text-emerald-600 font-semibold">
-                    Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
                   </p>
                 )}
               </div>

@@ -6,6 +6,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { action, sessionId, matricNumber, repMatric } = body;
 
+    if (!sessionId || !repMatric) {
+      return NextResponse.json({ error: "Missing session or rep" }, { status: 400 });
+    }
+
     // 1. Verify the requester is actually a Class Rep
     const { data: repProfile } = await supabase
       .from('student_profiles')
@@ -17,41 +21,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
     }
 
-    // 2. Ensure the Rep is enrolled in the course
-    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
+    // 2. Get the session's EXACT course
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('course_code, created_at')
+      .eq('session_id', sessionId)
+      .single();
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).single();
-
-    const { data: repEnrollment } = await supabase.from('enrollments')
-      .select('id')
-      .eq('course_id', course?.id)
-      .eq('matric_number', repMatric)
+    const { data: course } = await supabase
+      .from('courses')
+      .select('id, created_at')
+      .eq('course_code', session.course_code)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single();
+
+    if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+
+    // 3. NEW: Rep must be enrolled in the EXACT course row
+    const { data: repEnrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', course.id)
+      .eq('matric_number', repMatric)
+      .maybeSingle();
 
     if (!repEnrollment) {
       return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
     }
 
     if (action === 'log_dead_battery') {
-      if (!sessionId || !matricNumber) {
-        return NextResponse.json({ error: "Missing session or matric" }, { status: 400 });
+      if (!matricNumber) {
+        return NextResponse.json({ error: "Missing matric" }, { status: 400 });
       }
 
       const cleanMatric = matricNumber.toUpperCase().trim();
 
-      // 3. NEW: Ensure the TARGET student is also enrolled in this course
-      const { data: targetEnrollment } = await supabase.from('enrollments')
+      // 4. Target must be enrolled in the same course
+      const { data: targetEnrollment } = await supabase
+        .from('enrollments')
         .select('id')
-        .eq('course_id', course?.id)
+        .eq('course_id', course.id)
         .eq('matric_number', cleanMatric)
-        .single();
+        .maybeSingle();
 
       if (!targetEnrollment) {
         return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
       }
 
-      // 4. Check the 3-student cap
+      // 5. Check the 3-student cap
       const { count } = await supabase
         .from('attendance_logs')
         .select('*', { count: 'exact', head: true })
@@ -62,17 +81,17 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
       }
 
-      // 5. Check for existing log
+      // 6. Check for existing log
       const { data: existingLog } = await supabase
         .from('attendance_logs')
         .select('id, status')
         .eq('session_id', sessionId)
         .eq('matric_number', cleanMatric)
-        .single();
+        .maybeSingle();
 
       if (existingLog) {
         if (existingLog.status === 'verified') {
-           return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
+          return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
         }
         await supabase.from('attendance_logs').update({
           status: 'pending_override',

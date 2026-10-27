@@ -16,6 +16,14 @@ export async function POST(request: Request) {
 
     if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
+    // NEW: Check for existing device BEFORE verifying
+    // This catches double-tap race conditions
+    const { data: existingDevice } = await supabase
+      .from('user_devices')
+      .select('credential_id')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
     const verification = await verifyRegistrationResponse({
       response: authResponse,
       expectedChallenge,
@@ -23,30 +31,40 @@ export async function POST(request: Request) {
       expectedRPID: rpID,
     });
 
-    if (verification.verified && verification.registrationInfo) {
-      const { credential } = verification.registrationInfo;
-
-      const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
-      const immuneKey = `\\x${hex}`;
-
-      const { error: dbError } = await supabase
-        .from('user_devices')
-        .upsert({
-          matric_number: cleanMatric,
-          credential_id: credential.id,
-          public_key: immuneKey, 
-          counter: credential.counter,
-          transports: credential.transports || [],
-          device_hash: 'webauthn-verified', 
-          created_at: new Date().toISOString()
-        }, { onConflict: 'matric_number' });
-
-      if (dbError) throw dbError;
-
-      cookieStore.delete('webauthn_challenge');
-      return NextResponse.json({ verified: true });
+    if (!verification.verified || !verification.registrationInfo) {
+      return NextResponse.json({ verified: false }, { status: 400 });
     }
-    return NextResponse.json({ verified: false }, { status: 400 });
+
+    const { credential } = verification.registrationInfo;
+
+    // NEW: If a device already exists and it's a DIFFERENT credential, reject
+    if (existingDevice && existingDevice.credential_id !== credential.id) {
+      cookieStore.delete('webauthn_challenge');
+      return NextResponse.json(
+        { error: "This matric is already linked to another phone. Ask your lecturer to reset it." },
+        { status: 409 }
+      );
+    }
+
+    const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
+    const immuneKey = `\\x${hex}`;
+
+    const { error: dbError } = await supabase
+      .from('user_devices')
+      .upsert({
+        matric_number: cleanMatric,
+        credential_id: credential.id,
+        public_key: immuneKey,
+        counter: credential.counter,
+        transports: credential.transports || [],
+        device_hash: 'webauthn-verified',
+        created_at: new Date().toISOString()
+      }, { onConflict: 'matric_number' });
+
+    if (dbError) throw dbError;
+
+    cookieStore.delete('webauthn_challenge');
+    return NextResponse.json({ verified: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

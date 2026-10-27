@@ -6,6 +6,8 @@ interface NavigatorWithStandalone extends Navigator {
   standalone?: boolean;
 }
 
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export default function PWAInstaller() {
   const [showPrompt, setShowPrompt] = useState(false);
 
@@ -13,13 +15,16 @@ export default function PWAInstaller() {
     const id = setTimeout(() => {
       const ua = window.navigator.userAgent;
       const isIosDevice = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
-      
+
       const nav = window.navigator as NavigatorWithStandalone;
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 
-      const wasDismissed = localStorage.getItem('campuscheck_pwa_dismissed') === 'true';
+      // NEW: Check if dismissed recently (within 7 days)
+      const dismissedAt = localStorage.getItem('campuscheck_pwa_dismissed_at');
+      const dismissedTime = dismissedAt ? parseInt(dismissedAt, 10) : 0;
+      const isRecentlyDismissed = Date.now() - dismissedTime < DISMISS_DURATION_MS;
 
-      if (isIosDevice && !isStandalone && !wasDismissed) {
+      if (isIosDevice && !isStandalone && !isRecentlyDismissed) {
         setShowPrompt(true);
       }
     }, 0);
@@ -28,7 +33,7 @@ export default function PWAInstaller() {
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem('campuscheck_pwa_dismissed', 'true');
+    localStorage.setItem('campuscheck_pwa_dismissed_at', String(Date.now()));
     setShowPrompt(false);
   };
 
@@ -37,7 +42,7 @@ export default function PWAInstaller() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 p-4 animate-in slide-in-from-bottom-8 duration-500">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-5 max-w-md mx-auto relative">
-        <button 
+        <button
           onClick={handleDismiss}
           className="absolute top-3 right-3 p-1 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200"
         >
