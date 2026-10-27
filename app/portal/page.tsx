@@ -279,6 +279,18 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
+  // NEW: Lock immediately if the tab goes into the background
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && records) {
+        safeStorage.remove('campuscheck_portal_unlocked_at');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [records]);
+
   useEffect(() => {
     const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
     const id = setTimeout(() => {
@@ -623,14 +635,14 @@ export default function StudentPortal() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-  courseCode: course.course_code,
-  latitude: position.coords.latitude,
-  longitude: position.coords.longitude,
-  duration: 60, 
-  checkinOpensAfter: 0, 
-  startedBy: 'Class Rep',
-  repMatric: matricNumber
-})
+              courseCode: course.course_code,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              duration: 60, 
+              checkinOpensAfter: 0, 
+              startedBy: 'Class Rep',
+              repMatric: matricNumber
+            })
           });
 
           const data = await res.json();

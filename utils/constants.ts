@@ -19,8 +19,7 @@ export const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 export const ACTIVE_SESSION_KEY = 'active_attendance_session';
 export const PREWARM_STALE_MS = 15_000; // 15s
 // ── Student Portal ──
-export const PORTAL_UNLOCK_GRACE_MS = 5 * 60 * 1000; // 5 minutes (lowered from 30 for security)
-
+export const PORTAL_UNLOCK_GRACE_MS = 15 * 60 * 1000; // 15 minutes
 // ── Academic ──
 export const NUC_MIN_ELIGIBLE_PERCENTAGE = 70;
 export const DEFAULT_PLANNED_CLASSES = 15;
