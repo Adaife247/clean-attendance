@@ -7,7 +7,7 @@ import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen, Search
 } from 'lucide-react';
 
 interface Log { 
@@ -19,7 +19,13 @@ interface Log {
   reason?: string; 
   isBiometric?: boolean;
 }
-interface DashboardData { course: string; isActive: boolean; logs: Log[]; startedBy?: string; }
+interface DashboardData { 
+  course: string; 
+  isActive: boolean; 
+  logs: Log[]; 
+  startedBy?: string; 
+  hiddenDisqualifiedCount?: number;
+}
 interface LecturerProfile { full_name: string; department: string; }
 interface Course { id: string; course_code: string; }
 interface PastSession { session_id: string; created_at: string; course_code: string; verified_count: number; flagged_count: number; }
@@ -53,12 +59,16 @@ export default function LecturerDashboard() {
   const [ledgerTab, setLedgerTab] = useState<'verified' | 'flagged'>('verified');
   
   const [pastSessions, setPastSessions] = useState<PastSession[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
   const [viewingPastSession, setViewingPastSession] = useState<PastSession | null>(null);
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+  
+  // NEW: Ref to prevent overlapping API polls
+  const isFetchingRef = useRef(false);
 
   const confirm = useConfirmModal();
 
@@ -161,10 +171,11 @@ export default function LecturerDashboard() {
       const headers = await getHeaders();
       const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`, { headers });
       if (response.ok) setPastSessions(await response.json());
+      else if (response.status === 401) router.push('/login');
     } catch { 
       console.error("Failed to load history"); 
     }
-  }, [courses, selectedCourseId]);
+  }, [courses, selectedCourseId, router]);
 
   useEffect(() => {
     if (viewMode !== 'history') return;
@@ -194,6 +205,8 @@ export default function LecturerDashboard() {
           try { localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
           setActiveSessionId(result.sessionId);
           setViewMode('live');
+        } else if (response.status === 401) {
+          router.push('/login');
         } else { 
           setSetupError("Failed to create session on server."); 
         }
@@ -314,17 +327,23 @@ export default function LecturerDashboard() {
   };
 
   const fetchDashboardData = useCallback(async () => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || isFetchingRef.current) return;
+    
+    isFetchingRef.current = true;
     try {
       const headers = await getHeaders();
       const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`, { headers });
       if (response.ok) { 
         setData(await response.json()); 
+      } else if (response.status === 401) {
+        router.push('/login');
       }
     } catch { 
       console.error("Failed to fetch data"); 
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, router]);
 
   useEffect(() => {
     if (!activeSessionId || viewMode !== 'live') return;
@@ -371,6 +390,8 @@ export default function LecturerDashboard() {
       if (response.ok) {
         setManualMatric('');
         fetchDashboardData();
+      } else if (response.status === 401) {
+        router.push('/login');
       } else {
         confirm.ask('Server Rejected', `Status ${response.status}. Could not verify ${safeMatric}.`, () => {}, { isDangerous: false });
       }
@@ -402,6 +423,8 @@ export default function LecturerDashboard() {
           });
           if (response.ok) {
             confirm.ask('Device Wiped', `Hardware binding completely wiped for ${safeMatric}.`, () => setManualMatric(''), { isDangerous: false });
+          } else if (response.status === 401) {
+            router.push('/login');
           } else {
             const errorData = await response.json();
             confirm.ask('Wipe Failed', errorData.message || 'The server rejected the request.', () => {}, { isDangerous: false });
@@ -415,14 +438,13 @@ export default function LecturerDashboard() {
     );
   };
 
-    const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
+  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
     if (!logsToExport || logsToExport.length === 0) {
       confirm.ask('No Data', 'No check-ins recorded to export.', () => {}, { isDangerous: false });
       return;
     }
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
 
-    // Sanitize function for CSV
     const sanitize = (val: string | number) => {
       const str = String(val);
       if (/^[=+\-@]/.test(str)) return `'${str}`;
@@ -458,7 +480,10 @@ export default function LecturerDashboard() {
     try {
       const headers = await getHeaders();
       const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
-      if (!response.ok) throw new Error("Failed to fetch");
+      if (!response.ok) {
+        if (response.status === 401) router.push('/login');
+        throw new Error("Failed to fetch");
+      }
       const pastData = await response.json();
       generateAndDownloadCSV(pastData.logs, courseCode, dateString, true);
     } catch { 
@@ -474,6 +499,8 @@ export default function LecturerDashboard() {
     if (response.ok) {
       const result = await response.json();
       setPastSessionLogs(result.logs);
+    } else if (response.status === 401) {
+      router.push('/login');
     }
   };
 
@@ -485,6 +512,11 @@ export default function LecturerDashboard() {
     navigator.clipboard.writeText(clipboardText);
     confirm.ask('Link Copied', 'Attendance link copied! Share it with your students.', () => {}, { isDangerous: false });
   };
+
+  const filteredHistory = pastSessions.filter(s => 
+    s.course_code.toLowerCase().includes(historySearch.toLowerCase()) || 
+    new Date(s.created_at).toLocaleString().toLowerCase().includes(historySearch.toLowerCase())
+  );
 
   if (!activeSessionId || viewMode === 'history') {
     return (
@@ -579,7 +611,21 @@ export default function LecturerDashboard() {
             <div className="animate-in fade-in slide-in-from-bottom-4">
               {!viewingPastSession ? (
                 <div className="space-y-4">
-                  {pastSessions.map(session => (
+                  {/* NEW: Search Bar */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search size={18} className="text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search by date or course..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      className="w-full bg-white border border-gray-200 p-3 pl-10 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    />
+                  </div>
+
+                  {filteredHistory.map(session => (
                     <div key={session.session_id} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-blue-300 transition-colors">
                       <div>
                         <h3 className="font-black text-gray-900 text-lg">{session.course_code}</h3>
@@ -607,8 +653,10 @@ export default function LecturerDashboard() {
                       </div>
                     </div>
                   ))}
-                  {pastSessions.length === 0 && (
-                    <p className="text-center text-gray-500 font-bold py-10 bg-white rounded-2xl border border-gray-200">No past records found for this course.</p>
+                  {filteredHistory.length === 0 && (
+                    <p className="text-center text-gray-500 font-bold py-10 bg-white rounded-2xl border border-gray-200">
+                      {pastSessions.length === 0 ? "No past records found for this course." : "No records match your search."}
+                    </p>
                   )}
                 </div>
               ) : (
@@ -687,6 +735,13 @@ export default function LecturerDashboard() {
                 <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 ml-2">
                   <Wifi size={12} /> Live Sync
                 </span>
+
+                {/* NEW: Disqualified Count Badge */}
+                {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">
+                    <ShieldAlert size={12} /> {data.hiddenDisqualifiedCount} attempts disqualified
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
