@@ -87,25 +87,28 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
-  useEffect(() => {
+  const checkPermission = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      Promise.resolve().then(() => setGpsStatus('denied'));
+      setGpsStatus('denied');
       return;
     }
-    
-    if (navigator.permissions) {
-      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-        Promise.resolve().then(() => setGpsStatus(result.state as 'granted' | 'denied' | 'prompt'));
-        const handleChange = () => setGpsStatus(result.state as 'granted' | 'denied' | 'prompt');
-        result.addEventListener('change', handleChange);
-        return () => result.removeEventListener('change', handleChange);
-      }).catch(() => {
-        Promise.resolve().then(() => setGpsStatus('prompt'));
-      });
-    } else {
-      Promise.resolve().then(() => setGpsStatus('prompt'));
-    }
+
+    // FORCE iOS to check by doing a dummy read
+    navigator.geolocation.getCurrentPosition(
+      () => setGpsStatus('granted'),
+      (error) => {
+        if (error.code === 1) setGpsStatus('denied');
+        else setGpsStatus('granted'); // If it times out, the permission is actually granted
+      },
+      { timeout: 1000, maximumAge: 0 }
+    );
   }, []);
+
+  useEffect(() => {
+    // Wrap in setTimeout to prevent React "setState in effect" warning
+    const id = setTimeout(() => checkPermission(), 0);
+    return () => clearTimeout(id);
+  }, [checkPermission]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
@@ -447,12 +450,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
         {gpsStatus === 'denied' && (
-          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
-            <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
-            <div>
-              <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
-              <p className="text-xs text-red-700 font-medium mt-1">Please allow location access in your browser settings to check in.</p>
+          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl flex flex-col gap-2 animate-in slide-in-from-top-4">
+            <div className="flex items-start gap-3">
+              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
+                <p className="text-xs text-red-700 font-medium mt-1">Please allow location access in your browser settings to check in.</p>
+              </div>
             </div>
+            <button onClick={() => { setGpsStatus('prompt'); checkPermission(); }} className="mt-2 text-xs font-bold text-red-700 underline text-left">
+              I have turned it on, check again
+            </button>
           </div>
         )}
 
@@ -628,7 +636,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
             <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
-            <button onClick={() => setStatus('idle')} className="mt-6 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
+            <button onClick={() => { checkPermission(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on, Try Again</button>
+            <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
           </div>
         )}
       </div>
