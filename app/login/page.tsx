@@ -5,8 +5,6 @@ import { supabase } from '../../utils/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-const FACULTY_SECRET_KEY = process.env.NEXT_PUBLIC_FACULTY_KEY || "fuoye-2026";
-
 export default function LoginPage() {
   const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
@@ -33,7 +31,6 @@ export default function LoginPage() {
         
         if (data.session) {
           router.refresh();
-          
           setTimeout(() => {
             window.location.href = '/dashboard';
           }, 800);
@@ -41,19 +38,19 @@ export default function LoginPage() {
           throw new Error("Login successful, but no session was created.");
         }
       } else {
-        if (secretKey !== FACULTY_SECRET_KEY) {
-          throw new Error("Invalid Faculty Registration Key. Students cannot create accounts.");
+        // SECURE SIGNUP: Hits our new server route
+        const res = await fetch('/api/lecturer-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fullName, department, secretKey })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Registration failed');
         }
 
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-        if (signUpError) throw signUpError;
-        
-        if (data.user) {
-          const { error: profileError } = await supabase.from('lecturers').insert([{
-            id: data.user.id, email: email, full_name: fullName, department: department
-          }]);
-          if (profileError) throw profileError;
-        }
         alert('Registration successful! You can now log in.');
         setIsLogin(true);
         setLoading(false);
@@ -106,7 +103,7 @@ export default function LoginPage() {
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
-                  <input aria-label="Faculty Registration Key" type="text" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                  <input aria-label="Faculty Registration Key" type="password" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
                 </div>
               </>
             )}
