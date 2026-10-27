@@ -1,9 +1,10 @@
-export const dynamic = 'force-dynamic';
-
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
 import { headers } from 'next/headers';
+
+// This MUST be exactly here. Below imports, above functions.
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
     const courseCodeToSave = body.courseCode || body.course_code;
     const isRepStarting = body.startedBy === 'Class Rep';
     
-    // Await the headers properly in Next.js 15/16 to get the real IP
+    // Get IP address safely
     const headersList = await headers();
     const forwarded = headersList.get('x-forwarded-for');
     const lecturerIp = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown-ip');
@@ -40,7 +41,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing course code." }, { status: 400 });
     }
 
-    // Verify ownership of the course (only if lecturer is starting)
     if (!isRepStarting) {
       const { data: course } = await supabase
         .from('courses')
@@ -74,7 +74,10 @@ export async function POST(request: Request) {
       .select('session_id')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("DATABASE REJECTED SESSION:", error);
+      return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
+    }
 
     return NextResponse.json({
       sessionId: data.session_id,
@@ -84,6 +87,7 @@ export async function POST(request: Request) {
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("CREATE SESSION FATAL ERROR:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
