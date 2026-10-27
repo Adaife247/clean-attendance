@@ -4,13 +4,14 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint, BellRing
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
+import { usePushNotifications } from '@/utils/usePushNotifications';
 
 interface CourseRecord {
   course_code: string;
@@ -36,7 +37,7 @@ interface AvailableCourse { id: string; course_code: string; department: string;
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
-const POLL_INTERVAL_MS = 15000; // Poll every 15s for faster live banner
+const POLL_INTERVAL_MS = 15000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
@@ -87,6 +88,9 @@ export default function StudentPortal() {
 
   const confirm = useConfirmModal();
   const autoLoadAttempted = useRef(false);
+  
+  // PUSH NOTIFICATIONS HOOK
+  const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications(matricNumber);
 
   const fetchStudentData = useCallback(async (cleanMatric: string) => {
     const { data: profile } = await supabase
@@ -876,6 +880,23 @@ export default function StudentPortal() {
 
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
+                  
+                  {/* PUSH NOTIFICATION PROMPT */}
+                  {isSupported && permission !== 'granted' && !isSubscribed && (
+                    <div className="bg-gray-900 text-white p-4 rounded-2xl flex items-center justify-between mb-4 animate-in slide-in-from-top-4 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-white/20 p-2 rounded-full"><BellRing size={20} /></div>
+                        <div>
+                          <p className="font-bold text-sm">Never miss a class</p>
+                          <p className="text-[10px] text-gray-300">Enable alerts for when class starts.</p>
+                        </div>
+                      </div>
+                      <button onClick={subscribe} className="bg-white text-gray-900 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 transition-all">
+                        Allow
+                      </button>
+                    </div>
+                  )}
+
                   <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

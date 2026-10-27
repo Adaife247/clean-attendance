@@ -5,7 +5,6 @@ const STATIC_ASSETS = [
   '/icon-512x512.png'
 ];
 
-// Install: cache only the images
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -15,7 +14,6 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: nuke all old caches
 self.addEventListener('activate', (event) => {
   self.clients.claim();
   event.waitUntil(
@@ -31,9 +29,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Network-first for EVERYTHING. Do not intercept navigations.
 self.addEventListener('fetch', (event) => {
-  // Only cache images/fonts/CSS/JS. Never cache HTML routes.
   const url = new URL(event.request.url);
   const isStaticAsset = url.pathname.match(/\.(png|svg|woff2|css|js)$/);
 
@@ -50,5 +46,57 @@ self.addEventListener('fetch', (event) => {
       })
     );
   }
-  // For everything else (HTML, API), let the browser fetch it normally from the network.
+});
+
+// NEW: Listen for Push Notifications
+self.addEventListener('push', function(event) {
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      
+      const options = {
+        body: data.body,
+        icon: '/icon-192x192.png',
+        badge: '/icon-192x192.png',
+        vibrate: [100, 50, 100],
+        data: {
+          url: data.url || '/portal' // Where to go when clicked
+        }
+      };
+
+      event.waitUntil(
+        self.registration.showNotification(data.title, options)
+      );
+    } catch (e) {
+      console.error('Push data error', e);
+    }
+  }
+});
+
+// NEW: Handle notification click
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  
+  const urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
+
+  const promiseChain = clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true
+  }).then((windowClients) => {
+    let matchingClient = null;
+    for (let i = 0; i < windowClients.length; i++) {
+      const windowClient = windowClients[i];
+      if (windowClient.url === urlToOpen) {
+        matchingClient = windowClient;
+        break;
+      }
+    }
+    if (matchingClient) {
+      return matchingClient.focus();
+    } else {
+      return clients.openWindow(urlToOpen);
+    }
+  });
+
+  event.waitUntil(promiseChain);
 });
