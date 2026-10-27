@@ -268,8 +268,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
             setStatus('rating');
           }, 2500);
         }
-           } else if (result.status === 'disqualified') {
-        // Show the exact server message (e.g. "gps-spoof-pattern" or "proxy-device-reuse")
+      } else if (result.status === 'disqualified') {
         setErrorMessage(result.message || "This attempt has been flagged as invalid.");
         setStatus('disqualified');
       } else if (result.status === 'flagged' || response.status === 403) {
@@ -284,7 +283,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
         
-        // NEW: Prevent duplicate offline queue entries for the same session
         if (!existing.some(item => item.session === sessionId)) {
           existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
           safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
@@ -519,7 +517,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
             <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
             <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. Hang tight...</p>
-            {/* NEW: iOS Fallback Note */}
             {isIosFallback && (
               <p className="text-xs text-blue-600 font-bold mt-2">Note: Biometrics aren&apos;t supported on this browser. Verified via GPS.</p>
             )}
@@ -583,17 +580,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
             <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
-              {errorMessage.includes("out of bounds") ? "You are too far away. You must be inside the lecture hall to check in." : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down") ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again." : errorMessage}
+              {errorMessage.includes("out of bounds") || errorMessage.includes("away") ? "You are too far away. You must be inside the lecture hall to check in. If you are in the hall, try walking near a window." : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down") ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again." : errorMessage}
             </p>
             <div className="mt-6 space-y-3">
-              {!errorMessage.includes("out of bounds") && (
-                <>
-                  <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
-                    {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
-                  </button>
-                  <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
-                </>
-              )}
+              <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
+              
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
+              </button>
+              
               <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
             </div>
           </div>
