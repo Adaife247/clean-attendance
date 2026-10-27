@@ -5,7 +5,11 @@ import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
 export async function POST(request: Request) {
   try {
-    // 1. Spam Guard: Rate limiting (10 attempts/min per IP)
+    // Rate limit is 30/min. A real rep will never hit this (they only
+    // log 3 students per class). It exists to catch:
+    // - Stolen session tokens being replayed
+    // - Buggy scripts running on the rep's phone
+    // - Malicious use of DevTools to spam the DB
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['rep-action'];
     const rateCheck = checkRateLimit(`rep-action:${ip}`, limit);
@@ -24,7 +28,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing session or rep" }, { status: 400 });
     }
 
-    // 2. Verify the requester is actually a Class Rep
+    // 1. Verify the requester is actually a Class Rep
     const { data: repProfile } = await supabase
       .from('student_profiles')
       .select('is_class_rep')
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
     }
 
-    // 3. Get the session's EXACT course
+    // 2. Get the session's EXACT course
     const { data: session } = await supabase
       .from('lecture_sessions')
       .select('course_code, created_at')
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
 
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-    // 4. Rep must be enrolled in the EXACT course row
+    // 3. Rep must be enrolled in the EXACT course row
     const { data: repEnrollment } = await supabase
       .from('enrollments')
       .select('id')
@@ -72,7 +76,7 @@ export async function POST(request: Request) {
 
       const cleanMatric = matricNumber.toUpperCase().trim();
 
-      // 5. Target must be enrolled in the same course
+      // 4. Target must be enrolled in the same course
       const { data: targetEnrollment } = await supabase
         .from('enrollments')
         .select('id')
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
       }
 
-      // 6. Check the 3-DISTINCT-STUDENT cap (not 3 total clicks)
+      // 5. Check the 3-DISTINCT-STUDENT cap (not 3 total clicks)
       const { data: existingClaims } = await supabase
         .from('attendance_logs')
         .select('matric_number')
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
       }
 
-      // 7. Check for existing log for this specific student
+      // 6. Check for existing log for this specific student
       const { data: existingLog } = await supabase
         .from('attendance_logs')
         .select('id, status')

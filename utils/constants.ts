@@ -39,7 +39,7 @@ export const RATE_LIMIT_DEFAULTS = {
   'webauthn-register-generate': 5,
   'verify-attendance': 20,
   'request-override': 5,
-  'rep-action': 10,
+  'rep-action': 30,           // Generous: 10 classes × 3 students = 30 req/min
   'rate-session': 10,
 } as const;
 
