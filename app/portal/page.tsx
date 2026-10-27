@@ -834,9 +834,9 @@ export default function StudentPortal() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Class is live: {activeLiveSession.course}</p>
                 <p className="font-bold text-emerald-900">You&apos;re checked in.</p>
-                {liveSessionCheckedInAt && (
+                                {liveSessionCheckedInAt && (
                   <p className="text-[10px] text-emerald-600 font-semibold">
-                    Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
                   </p>
                 )}
               </div>

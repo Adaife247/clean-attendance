@@ -66,8 +66,6 @@ export default function LecturerDashboard() {
 
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
-  
-  // NEW: Ref to prevent overlapping API polls
   const isFetchingRef = useRef(false);
 
   const confirm = useConfirmModal();
@@ -332,7 +330,8 @@ export default function LecturerDashboard() {
     isFetchingRef.current = true;
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`, { headers });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
       if (response.ok) { 
         setData(await response.json()); 
       } else if (response.status === 401) {
@@ -479,7 +478,8 @@ export default function LecturerDashboard() {
     setDownloadingId(sessionId);
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
       if (!response.ok) {
         if (response.status === 401) router.push('/login');
         throw new Error("Failed to fetch");
@@ -495,7 +495,8 @@ export default function LecturerDashboard() {
   const viewPastLedger = async (session: PastSession) => {
     setViewingPastSession(session);
     const headers = await getHeaders();
-    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}`, { headers });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}&timeZone=${encodeURIComponent(tz)}`, { headers });
     if (response.ok) {
       const result = await response.json();
       setPastSessionLogs(result.logs);
@@ -611,7 +612,6 @@ export default function LecturerDashboard() {
             <div className="animate-in fade-in slide-in-from-bottom-4">
               {!viewingPastSession ? (
                 <div className="space-y-4">
-                  {/* NEW: Search Bar */}
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Search size={18} className="text-gray-400" />
@@ -736,7 +736,6 @@ export default function LecturerDashboard() {
                   <Wifi size={12} /> Live Sync
                 </span>
 
-                {/* NEW: Disqualified Count Badge */}
                 {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
                   <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">
                     <ShieldAlert size={12} /> {data.hiddenDisqualifiedCount} attempts disqualified

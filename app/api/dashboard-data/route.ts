@@ -18,6 +18,9 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
+    
+    // NEW: Get the timezone from the client (fallback to West Africa Time if missing)
+    const clientTimeZone = searchParams.get('timeZone') || 'Africa/Lagos';
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
@@ -76,11 +79,11 @@ export async function GET(request: Request) {
           } catch {}
         }
         
-        // FIX: Force formatting to West Africa Time (or your local timezone) to prevent 1-hour offset
+        // Use the dynamic client timezone
         const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
           hour: '2-digit',
           minute: '2-digit',
-          timeZone: 'Africa/Lagos' // Adjust this if your university is in a different timezone
+          timeZone: clientTimeZone
         });
 
         return {
