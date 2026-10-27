@@ -102,16 +102,9 @@ export async function POST(request: Request) {
 
     let isSpoofed = false;
     
-    // FILTER: Remove any pings with 0 accuracy. This is an iOS glitch, not a real location.
+    // FILTER: Remove any pings with 0 accuracy.
     const validPings = (telemetry as Telemetry[]).filter((t: Telemetry) => t.acc > 0);
-    
-    // If all pings were 0, default to the raw telemetry so we don't crash
     const pingsToUse = validPings.length > 0 ? validPings : telemetry;
-
-    let bestPing = pingsToUse[0];
-    for (let i = 0; i < pingsToUse.length; i++) {
-      if (pingsToUse[i].acc < bestPing.acc) bestPing = pingsToUse[i];
-    }
 
     // Check for teleportation (spoofing)
     for (let i = 1; i < pingsToUse.length; i++) {
@@ -124,27 +117,34 @@ export async function POST(request: Request) {
       disqualificationReason = 'gps-spoof-pattern';
     }
 
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
+    // THE FIX: Calculate distance for EVERY ping. 
+    // If ANY ping puts them inside the hall, they pass.
+    let bestDistance = Infinity;
+
+    for (let i = 0; i < pingsToUse.length; i++) {
+      const ping = pingsToUse[i];
+      const dist = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, ping.lat, ping.lng);
+      
+      if (dist < bestDistance) {
+        bestDistance = dist;
+      }
+    }
 
     let finalStatus = 'absent';
-    let responseMessage = `You are ${Math.round(distanceToLecturer)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
-
-    // THE FORGIVING GEOFENCE
-    const accuracyMargin = bestPing.acc || 0;
-    const isInsideGeofence = distanceToLecturer <= GEOFENCE_RADIUS_METERS || (distanceToLecturer - accuracyMargin) <= GEOFENCE_RADIUS_METERS;
+    let responseMessage = `You are ${Math.round(bestDistance)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
 
     if (disqualificationReason) {
       finalStatus = 'disqualified';
       responseMessage = "This attempt has been flagged as invalid. Please see your lecturer in person.";
-    } else if (isInsideGeofence) {
+    } else if (bestDistance <= GEOFENCE_RADIUS_METERS) {
       finalStatus = 'verified';
       responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
-    } else if (distanceToLecturer > GEOFENCE_HARD_BLOCK_METERS) {
+    } else if (bestDistance > GEOFENCE_HARD_BLOCK_METERS) {
       finalStatus = 'flagged';
       responseMessage = "You are too far from the lecture hall.";
     } else {
       finalStatus = 'flagged';
-      responseMessage = `You are ${Math.round(distanceToLecturer)}m away. You must be inside the lecture hall.`;
+      responseMessage = `You are ${Math.round(bestDistance)}m away. You must be inside the lecture hall.`;
     }
 
     if (existingLog) {
@@ -164,8 +164,8 @@ export async function POST(request: Request) {
 
     const deviceInfoPayload = JSON.stringify({ 
       telemetry, 
-      evaluatedAccuracy: bestPing.acc, 
-      distanceMeters: Math.round(distanceToLecturer), 
+      evaluatedDistance: Math.round(bestDistance), 
+      distanceMeters: Math.round(bestDistance), 
       deviceFingerprint, 
       verificationMethod,
       disqualificationReason
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
       }]);
     }
 
-    return NextResponse.json({ status: finalStatus, distance: Math.round(distanceToLecturer), message: responseMessage }, { status: 200, headers: rateLimitHeaders(rateCheck) });
+    return NextResponse.json({ status: finalStatus, distance: Math.round(bestDistance), message: responseMessage }, { status: 200, headers: rateLimitHeaders(rateCheck) });
 
   } catch (error) {
     console.error("Verification API Error:", error);
