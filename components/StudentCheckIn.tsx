@@ -165,7 +165,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: item.session, matricNumber: item.matric, telemetry: item.telemetry, deviceFingerprint: item.fingerprint, verificationMethod: item.verificationMethod })
+          body: JSON.stringify({ 
+            sessionId: item.session, 
+            matricNumber: item.matric, 
+            telemetry: item.telemetry, 
+            deviceFingerprint: item.fingerprint, 
+            verificationMethod: item.verificationMethod,
+            userAgent: navigator.userAgent 
+          })
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
@@ -252,7 +259,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber, telemetry: gpsTelemetry, deviceFingerprint: fingerprint || 'unknown', verificationMethod })
+        body: JSON.stringify({ 
+          sessionId, 
+          matricNumber, 
+          telemetry: gpsTelemetry, 
+          deviceFingerprint: fingerprint || 'unknown', 
+          verificationMethod,
+          userAgent: navigator.userAgent
+        })
       });
       const result = await response.json();
 

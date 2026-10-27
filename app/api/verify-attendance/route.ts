@@ -35,12 +35,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint, verificationMethod } = body;
+    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint, verificationMethod, userAgent } = body;
     
     if (!matricNumber || !sessionId) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent || '');
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!telemetry || telemetry.length === 0) {
@@ -101,12 +102,9 @@ export async function POST(request: Request) {
     }
 
     let isSpoofed = false;
-    
-    // FILTER: Remove any pings with 0 accuracy.
     const validPings = (telemetry as Telemetry[]).filter((t: Telemetry) => t.acc > 0);
     const pingsToUse = validPings.length > 0 ? validPings : telemetry;
 
-    // Check for teleportation (spoofing)
     for (let i = 1; i < pingsToUse.length; i++) {
       const drift = getDistanceInMeters(pingsToUse[i-1].lat, pingsToUse[i-1].lng, pingsToUse[i].lat, pingsToUse[i].lng);
       const timeDeltaSec = Math.abs(pingsToUse[i].timestamp - pingsToUse[i-1].timestamp) / 1000;
@@ -117,29 +115,27 @@ export async function POST(request: Request) {
       disqualificationReason = 'gps-spoof-pattern';
     }
 
-    // THE FIX: Calculate distance for EVERY ping. 
-    // If ANY ping puts them inside the hall, they pass.
-    let bestDistance = Infinity;
+    // THE FIX: iOS Special Case
+    const allowedRadius = isIOS ? 500 : GEOFENCE_RADIUS_METERS;
+    const hardBlockRadius = isIOS ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
 
+    let bestDistance = Infinity;
     for (let i = 0; i < pingsToUse.length; i++) {
       const ping = pingsToUse[i];
       const dist = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, ping.lat, ping.lng);
-      
-      if (dist < bestDistance) {
-        bestDistance = dist;
-      }
+      if (dist < bestDistance) bestDistance = dist;
     }
 
     let finalStatus = 'absent';
-    let responseMessage = `You are ${Math.round(bestDistance)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
+    let responseMessage = `You are ${Math.round(bestDistance)}m away (max: ${allowedRadius}m).`;
 
     if (disqualificationReason) {
       finalStatus = 'disqualified';
       responseMessage = "This attempt has been flagged as invalid. Please see your lecturer in person.";
-    } else if (bestDistance <= GEOFENCE_RADIUS_METERS) {
+    } else if (bestDistance <= allowedRadius) {
       finalStatus = 'verified';
       responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
-    } else if (bestDistance > GEOFENCE_HARD_BLOCK_METERS) {
+    } else if (bestDistance > hardBlockRadius) {
       finalStatus = 'flagged';
       responseMessage = "You are too far from the lecture hall.";
     } else {
@@ -168,7 +164,8 @@ export async function POST(request: Request) {
       distanceMeters: Math.round(bestDistance), 
       deviceFingerprint, 
       verificationMethod,
-      disqualificationReason
+      disqualificationReason,
+      isIOS
     });
 
     if (existingLog) {
