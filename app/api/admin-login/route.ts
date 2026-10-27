@@ -7,18 +7,19 @@ import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
-  
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-  
-  return crypto.timingSafeEqual(bufA, bufB);
+
+  const maxLen = Math.max(bufA.length, bufB.length);
+  const padA = Buffer.alloc(maxLen);
+  const padB = Buffer.alloc(maxLen);
+  bufA.copy(padA);
+  bufB.copy(padB);
+
+  const equal = crypto.timingSafeEqual(padA, padB);
+  return equal && bufA.length === bufB.length;
 }
 
 export async function POST(request: Request) {
   try {
-    // 1. Rate Limiting (5 attempts per minute per IP)
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['admin-login'];
     const rateCheck = checkRateLimit(`admin-login:${ip}`, limit);

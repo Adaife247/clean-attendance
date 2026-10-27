@@ -49,7 +49,6 @@ const TABS = [
   { id: 'rep'       as const, label: 'Rep Desk', Icon: BookOpen },
 ];
 
-// New: track the state machine for the unlock flow
 type UnlockState = 'idle' | 'checking' | 'not_enrolled' | 'needs_setup' | 'authenticating' | 'unlocked';
 
 export default function StudentPortal() {
@@ -79,13 +78,11 @@ export default function StudentPortal() {
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
 
-  // Rep Desk State
   const [repCourseId, setRepCourseId] = useState('');
   const [repBatteryMatric, setRepBatteryMatric] = useState('');
   const [isLoggingBattery, setIsLoggingBattery] = useState(false);
   const [isUploadingList, setIsUploadingList] = useState(false);
 
-  // Backup Anchor State
   const [isStartingRepSession, setIsStartingRepSession] = useState(false);
   const [repSessionError, setRepSessionError] = useState('');
 
@@ -339,7 +336,6 @@ export default function StudentPortal() {
     }).length;
   }, [feed, lastSeenTimestamp, now]);
 
-  // NEW: registration flow — separate from login
   const handleRegister = async () => {
     if (matricNumber.length < 5) return;
     setUnlockState('authenticating');
@@ -361,7 +357,6 @@ export default function StudentPortal() {
           return;
         }
         if (options.error === 'ALREADY_REGISTERED') {
-          // They're already registered — just trigger login instead
           await handleVerifyAndFetch();
           return;
         }
@@ -377,7 +372,6 @@ export default function StudentPortal() {
 
       if (!verifyResult.verified) throw new Error("Biometric registration failed.");
 
-      // Success! Store matric + grace timestamp + fetch data
       safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
       safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
 
@@ -666,7 +660,6 @@ export default function StudentPortal() {
 
   const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
 
-  // Render the unlock form depending on state
   const renderUnlockForm = () => {
     if (unlockState === 'not_enrolled') {
       return (
@@ -742,7 +735,6 @@ export default function StudentPortal() {
       );
     }
 
-    // Default: idle — show matric input
     return (
       <>
         <div className="relative mb-4">
@@ -839,7 +831,7 @@ export default function StudentPortal() {
           )
         )}
 
-        <div className="bg-white/80 backdrop-blur-xl rounded-4xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
           
           {!records && renderUnlockForm()}
 

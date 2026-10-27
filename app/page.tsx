@@ -30,7 +30,7 @@ function CheckInWrapper() {
             <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
           </div>
 
-          <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+          <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
             
             <div className="space-y-4">
               <Link 

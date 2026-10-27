@@ -32,10 +32,8 @@ export default function LoginPage() {
         if (signInError) throw signInError;
         
         if (data.session) {
-          // 1. Tell Next.js to refresh the router cache so it picks up the new cookies
           router.refresh();
           
-          // 2. Wait 800ms for the browser to securely store the cookies
           setTimeout(() => {
             window.location.href = '/dashboard';
           }, 800);
@@ -88,7 +86,7 @@ export default function LoginPage() {
           <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
         </div>
 
-        <div className="bg-white rounded-4xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
           
           <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
             <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>

@@ -105,7 +105,6 @@ export default function AnalyticsPage() {
   const handleDownload = async (isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
     
-    // Warning if trying to finalize with fewer classes than planned
     if (lockGrades && !selectedCourse.is_finalized) {
       if (reportData.totalClasses < reportData.plannedClasses) {
         const confirm = window.confirm(`⚠️ WARNING: You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}.\n\nIf you lock grades now, the system will calculate final scores based on the ${reportData.totalClasses} actual classes held.\n\nDo you want to proceed?`);
@@ -198,7 +197,6 @@ export default function AnalyticsPage() {
             </h1>
             <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
           </div>
-          {/* ACCESSIBILITY FIX: Added aria-label */}
           <select
             aria-label="Select Course for Analytics"
             value={selectedCourseCode}
