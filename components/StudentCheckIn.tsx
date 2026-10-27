@@ -268,7 +268,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
             setStatus('rating');
           }, 2500);
         }
-      } else if (result.status === 'disqualified') {
+           } else if (result.status === 'disqualified') {
+        // Show the exact server message (e.g. "gps-spoof-pattern" or "proxy-device-reuse")
         setErrorMessage(result.message || "This attempt has been flagged as invalid.");
         setStatus('disqualified');
       } else if (result.status === 'flagged' || response.status === 403) {

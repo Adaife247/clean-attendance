@@ -115,6 +115,8 @@ export async function POST(request: Request) {
       if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
     }
 
+    // FIX: Only disqualify if there are 3+ pings, total drift is 0, AND all of them have 0 accuracy.
+    // This prevents a single iOS warm-up ping from ruining the check-in.
     const allZeroAcc = (telemetry as Telemetry[]).every((t: Telemetry) => t.acc === 0);
     if (telemetry.length >= 3 && totalDrift < 0.5 && allZeroAcc) isSpoofed = true;
 
