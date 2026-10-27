@@ -279,7 +279,6 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
-  // NEW: Lock immediately if the tab goes into the background
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && records) {

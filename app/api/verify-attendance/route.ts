@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
+      .select('anchor_latitude, anchor_longitude, anchor_ip, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
       .eq('session_id', sessionId)
       .single();
 
@@ -115,7 +115,10 @@ export async function POST(request: Request) {
       disqualificationReason = 'gps-spoof-pattern';
     }
 
-    // THE FIX: iOS Special Case
+    // THE IP CHECK: If they are on the same network as the lecturer, they are inside.
+    const isOnSameNetwork = session.anchor_ip && session.anchor_ip === ip;
+
+    // THE iOS SPECIAL CASE
     const allowedRadius = isIOS ? 500 : GEOFENCE_RADIUS_METERS;
     const hardBlockRadius = isIOS ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
 
@@ -132,9 +135,9 @@ export async function POST(request: Request) {
     if (disqualificationReason) {
       finalStatus = 'disqualified';
       responseMessage = "This attempt has been flagged as invalid. Please see your lecturer in person.";
-    } else if (bestDistance <= allowedRadius) {
+    } else if (isOnSameNetwork || bestDistance <= allowedRadius) {
       finalStatus = 'verified';
-      responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
+      responseMessage = isOnSameNetwork ? "Verified via Campus Wi-Fi" : (verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified");
     } else if (bestDistance > hardBlockRadius) {
       finalStatus = 'flagged';
       responseMessage = "You are too far from the lecture hall.";
@@ -165,7 +168,8 @@ export async function POST(request: Request) {
       deviceFingerprint, 
       verificationMethod,
       disqualificationReason,
-      isIOS
+      isIOS,
+      isOnSameNetwork
     });
 
     if (existingLog) {

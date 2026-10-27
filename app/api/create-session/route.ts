@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
+import { headers } from 'next/headers';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const courseCodeToSave = body.courseCode || body.course_code;
     const isRepStarting = body.startedBy === 'Class Rep';
+    
+    // FIX: Await the headers properly in Next.js 15/16 to get the real IP
+    const headersList = await headers();
+    const forwarded = headersList.get('x-forwarded-for');
+    const lecturerIp = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown-ip');
 
-    // If a Rep is starting the session, we can't use verifyLecturer because reps aren't lecturers.
-    // We rely on the fact that the rep-action route validated them, OR we can trust the flag here.
-    // To be safe, we allow the Rep to bypass the lecturer check ONLY if they are a valid rep.
     let authUserId = null;
     let finalStartedBy = 'lecturer';
 
@@ -60,6 +63,7 @@ export async function POST(request: Request) {
         course_code: courseCodeToSave,
         anchor_latitude: body.latitude || body.lat,
         anchor_longitude: body.longitude || body.lng,
+        anchor_ip: lecturerIp, // Saves the real IP now
         is_active: true,
         expires_at: expiresAt,
         checkin_opens_after_minutes: checkinOpensAfterMinutes,
