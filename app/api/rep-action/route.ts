@@ -17,19 +17,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
     }
 
-    // 2. Ensure they are enrolled in the course for this session
+    // 2. Ensure the Rep is enrolled in the course
     const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
     const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).single();
 
-    const { data: enrollment } = await supabase.from('enrollments')
+    const { data: repEnrollment } = await supabase.from('enrollments')
       .select('id')
       .eq('course_id', course?.id)
       .eq('matric_number', repMatric)
       .single();
 
-    if (!enrollment) {
+    if (!repEnrollment) {
       return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
     }
 
@@ -40,6 +40,18 @@ export async function POST(request: Request) {
 
       const cleanMatric = matricNumber.toUpperCase().trim();
 
+      // 3. NEW: Ensure the TARGET student is also enrolled in this course
+      const { data: targetEnrollment } = await supabase.from('enrollments')
+        .select('id')
+        .eq('course_id', course?.id)
+        .eq('matric_number', cleanMatric)
+        .single();
+
+      if (!targetEnrollment) {
+        return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
+      }
+
+      // 4. Check the 3-student cap
       const { count } = await supabase
         .from('attendance_logs')
         .select('*', { count: 'exact', head: true })
@@ -50,6 +62,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
       }
 
+      // 5. Check for existing log
       const { data: existingLog } = await supabase
         .from('attendance_logs')
         .select('id, status')

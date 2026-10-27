@@ -1,6 +1,5 @@
 // ─── types/db.ts ───
 // Hand-written Supabase schema types.
-// If you later run `supabase gen types`, delete this file and use the generated one.
 
 export interface Course {
   id: string;
@@ -38,7 +37,8 @@ export type AttendanceStatus =
   | 'flagged'
   | 'pending_override'
   | 'absent'
-  | 'blocked';
+  | 'blocked'
+  | 'disqualified';
 
 export interface AttendanceLog {
   id: string;
@@ -115,4 +115,5 @@ export interface DashboardData {
   createdAt: string | null;
   logs: DashboardLog[];
   startedBy?: string;
+  hiddenDisqualifiedCount?: number;
 }

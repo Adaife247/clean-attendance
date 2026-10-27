@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
 
+// Helper to sanitize CSV cells and prevent CSV Injection
+function sanitizeCSV(val: string | number) {
+  const str = String(val);
+  if (/^[=+\-@]/.test(str)) {
+    return `'${str}`; // Prepend single quote to neutralize formulas
+  }
+  return str;
+}
+
 export async function GET(request: Request) {
   try {
     const auth = await verifyLecturer(request);
@@ -56,7 +65,13 @@ export async function GET(request: Request) {
 
     const report = Array.from(attendanceMap.entries()).map(([matric, attended]) => {
       const percentage = Math.round((attended / totalClassesHeld) * 100);
-      return { matricNumber: matric, totalClasses: totalClassesHeld, attended, percentage, eligible: percentage >= 70 ? 'YES' : 'NO' };
+      return { 
+        matricNumber: sanitizeCSV(matric), 
+        totalClasses: totalClassesHeld, 
+        attended, 
+        percentage, 
+        eligible: percentage >= 70 ? 'YES' : 'NO' 
+      };
     });
 
     report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));

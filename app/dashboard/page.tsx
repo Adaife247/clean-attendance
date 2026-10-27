@@ -415,20 +415,34 @@ export default function LecturerDashboard() {
     );
   };
 
-  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
+    const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
     if (!logsToExport || logsToExport.length === 0) {
       confirm.ask('No Data', 'No check-ins recorded to export.', () => {}, { isDangerous: false });
       return;
     }
     const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
+
+    // Sanitize function for CSV
+    const sanitize = (val: string | number) => {
+      const str = String(val);
+      if (/^[=+\-@]/.test(str)) return `'${str}`;
+      return str;
+    };
+
     const header = [
       [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
-      ["Course Code", courseName], ["Date Generated", dateStr],
+      ["Course Code", sanitize(courseName)], ["Date Generated", dateStr],
       ["Total Present", verifiedCount], ["Total Records Logged", logsToExport.length], [],
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
     const rows = logsToExport.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [log.matricNumber, log.status.toUpperCase(), log.time, "Verified via Secure Platform"]);
+      .map(log => [
+        sanitize(log.matricNumber), 
+        sanitize(log.status.toUpperCase()), 
+        sanitize(log.time), 
+        "Verified via Secure Platform"
+      ]);
+      
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
