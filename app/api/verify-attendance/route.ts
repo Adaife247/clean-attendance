@@ -3,6 +3,14 @@ import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
 import { RATE_LIMIT_DEFAULTS, GEOFENCE_RADIUS_METERS, GEOFENCE_HARD_BLOCK_METERS } from '@/utils/constants';
 
+interface Telemetry {
+  lat: number;
+  lng: number;
+  alt: number | null;
+  acc: number;
+  timestamp: number;
+}
+
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180;
@@ -39,7 +47,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 2. Fetch Session
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
@@ -50,7 +57,6 @@ export async function POST(request: Request) {
     if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
     if (session.expires_at && new Date() > new Date(session.expires_at)) return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
 
-    // 3. Wait Time
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
     if (opensAfter > 0 && session.created_at) {
       const sessionStart = new Date(session.created_at).getTime();
@@ -62,14 +68,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Enrollment Check
     const { data: courseRow } = await supabase.from('courses').select('id').eq('course_code', session.course_code).limit(1).maybeSingle();
     if (!courseRow) return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
 
     const { data: enrollment } = await supabase.from('enrollments').select('id').eq('course_id', courseRow.id).eq('matric_number', cleanMatric).maybeSingle();
     if (!enrollment) return NextResponse.json({ message: `You are not registered for ${session.course_code}. Please contact your lecturer.` }, { status: 403 });
 
-    // 5. Existing Log Check
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id, status, device_info')
@@ -81,7 +85,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // 6. Proxy Check
     let disqualificationReason: string | null = null;
 
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
@@ -97,7 +100,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // 7. Geofence & Spoof Check
     let isSpoofed = false;
     let bestPing = telemetry[0];
 
@@ -113,7 +115,8 @@ export async function POST(request: Request) {
       if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
     }
 
-    if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) isSpoofed = true;
+    const allZeroAcc = (telemetry as Telemetry[]).every((t: Telemetry) => t.acc === 0);
+    if (telemetry.length >= 3 && totalDrift < 0.5 && allZeroAcc) isSpoofed = true;
 
     if (isSpoofed) {
       disqualificationReason = 'gps-spoof-pattern';
@@ -121,7 +124,6 @@ export async function POST(request: Request) {
 
     const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
 
-    // 8. Determine Final Status
     let finalStatus = 'absent';
     let responseMessage = `You are ${Math.round(distanceToLecturer)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
 
@@ -138,13 +140,11 @@ export async function POST(request: Request) {
       finalStatus = 'flagged';
     }
 
-    // 9. Retry Guard (Spoofers/Proxies stay disqualified forever)
     if (existingLog) {
       if (existingLog.status === 'disqualified') {
         finalStatus = 'disqualified';
         responseMessage = "This attempt was previously disqualified. See your lecturer in person.";
       } else {
-        // Check if they were previously disqualified via device_info (backwards compatibility)
         try {
           const prevInfo = existingLog.device_info ? JSON.parse(existingLog.device_info) : {};
           if (prevInfo.disqualificationReason) {
@@ -155,7 +155,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // 10. Insert or Update
     const deviceInfoPayload = JSON.stringify({ 
       telemetry, 
       evaluatedAccuracy: bestPing.acc, 
