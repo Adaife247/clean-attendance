@@ -283,7 +283,30 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
-  // REMOVED: visibilitychange auto-lock. The student can now freely switch tabs.
+  // NEW: Active 15-minute countdown timer
+  useEffect(() => {
+    if (!records) return;
+
+    const checkLockTimer = () => {
+      const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
+      const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
+      
+      // If the time has passed, lock the portal
+      if (Date.now() - lastUnlockedTime >= PORTAL_UNLOCK_GRACE_MS) {
+        safeStorage.remove('campuscheck_portal_unlocked_at');
+        setRecords(null);
+        setHistory(null);
+        setNickname('');
+        setSavedNickname('');
+        setUnlockState('idle');
+        setUnlockError('Your portal session expired for security reasons. Please unlock again.');
+      }
+    };
+
+    // Check every 30 seconds
+    const interval = setInterval(checkLockTimer, 30000);
+    return () => clearInterval(interval);
+  }, [records]);
 
   useEffect(() => {
     const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
