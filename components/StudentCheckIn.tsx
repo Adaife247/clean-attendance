@@ -289,6 +289,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
+        
+        // NEW: Track check-ins for the PWA installer logic
+        const currentCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+        localStorage.setItem('campuscheck_checkin_count', String(currentCount + 1));
+
       } else if (result.status === 'disqualified') {
         setErrorMessage(result.message || "This attempt has been flagged as invalid.");
         setStatus('disqualified');

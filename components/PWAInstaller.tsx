@@ -6,34 +6,51 @@ interface NavigatorWithStandalone extends Navigator {
   standalone?: boolean;
 }
 
-const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
 export default function PWAInstaller() {
   const [showPrompt, setShowPrompt] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
     const id = setTimeout(() => {
       const ua = window.navigator.userAgent;
-      const isIosDevice = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
+      const iosDevice = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
+      setIsIOS(iosDevice);
 
       const nav = window.navigator as NavigatorWithStandalone;
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 
-      // NEW: Check if dismissed recently (within 7 days)
-      const dismissedAt = localStorage.getItem('campuscheck_pwa_dismissed_at');
-      const dismissedTime = dismissedAt ? parseInt(dismissedAt, 10) : 0;
-      const isRecentlyDismissed = Date.now() - dismissedTime < DISMISS_DURATION_MS;
+      // If they already installed it, never show
+      if (isStandalone) return;
 
-      if (isIosDevice && !isStandalone && !isRecentlyDismissed) {
-        setShowPrompt(true);
-      }
+      // Count dismissals — not days
+      const dismissalCount = parseInt(localStorage.getItem('campuscheck_pwa_dismiss_count') || '0', 10);
+
+      // After 3 dismissals, permanently stop
+      if (dismissalCount >= 3) return;
+
+      // Only show after they've demonstrated intent:
+      // - Successfully checked into at least 1 class
+      const checkinCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+      if (checkinCount < 1) return;
+
+      // Show if enough new check-ins since their last dismissal
+      const lastDismissedAt = parseInt(localStorage.getItem('campuscheck_pwa_last_dismissed_checkin_count') || '0', 10);
+      const requiredCheckinsSinceDismiss = dismissalCount === 0 ? 1 : dismissalCount === 1 ? 3 : 10;
+
+      if (checkinCount - lastDismissedAt < requiredCheckinsSinceDismiss) return;
+
+      setShowPrompt(true);
     }, 0);
 
     return () => clearTimeout(id);
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem('campuscheck_pwa_dismissed_at', String(Date.now()));
+    const currentCheckins = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+    const currentDismissCount = parseInt(localStorage.getItem('campuscheck_pwa_dismiss_count') || '0', 10);
+
+    localStorage.setItem('campuscheck_pwa_dismiss_count', String(currentDismissCount + 1));
+    localStorage.setItem('campuscheck_pwa_last_dismissed_checkin_count', String(currentCheckins));
     setShowPrompt(false);
   };
 
@@ -54,15 +71,29 @@ export default function PWAInstaller() {
             <Download size={20} />
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 text-sm">Install CampusCheck App</h3>
-            <p className="text-xs text-gray-500 font-medium">Required for reliable notifications on iPhone</p>
+            <h3 className="font-bold text-gray-900 text-sm">
+              {isIOS ? 'Install CampusCheck App' : 'Add CampusCheck to Home Screen'}
+            </h3>
+            <p className="text-xs text-gray-500 font-medium">
+              {isIOS ? 'Required for reliable notifications on iPhone' : 'Faster check-ins, no browser needed'}
+            </p>
           </div>
         </div>
 
         <div className="space-y-3 text-sm text-gray-700 font-medium">
-          <p>1. Tap the <strong>Share</strong> button at the bottom of Safari <Share size={14} className="inline mx-1 text-blue-600 mb-1" /></p>
-          <p>2. Scroll down and tap <strong>Add to Home Screen</strong> <PlusSquare size={14} className="inline mx-1 text-gray-800 mb-1" /></p>
-          <p>3. Open the app from your home screen to enable instant alerts!</p>
+          {isIOS ? (
+            <>
+              <p>1. Tap the <strong>Share</strong> button at the bottom of Safari <Share size={14} className="inline mx-1 text-blue-600 mb-1" /></p>
+              <p>2. Scroll down and tap <strong>Add to Home Screen</strong> <PlusSquare size={14} className="inline mx-1 text-gray-800 mb-1" /></p>
+              <p>3. Open the app from your home screen to enable instant alerts!</p>
+            </>
+          ) : (
+            <>
+              <p>1. Tap the <strong>menu icon</strong> (three dots) in Chrome.</p>
+              <p>2. Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+              <p>3. Open from your home screen for faster access.</p>
+            </>
+          )}
         </div>
       </div>
     </div>
