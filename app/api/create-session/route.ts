@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
@@ -9,7 +11,7 @@ export async function POST(request: Request) {
     const courseCodeToSave = body.courseCode || body.course_code;
     const isRepStarting = body.startedBy === 'Class Rep';
     
-    // FIX: Await the headers properly in Next.js 15/16 to get the real IP
+    // Await the headers properly in Next.js 15/16 to get the real IP
     const headersList = await headers();
     const forwarded = headersList.get('x-forwarded-for');
     const lecturerIp = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown-ip');
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
         course_code: courseCodeToSave,
         anchor_latitude: body.latitude || body.lat,
         anchor_longitude: body.longitude || body.lng,
-        anchor_ip: lecturerIp, // Saves the real IP now
+        anchor_ip: lecturerIp, 
         is_active: true,
         expires_at: expiresAt,
         checkin_opens_after_minutes: checkinOpensAfterMinutes,
