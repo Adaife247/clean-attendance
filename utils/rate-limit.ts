@@ -1,17 +1,14 @@
 // ─── utils/rate-limit.ts ───
 // In-memory sliding-window rate limiter.
-//
-// Works: single Vercel instance, small user base.
-// Fails: multi-region scaling (each instance has its own memory).
-//
-// To upgrade to Redis (Upstash): replace `hits` Map with a Redis call.
-// Signature and behavior stay identical — only the storage layer changes.
 
 import { RATE_LIMIT_WINDOW_MS } from './constants';
 
 type Bucket = { count: number; resetAt: number };
 
 const hits = new Map<string, Bucket>();
+
+// Hard cap to prevent memory exhaustion from fake IP floods
+const MAX_MAP_SIZE = 5000;
 
 // Periodic cleanup so the Map doesn't grow forever
 let cleanupScheduled = false;
@@ -43,6 +40,12 @@ export function checkRateLimit(
   const existing = hits.get(identifier);
 
   if (!existing || existing.resetAt < now) {
+    // NEW: If the map is getting too large, force-delete the oldest 1000 entries
+    if (hits.size >= MAX_MAP_SIZE) {
+      const keysToDelete = Array.from(hits.keys()).slice(0, 1000);
+      keysToDelete.forEach(k => hits.delete(k));
+    }
+
     const bucket: Bucket = { count: 1, resetAt: now + windowMs };
     hits.set(identifier, bucket);
     return { allowed: true, remaining: limit - 1, resetAt: bucket.resetAt };
