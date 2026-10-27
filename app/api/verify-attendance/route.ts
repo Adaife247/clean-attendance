@@ -15,7 +15,6 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
 
 export async function POST(request: Request) {
   try {
-    // 1. Rate Limiting (20 attempts per minute per IP)
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['verify-attendance'];
     const rateCheck = checkRateLimit(`verify-att:${ip}`, limit);
@@ -40,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
     }
 
-    // 2. Fetch Session using ADMIN client
+    // 2. Fetch Session
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
     if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
     if (session.expires_at && new Date() > new Date(session.expires_at)) return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
 
-    // 3. SERVER-SIDE ENFORCEMENT of the wait time
+    // 3. Wait Time
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
     if (opensAfter > 0 && session.created_at) {
       const sessionStart = new Date(session.created_at).getTime();
@@ -63,17 +62,17 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Hard Reject: Enrollment Check
+    // 4. Enrollment Check
     const { data: courseRow } = await supabase.from('courses').select('id').eq('course_code', session.course_code).limit(1).maybeSingle();
     if (!courseRow) return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
 
     const { data: enrollment } = await supabase.from('enrollments').select('id').eq('course_id', courseRow.id).eq('matric_number', cleanMatric).maybeSingle();
     if (!enrollment) return NextResponse.json({ message: `You are not registered for ${session.course_code}. Please contact your lecturer.` }, { status: 403 });
 
-    // 5. Check for Existing Log
+    // 5. Existing Log Check
     const { data: existingLog } = await supabase
       .from('attendance_logs')
-      .select('id, status')
+      .select('id, status, device_info')
       .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
@@ -82,7 +81,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
     }
 
-    // 6. Hard Reject: Proxy Check
+    // 6. Proxy Check
+    let disqualificationReason: string | null = null;
+
     if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
       const { data: ghostLogs } = await supabase
         .from('attendance_logs')
@@ -92,11 +93,11 @@ export async function POST(request: Request) {
         .eq('status', 'verified');
 
       if (ghostLogs && ghostLogs.length > 0) {
-        return NextResponse.json({ status: 'rejected', message: "Security Block: This device has already been used for another student." }, { status: 403 });
+        disqualificationReason = 'proxy-device-reuse';
       }
     }
 
-    // 7. Geofence & Anomaly Check
+    // 7. Geofence & Spoof Check
     let isSpoofed = false;
     let bestPing = telemetry[0];
 
@@ -114,30 +115,60 @@ export async function POST(request: Request) {
 
     if (telemetry.length >= 3 && totalDrift < 0.5 && bestPing.acc === 0) isSpoofed = true;
 
-    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
-
-    if (distanceToLecturer > GEOFENCE_HARD_BLOCK_METERS) {
-      return NextResponse.json({ status: 'rejected', distance: Math.round(distanceToLecturer), message: "out of bounds" }, { status: 403 });
+    if (isSpoofed) {
+      disqualificationReason = 'gps-spoof-pattern';
     }
 
+    const distanceToLecturer = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, bestPing.lat, bestPing.lng);
+
+    // 8. Determine Final Status
     let finalStatus = 'absent';
     let responseMessage = `You are ${Math.round(distanceToLecturer)}m away (max: ${GEOFENCE_RADIUS_METERS}m).`;
 
-    if (distanceToLecturer <= GEOFENCE_RADIUS_METERS) {
-      if (isSpoofed) {
-        finalStatus = 'flagged';
-        responseMessage = "Location anomaly detected. Please see lecturer.";
+    if (disqualificationReason) {
+      finalStatus = 'disqualified';
+      responseMessage = "This attempt has been flagged as invalid. Please see your lecturer in person.";
+    } else if (distanceToLecturer > GEOFENCE_HARD_BLOCK_METERS) {
+      finalStatus = 'flagged';
+      responseMessage = "out of bounds";
+    } else if (distanceToLecturer <= GEOFENCE_RADIUS_METERS) {
+      finalStatus = 'verified';
+      responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
+    } else {
+      finalStatus = 'flagged';
+    }
+
+    // 9. Retry Guard (Spoofers/Proxies stay disqualified forever)
+    if (existingLog) {
+      if (existingLog.status === 'disqualified') {
+        finalStatus = 'disqualified';
+        responseMessage = "This attempt was previously disqualified. See your lecturer in person.";
       } else {
-        finalStatus = 'verified';
-        responseMessage = verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified";
+        // Check if they were previously disqualified via device_info (backwards compatibility)
+        try {
+          const prevInfo = existingLog.device_info ? JSON.parse(existingLog.device_info) : {};
+          if (prevInfo.disqualificationReason) {
+            finalStatus = 'disqualified';
+            responseMessage = "This attempt was previously disqualified. See your lecturer in person.";
+          }
+        } catch {}
       }
     }
 
-    // 8. Insert or Update using ADMIN client
+    // 10. Insert or Update
+    const deviceInfoPayload = JSON.stringify({ 
+      telemetry, 
+      evaluatedAccuracy: bestPing.acc, 
+      distanceMeters: Math.round(distanceToLecturer), 
+      deviceFingerprint, 
+      verificationMethod,
+      disqualificationReason
+    });
+
     if (existingLog) {
       await supabase.from('attendance_logs').update({
         status: finalStatus,
-        device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc, distanceMeters: Math.round(distanceToLecturer), deviceFingerprint, verificationMethod }),
+        device_info: deviceInfoPayload,
         device_hash: hardwareFingerprint || 'unknown-hardware',
       }).eq('id', existingLog.id);
     } else {
@@ -145,7 +176,7 @@ export async function POST(request: Request) {
         session_id: sessionId,
         matric_number: cleanMatric,
         status: finalStatus,
-        device_info: JSON.stringify({ telemetry, evaluatedAccuracy: bestPing.acc, distanceMeters: Math.round(distanceToLecturer), deviceFingerprint, verificationMethod }),
+        device_info: deviceInfoPayload,
         device_hash: hardwareFingerprint || 'unknown-hardware',
       }]);
     }

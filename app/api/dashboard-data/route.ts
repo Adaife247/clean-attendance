@@ -29,7 +29,6 @@ export async function GET(request: Request) {
 
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    // Verify ownership
     const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
     if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
@@ -41,7 +40,11 @@ export async function GET(request: Request) {
       .eq('session_id', sessionId)
       .order('check_in_time', { ascending: false });
 
-    const matrics = (logs || []).map(l => l.matric_number);
+    // NEW: Hide disqualified logs from the live dashboard view
+    const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
+    const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
+
+    const matrics = visibleLogs.map(l => l.matric_number);
     const { data: profiles } = await supabase
       .from('student_profiles')
       .select('matric_number, nickname')
@@ -54,7 +57,8 @@ export async function GET(request: Request) {
       course: courseName,
       isActive: session?.is_active === true,
       createdAt: session?.created_at || null,
-      logs: (logs as AttendanceLogRow[] | null || []).map((l) => {
+      hiddenDisqualifiedCount: disqualifiedCount,
+      logs: visibleLogs.map((l) => {
         let reason = null;
         let isBiometric = false;
         

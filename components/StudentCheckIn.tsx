@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
-  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin, ShieldAlert
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
@@ -24,7 +24,7 @@ interface OfflineQueueItem {
 
 type Status =
   | 'idle' | 'checking' | 'needs_setup' | 'ready'
-  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed'
+  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'disqualified'
   | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
@@ -267,6 +267,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
             setStatus('rating');
           }, 2500);
         }
+      } else if (result.status === 'disqualified') {
+        setErrorMessage(result.message || "This attempt has been flagged as invalid.");
+        setStatus('disqualified');
       } else if (result.status === 'flagged' || response.status === 403) {
         setErrorMessage(result.message || "Verification failed.");
         setStatus('failed');
@@ -411,7 +414,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (!skip) {
         await fetch('/api/rate-session', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
+          body: JSON.stringify({ sessionId, matricNumber, rating: ratingStars, tags: ratingTags })
         });
       }
     } catch {}
@@ -581,6 +584,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 </>
               )}
               <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
+            </div>
+          </div>
+        )}
+
+        {status === 'disqualified' && (
+          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ShieldAlert className="w-16 h-16 text-red-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900">Attempt Disqualified</h3>
+            <p className="text-red-700 mt-2 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100">
+              {errorMessage}
+            </p>
+            <div className="mt-6 space-y-3">
+              <p className="text-sm text-gray-600 font-medium">You cannot retry this check-in. Please show this screen to your lecturer.</p>
+              <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">Return to Portal</button>
             </div>
           </div>
         )}

@@ -3,6 +3,7 @@ import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
 interface RateBody {
   sessionId: string;
+  matricNumber: string;
   rating: number;
   tags: string[];
 }
@@ -10,10 +11,24 @@ interface RateBody {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RateBody;
-    const { sessionId, rating, tags } = body;
+    const { sessionId, matricNumber, rating, tags } = body;
 
-    if (!sessionId || typeof rating !== 'number' || rating < 1 || rating > 5) {
+    if (!sessionId || !matricNumber || typeof rating !== 'number' || rating < 1 || rating > 5) {
       return NextResponse.json({ error: 'Invalid rating payload' }, { status: 400 });
+    }
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    // NEW: Verify the student actually checked in and was verified
+    const { data: log } = await supabase
+      .from('attendance_logs')
+      .select('status')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (!log || log.status !== 'verified') {
+      return NextResponse.json({ error: 'You must be verified to rate this session.' }, { status: 403 });
     }
 
     const cleanTags = Array.isArray(tags)
