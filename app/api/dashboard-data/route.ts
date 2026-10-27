@@ -40,7 +40,6 @@ export async function GET(request: Request) {
       .eq('session_id', sessionId)
       .order('check_in_time', { ascending: false });
 
-    // NEW: Hide disqualified logs from the live dashboard view
     const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
     const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
 
@@ -77,12 +76,19 @@ export async function GET(request: Request) {
           } catch {}
         }
         
+        // FIX: Force formatting to West Africa Time (or your local timezone) to prevent 1-hour offset
+        const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Africa/Lagos' // Adjust this if your university is in a different timezone
+        });
+
         return {
           id: l.id,
           matricNumber: l.matric_number,
           nickname: nicknameMap.get(l.matric_number) || null,
           status: l.status,
-          time: new Date(l.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: localTimeString,
           reason,
           isBiometric
         };

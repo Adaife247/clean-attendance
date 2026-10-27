@@ -66,7 +66,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const fingerprintRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Wrap initial state updates in setTimeout to avoid React hydration warnings
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
       const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
@@ -77,7 +76,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setMatricNumber(savedMatric.toUpperCase());
       }
 
-      // Detect Device Type for Location Instructions
       const ua = navigator.userAgent;
       if (/iPad|iPhone|iPod/.test(ua)) {
         setDeviceType('ios');

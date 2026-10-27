@@ -283,16 +283,7 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && records) {
-        safeStorage.remove('campuscheck_portal_unlocked_at');
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [records]);
+  // REMOVED: visibilitychange auto-lock. The student can now freely switch tabs.
 
   useEffect(() => {
     const saved = safeStorage.getString(FEED_LAST_SEEN_KEY);
