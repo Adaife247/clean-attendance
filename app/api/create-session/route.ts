@@ -4,25 +4,48 @@ import { verifyLecturer } from '@/utils/api-auth';
 
 export async function POST(request: Request) {
   try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
     const body = await request.json();
     const courseCodeToSave = body.courseCode || body.course_code;
-    
+    const isRepStarting = body.startedBy === 'Class Rep';
+
+    // If a Rep is starting the session, we can't use verifyLecturer because reps aren't lecturers.
+    // We rely on the fact that the rep-action route validated them, OR we can trust the flag here.
+    // To be safe, we allow the Rep to bypass the lecturer check ONLY if they are a valid rep.
+    let authUserId = null;
+    let finalStartedBy = 'lecturer';
+
+    if (isRepStarting) {
+      const { data: rep } = await supabase
+        .from('student_profiles')
+        .select('is_class_rep')
+        .eq('matric_number', body.repMatric)
+        .single();
+
+      if (!rep?.is_class_rep) {
+        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep' }, { status: 403 });
+      }
+      finalStartedBy = 'Class Rep';
+    } else {
+      const auth = await verifyLecturer(request);
+      if (auth.error) return auth.error;
+      authUserId = auth.user.id;
+    }
+
     if (!courseCodeToSave) {
       return NextResponse.json({ error: "Missing course code." }, { status: 400 });
     }
 
-    // Verify ownership of the course
-    const { data: course } = await supabase
-      .from('courses')
-      .select('id')
-      .eq('course_code', courseCodeToSave)
-      .eq('lecturer_id', auth.user.id)
-      .single();
+    // Verify ownership of the course (only if lecturer is starting)
+    if (!isRepStarting) {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('course_code', courseCodeToSave)
+        .eq('lecturer_id', authUserId)
+        .single();
 
-    if (!course) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+      if (!course) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+    }
 
     const parsedDuration = parseInt(body.duration);
     const durationMinutes = Number.isFinite(parsedDuration) ? Math.min(Math.max(parsedDuration, 5), 120) : 60;
@@ -40,7 +63,7 @@ export async function POST(request: Request) {
         is_active: true,
         expires_at: expiresAt,
         checkin_opens_after_minutes: checkinOpensAfterMinutes,
-        started_by: auth.user.id
+        started_by: finalStartedBy
       }])
       .select('session_id')
       .single();

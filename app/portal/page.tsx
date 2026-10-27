@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { safeStorage } from '@/utils/safe-storage';
-import { STORAGE_KEYS } from '@/utils/constants';
+import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
 
 interface CourseRecord {
   course_code: string;
@@ -38,7 +38,6 @@ const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
 const POLL_INTERVAL_MS = 30000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
-const PORTAL_UNLOCK_GRACE_MS = 30 * 60 * 1000;
 const getCurrentTimestamp = () => Date.now();
 
 const TABS = [
@@ -624,13 +623,14 @@ export default function StudentPortal() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              courseCode: course.course_code,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              duration: 60, 
-              checkinOpensAfter: 0, 
-              startedBy: 'Class Rep'
-            })
+  courseCode: course.course_code,
+  latitude: position.coords.latitude,
+  longitude: position.coords.longitude,
+  duration: 60, 
+  checkinOpensAfter: 0, 
+  startedBy: 'Class Rep',
+  repMatric: matricNumber
+})
           });
 
           const data = await res.json();

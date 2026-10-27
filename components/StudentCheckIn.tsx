@@ -58,6 +58,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+  const [isIosFallback, setIsIosFallback] = useState(false);
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
@@ -281,8 +282,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
-        existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
-        safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
+        
+        // NEW: Prevent duplicate offline queue entries for the same session
+        if (!existing.some(item => item.session === sessionId)) {
+          existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
+          safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
+        }
         setStatus('offline-queued');
       } else {
         setErrorMessage("Server connection lost.");
@@ -297,6 +302,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     let verificationMethod = 'skipped';
 
     const skipWebAuthn = isIosNonSafari();
+    if (skipWebAuthn) setIsIosFallback(true);
 
     if (!skipWebAuthn) {
       try {
@@ -512,6 +518,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
             <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
             <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. Hang tight...</p>
+            {/* NEW: iOS Fallback Note */}
+            {isIosFallback && (
+              <p className="text-xs text-blue-600 font-bold mt-2">Note: Biometrics aren&apos;t supported on this browser. Verified via GPS.</p>
+            )}
           </div>
         )}
 
