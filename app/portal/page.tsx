@@ -12,6 +12,7 @@ import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
 import { usePushNotifications } from '@/utils/usePushNotifications';
+import PWAInstaller from '@/components/PWAInstaller';
 
 interface CourseRecord {
   course_code: string;
@@ -89,7 +90,6 @@ export default function StudentPortal() {
   const confirm = useConfirmModal();
   const autoLoadAttempted = useRef(false);
   
-  // PUSH NOTIFICATIONS HOOK
   const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications(matricNumber);
 
   const fetchStudentData = useCallback(async (cleanMatric: string) => {
@@ -881,7 +881,6 @@ export default function StudentPortal() {
               {activeTab === 'dashboard' && (
                 <div className="space-y-5 animate-in fade-in">
                   
-                  {/* PUSH NOTIFICATION PROMPT */}
                   {isSupported && permission !== 'granted' && !isSubscribed && (
                     <div className="bg-gray-900 text-white p-4 rounded-2xl flex items-center justify-between mb-4 animate-in slide-in-from-top-4 shadow-lg">
                       <div className="flex items-center gap-3">
@@ -1183,6 +1182,8 @@ export default function StudentPortal() {
           </div>
         </div>
       </div>
+      
+      <PWAInstaller />
       <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>
   );
