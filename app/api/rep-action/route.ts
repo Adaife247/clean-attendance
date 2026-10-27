@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +18,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
     }
 
+    // 2. Ensure they are enrolled in the course for this session
+    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
+    if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).single();
+
+    const { data: enrollment } = await supabase.from('enrollments')
+      .select('id')
+      .eq('course_id', course?.id)
+      .eq('matric_number', repMatric)
+      .single();
+
+    if (!enrollment) {
+      return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
+    }
+
     if (action === 'log_dead_battery') {
       if (!sessionId || !matricNumber) {
         return NextResponse.json({ error: "Missing session or matric" }, { status: 400 });
@@ -24,20 +41,16 @@ export async function POST(request: Request) {
 
       const cleanMatric = matricNumber.toUpperCase().trim();
 
-      // 2. Check the 3-student cap
-      const { count, error: countError } = await supabase
+      const { count } = await supabase
         .from('attendance_logs')
         .select('*', { count: 'exact', head: true })
         .eq('session_id', sessionId)
-        .eq('device_hash', 'rep-battery-log'); // We use this hash to track Rep logs
-
-      if (countError) throw countError;
+        .eq('device_hash', 'rep-battery-log');
 
       if (count !== null && count >= 3) {
         return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
       }
 
-      // 3. Check if the student already has a log
       const { data: existingLog } = await supabase
         .from('attendance_logs')
         .select('id, status')
@@ -49,14 +62,12 @@ export async function POST(request: Request) {
         if (existingLog.status === 'verified') {
            return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
         }
-        // Update existing log to pending_override
         await supabase.from('attendance_logs').update({
           status: 'pending_override',
           device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
           device_hash: 'rep-battery-log'
         }).eq('id', existingLog.id);
       } else {
-        // Insert new log
         await supabase.from('attendance_logs').insert([{
           session_id: sessionId,
           matric_number: cleanMatric,
@@ -71,7 +82,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
-    console.error("Rep Action Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
 
 export async function POST(request: Request) {
   try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     const rawMatric = body.matricNumber;
 
@@ -12,8 +16,6 @@ export async function POST(request: Request) {
 
     const cleanMatric = String(rawMatric).toUpperCase().trim();
 
-    // Delete the device binding. This forces the student to re-register a new passkey.
-    // Their attendance history remains perfectly intact in the attendance_logs table.
     const { error } = await supabase
       .from('user_devices')
       .delete()
@@ -24,8 +26,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
 
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("Device Reset Error:", msg);
     return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
   }
 }

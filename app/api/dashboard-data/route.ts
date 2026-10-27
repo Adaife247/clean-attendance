@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
 
 interface AttendanceLogRow {
   id: string;
@@ -12,18 +13,25 @@ interface AttendanceLogRow {
 
 export async function GET(request: Request) {
   try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-    const { data: session, error: sessionError } = await supabase
+    const { data: session } = await supabase
       .from('lecture_sessions')
       .select('is_active, course_code, created_at')
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError) console.error("Session Error:", sessionError.message);
+    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+
+    // Verify ownership
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
     const courseName = session?.course_code || "Unknown Course";
 
@@ -33,7 +41,6 @@ export async function GET(request: Request) {
       .eq('session_id', sessionId)
       .order('check_in_time', { ascending: false });
 
-    // Fetch nicknames for the students who checked in
     const matrics = (logs || []).map(l => l.matric_number);
     const { data: profiles } = await supabase
       .from('student_profiles')

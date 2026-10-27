@@ -27,12 +27,11 @@ interface PastSession { session_id: string; created_at: string; course_code: str
 const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
 const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 const ACTIVE_SESSION_KEY = 'active_attendance_session';
-const SESSION_EXPIRY_POLL_MS = 30000; // 30 seconds
+const SESSION_EXPIRY_POLL_MS = 30000;
 
 export default function LecturerDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
-  const [lecturerId, setLecturerId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
 
@@ -63,6 +62,14 @@ export default function LecturerDashboard() {
 
   const confirm = useConfirmModal();
 
+  const getHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token || ''}`
+    };
+  };
+
   const clearStaleSession = useCallback((reason?: string) => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     setActiveSessionId(null);
@@ -76,8 +83,6 @@ export default function LecturerDashboard() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
       
-      setLecturerId(session.user.id);
-
       const { data: profileData } = await supabase.from('lecturers').select('full_name, department').eq('id', session.user.id).single();
       if (profileData) setProfile({ full_name: profileData.full_name, department: profileData.department });
 
@@ -91,17 +96,12 @@ export default function LecturerDashboard() {
     return () => clearTimeout(id);
   }, [router]);
 
-  // ✅ FIX: On mount, check BOTH is_active AND expires_at
   useEffect(() => {
     const timeoutId = window.setTimeout(async () => {
       const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
       if (!savedSession) return;
 
-      const { data } = await supabase
-        .from('lecture_sessions')
-        .select('is_active, expires_at')
-        .eq('session_id', savedSession)
-        .single();
+      const { data } = await supabase.from('lecture_sessions').select('is_active, expires_at').eq('session_id', savedSession).single();
 
       if (!data) {
         localStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -114,24 +114,17 @@ export default function LecturerDashboard() {
         setActiveSessionId(savedSession);
       } else {
         localStorage.removeItem(ACTIVE_SESSION_KEY);
-        if (isExpired) {
-          setExpiredMessage('The previous session expired while you were away.');
-        }
+        if (isExpired) setExpiredMessage('The previous session expired while you were away.');
       }
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  // ✅ FIX: Poll every 30s to auto-expire the session
   useEffect(() => {
     if (!activeSessionId) return;
 
     const checkExpiry = async () => {
-      const { data } = await supabase
-        .from('lecture_sessions')
-        .select('is_active, expires_at')
-        .eq('session_id', activeSessionId)
-        .single();
+      const { data } = await supabase.from('lecture_sessions').select('is_active, expires_at').eq('session_id', activeSessionId).single();
 
       if (!data) {
         clearStaleSession('This session no longer exists.');
@@ -142,11 +135,7 @@ export default function LecturerDashboard() {
       const isManuallyEnded = !data.is_active;
 
       if (isExpired || isManuallyEnded) {
-        clearStaleSession(
-          isManuallyEnded 
-            ? 'This session was ended.' 
-            : 'Time is up. The session expired.'
-        );
+        clearStaleSession(isManuallyEnded ? 'This session was ended.' : 'Time is up. The session expired.');
       }
     };
 
@@ -157,9 +146,7 @@ export default function LecturerDashboard() {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     const id = navigator.geolocation.watchPosition(
-      (position) => {
-        prewarmPosRef.current = { lat: position.coords.latitude, lng: position.coords.longitude, acc: position.coords.accuracy, ts: Date.now() };
-      },
+      (position) => { prewarmPosRef.current = { lat: position.coords.latitude, lng: position.coords.longitude, acc: position.coords.accuracy, ts: Date.now() }; },
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
@@ -171,9 +158,12 @@ export default function LecturerDashboard() {
     const course = courses.find(c => c.id === selectedCourseId);
     if (!course) return;
     try {
-      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`);
+      const headers = await getHeaders();
+      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`, { headers });
       if (response.ok) setPastSessions(await response.json());
-    } catch { console.error("Failed to load history"); }
+    } catch { 
+      console.error("Failed to load history"); 
+    }
   }, [courses, selectedCourseId]);
 
   useEffect(() => {
@@ -192,8 +182,10 @@ export default function LecturerDashboard() {
     const executeSessionCreation = async (lat: number, lng: number) => {
       setSetupError("Creating session...");
       try {
+        const headers = await getHeaders();
         const response = await fetch('/api/create-session', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', 
+          headers,
           body: JSON.stringify({ courseId: selectedCourseId, courseCode: courses.find(c => c.id === selectedCourseId)?.course_code, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })
         });
         if (response.ok) {
@@ -202,8 +194,14 @@ export default function LecturerDashboard() {
           try { localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
           setActiveSessionId(result.sessionId);
           setViewMode('live');
-        } else { setSetupError("Failed to create session on server."); }
-      } catch { setSetupError("Network error. Please try again."); } finally { setIsStarting(false); }
+        } else { 
+          setSetupError("Failed to create session on server."); 
+        }
+      } catch { 
+        setSetupError("Network error. Please try again."); 
+      } finally { 
+        setIsStarting(false); 
+      }
     };
 
     try {
@@ -300,13 +298,14 @@ export default function LecturerDashboard() {
       'Students will no longer be able to check in. This cannot be undone.',
       async () => {
         try {
+          const headers = await getHeaders();
           await fetch('/api/end-session', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ sessionId: activeSessionId }),
           });
-        } catch (e) {
-          console.error('Failed to notify server', e);
+        } catch (err) {
+          console.error('Failed to notify server', err);
         }
         clearStaleSession('Session ended. Ready for the next one.');
       },
@@ -317,9 +316,14 @@ export default function LecturerDashboard() {
   const fetchDashboardData = useCallback(async () => {
     if (!activeSessionId) return;
     try {
-      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`);
-      if (response.ok) { setData(await response.json()); }
-    } catch { console.error("Failed to fetch data"); }
+      const headers = await getHeaders();
+      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}`, { headers });
+      if (response.ok) { 
+        setData(await response.json()); 
+      }
+    } catch { 
+      console.error("Failed to fetch data"); 
+    }
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -355,13 +359,13 @@ export default function LecturerDashboard() {
 
     setIsOverriding(true);
     try {
+      const headers = await getHeaders();
       const response = await fetch('/api/override-attendance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           sessionId: activeSessionId,
           matricNumber: safeMatric,
-          lecturerId,
         }),
       });
       if (response.ok) {
@@ -390,9 +394,10 @@ export default function LecturerDashboard() {
       async () => {
         setIsResetting(true);
         try {
+          const headers = await getHeaders();
           const response = await fetch('/api/reset-device', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ matricNumber: safeMatric }),
           });
           if (response.ok) {
@@ -437,7 +442,8 @@ export default function LecturerDashboard() {
   const downloadPastSession = async (sessionId: string, dateString: string, courseCode: string) => {
     setDownloadingId(sessionId);
     try {
-      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+      const headers = await getHeaders();
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
       if (!response.ok) throw new Error("Failed to fetch");
       const pastData = await response.json();
       generateAndDownloadCSV(pastData.logs, courseCode, dateString, true);
@@ -449,7 +455,8 @@ export default function LecturerDashboard() {
 
   const viewPastLedger = async (session: PastSession) => {
     setViewingPastSession(session);
-    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}`);
+    const headers = await getHeaders();
+    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}`, { headers });
     if (response.ok) {
       const result = await response.json();
       setPastSessionLogs(result.logs);
@@ -476,10 +483,7 @@ export default function LecturerDashboard() {
                 <p className="font-bold text-amber-900 text-sm">{expiredMessage}</p>
                 <p className="text-xs text-amber-700 font-medium mt-1">Start a new session below, or review past records.</p>
               </div>
-              <button
-                onClick={() => setExpiredMessage('')}
-                className="text-amber-600 hover:text-amber-800 text-xs font-bold"
-              >
+              <button onClick={() => setExpiredMessage('')} className="text-amber-600 hover:text-amber-800 text-xs font-bold">
                 Dismiss
               </button>
             </div>
@@ -648,7 +652,6 @@ export default function LecturerDashboard() {
     <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Header Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div>
@@ -687,7 +690,6 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
-        {/* LECTURER ACTION BAR */}
         <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -703,7 +705,6 @@ export default function LecturerDashboard() {
           </div>
         </div>
 
-        {/* TABBED LEDGER */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="flex border-b border-gray-100">
             <button 
