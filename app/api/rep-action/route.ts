@@ -1,8 +1,22 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
+import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
 export async function POST(request: Request) {
   try {
+    // NEW: Rate limiting (10 attempts/min per IP)
+    const ip = getClientIp(request);
+    const limit = RATE_LIMIT_DEFAULTS['rep-action'];
+    const rateCheck = checkRateLimit(`rep-action:${ip}`, limit);
+
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait a minute." },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
     const body = await request.json();
     const { action, sessionId, matricNumber, repMatric } = body;
 
@@ -39,7 +53,7 @@ export async function POST(request: Request) {
 
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-    // 3. NEW: Rep must be enrolled in the EXACT course row
+    // 3. Rep must be enrolled in the EXACT course row
     const { data: repEnrollment } = await supabase
       .from('enrollments')
       .select('id')
