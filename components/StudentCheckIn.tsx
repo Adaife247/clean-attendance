@@ -63,7 +63,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
-  const hasTransitionedRef = useRef(false);
 
   useEffect(() => {
     const urlMatric = searchParams.get('matric');
@@ -275,13 +274,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
-        
-        if (!hasTransitionedRef.current) {
-          hasTransitionedRef.current = true;
-          setTimeout(() => {
-            setStatus('rating');
-          }, 2500);
-        }
       } else if (result.status === 'disqualified') {
         setErrorMessage(result.message || "This attempt has been flagged as invalid.");
         setStatus('disqualified');
@@ -530,10 +522,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
             <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
             <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
-            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded. Hang tight...</p>
+            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded.</p>
             {isIosFallback && (
               <p className="text-xs text-blue-600 font-bold mt-2">Note: Biometrics aren&apos;t supported on this browser. Verified via GPS.</p>
             )}
+            
+            <div className="mt-8 space-y-3">
+              <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">
+                Rate this Lecture
+              </button>
+              <button onClick={() => router.push('/portal')} className="w-full bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-all">
+                Return to Portal
+              </button>
+            </div>
           </div>
         )}
 

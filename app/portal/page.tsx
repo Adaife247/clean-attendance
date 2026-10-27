@@ -36,7 +36,7 @@ interface AvailableCourse { id: string; course_code: string; department: string;
 const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
 const LEVELS = ['100', '200', '300', '400', '500'];
 const MATRIC_REGEX = /[\/\-]/;
-const POLL_INTERVAL_MS = 30000;
+const POLL_INTERVAL_MS = 15000; // Poll every 15s for faster live banner
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
