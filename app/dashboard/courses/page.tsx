@@ -98,6 +98,14 @@ export default function CourseManagement() {
     confirm.ask(title, message, onConfirm, { isDangerous });
   };
 
+  const getHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token || ''}`
+    };
+  };
+
   const fetchEnrollmentCounts = useCallback(async (courseIds: string[]) => {
     if (courseIds.length === 0) {
       setCourseCounts({});
@@ -182,48 +190,15 @@ export default function CourseManagement() {
     setIsSettingRep(true);
 
     try {
-      const course = courses.find(c => c.course_code === repCourseCode);
-      if (!course) throw new Error("Course not found.");
+      const headers = await getHeaders();
+      const res = await fetch('/api/set-rep', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ courseCode: repCourseCode, matricNumber: cleanMatric })
+      });
 
-      const { data: enrollment } = await supabase
-        .from('enrollments')
-        .select('id')
-        .eq('course_id', course.id)
-        .eq('matric_number', cleanMatric)
-        .maybeSingle();
-
-      if (!enrollment) {
-        confirm.ask('Not Enrolled', `❌ ${cleanMatric} is not enrolled in ${repCourseCode}.\n\nUpload the roster first, then make them a Rep.`, () => {}, { isDangerous: false });
-        setIsSettingRep(false);
-        return;
-      }
-
-      const { data: enrolledStudents } = await supabase
-        .from('enrollments')
-        .select('matric_number')
-        .eq('course_id', course.id);
-      
-      if (enrolledStudents) {
-        const allMatrics = enrolledStudents.map(e => e.matric_number);
-        const { data: existingReps } = await supabase
-          .from('student_profiles')
-          .select('matric_number')
-          .in('matric_number', allMatrics)
-          .eq('is_class_rep', true);
-
-        if (existingReps && existingReps.length > 0) {
-          for (const oldRep of existingReps) {
-            await supabase.from('student_profiles').update({ is_class_rep: false }).eq('matric_number', oldRep.matric_number);
-          }
-        }
-      }
-
-      const { error: repError } = await supabase.from('student_profiles').upsert(
-        { matric_number: cleanMatric, is_class_rep: true },
-        { onConflict: 'matric_number' }
-      );
-
-      if (repError) throw repError;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to set rep.");
 
       confirm.ask('Success', `✅ Success! ${cleanMatric} is now the Class Rep for ${repCourseCode}.`, () => {}, { isDangerous: false });
       setRepMatricInput('');
@@ -491,20 +466,15 @@ export default function CourseManagement() {
       `Grant Medical/Excused Waiver for ${cleanMatric} on ${record.date}? This will count them as present.`,
       async () => {
         try {
-          if (record.logId) {
-            await supabase.from('attendance_logs').update({
-              status: 'verified',
-              device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
-            }).eq('id', record.logId);
-          } else {
-            await supabase.from('attendance_logs').insert([{
-              session_id: record.sessionId,
-              matric_number: cleanMatric,
-              status: 'verified',
-              device_info: JSON.stringify({ method: "Medical Waiver / Excused" }),
-              device_hash: 'admin-waiver',
-            }]);
-          }
+          const headers = await getHeaders();
+          const res = await fetch('/api/override-attendance', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ sessionId: record.sessionId, matricNumber: cleanMatric })
+          });
+
+          if (!res.ok) throw new Error("Failed to grant waiver");
+
           confirm.ask('Success', 'Waiver Granted successfully!', () => {}, { isDangerous: false });
           handleStudentAudit();
         } catch {
@@ -525,9 +495,10 @@ export default function CourseManagement() {
       async () => {
         setIsWiping(true);
         try {
+          const headers = await getHeaders();
           const response = await fetch('/api/reset-device', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ matricNumber: safeMatric }),
           });
           if (response.ok) {
