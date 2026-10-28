@@ -215,45 +215,95 @@ export default function LecturerDashboard() {
       }
     };
 
+    // Fast path: use a recent anchor from localStorage if it's fresh.
     try {
       const cached = localStorage.getItem(ANCHOR_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached) as { lat: number; lng: number; ts: number };
         if (Date.now() - parsed.ts < ANCHOR_CACHE_MAX_AGE_MS) {
-          setSetupError("Using cached location..."); executeSessionCreation(parsed.lat, parsed.lng); return;
+          setSetupError("Using cached location..."); 
+          executeSessionCreation(parsed.lat, parsed.lng); 
+          return;
         }
       }
     } catch {}
 
+    // Fast path: use a recent prewarm fix if it's fresh.
     if (prewarmPosRef.current && Date.now() - prewarmPosRef.current.ts < 15000) {
-      setSetupError(`Using recent fix (±${Math.round(prewarmPosRef.current.acc)}m)...`);
-      executeSessionCreation(prewarmPosRef.current.lat, prewarmPosRef.current.lng); return;
+      const snapshot = prewarmPosRef.current;
+      setSetupError(`Using recent fix (±${Math.round(snapshot.acc)}m)...`);
+      executeSessionCreation(snapshot.lat, snapshot.lng); 
+      return;
     }
 
-    let watchId = 0, bestLat = 0, bestLng = 0, bestAcc = 9999;
+    // Slow path: collect multiple readings and require them to agree.
+    setSetupError("Getting a stable GPS fix...");
+    const readings: { lat: number; lng: number; acc: number }[] = [];
+    let watchId = 0;
+    let finished = false;
+
+    const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
+
+    const finish = (lat: number, lng: number) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      executeSessionCreation(lat, lng);
+    };
+
+    const fail = (msg: string) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      setSetupError(msg);
+      setIsStarting(false);
+    };
+
     const timeoutId = setTimeout(() => {
-      if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
-      if (bestAcc !== 9999) executeSessionCreation(bestLat, bestLng);
-      else { setSetupError("Couldn't get a location fix. Move near a window and try again."); setIsStarting(false); }
-    }, 20000);
+      if (finished) return;
+      if (readings.length >= 3) {
+        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+        finish(lat, lng);
+      } else {
+        fail("Couldn't get a stable GPS fix. Move near a window or outdoors, then try again.");
+      }
+    }, 25000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const currentAcc = position.coords.accuracy;
-        if (currentAcc < bestAcc) {
-          bestAcc = currentAcc; bestLat = position.coords.latitude; bestLng = position.coords.longitude;
-          setSetupError(`Locking on... ±${Math.round(bestAcc)}m`);
+        if (finished) return;
+        const acc = position.coords.accuracy;
+        if (acc > 50) {
+          setSetupError(`GPS accuracy is ±${Math.round(acc)}m — too weak. Move near a window.`);
+          return;
         }
-        if (bestAcc <= 100) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); executeSessionCreation(bestLat, bestLng); }
+        readings.push({ lat: position.coords.latitude, lng: position.coords.longitude, acc });
+
+        if (readings.length >= 3) {
+          const latSpread = Math.max(...readings.map(r => r.lat)) - Math.min(...readings.map(r => r.lat));
+          const lngSpread = Math.max(...readings.map(r => r.lng)) - Math.min(...readings.map(r => r.lng));
+          // ~30m ≈ 0.0003 degrees
+          if (latSpread < 0.0003 && lngSpread < 0.0003) {
+            clearTimeout(timeoutId);
+            const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+            const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+            finish(lat, lng);
+            return;
+          }
+          // Readings disagree — drop the oldest and keep collecting
+          readings.shift();
+          setSetupError(`GPS is still settling (±${Math.round(acc)}m)...`);
+        } else {
+          setSetupError(`Stabilizing GPS fix (${readings.length}/3, ±${Math.round(acc)}m)...`);
+        }
       },
       (error) => {
         clearTimeout(timeoutId);
-        if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
-        if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
-        else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
-        else if (error.code === 3) setSetupError("Timeout: GPS took too long. Try moving near a window.");
-        else setSetupError("Failed to grab GPS.");
-        setIsStarting(false);
+        if (error.code === 1) fail("Permission Denied: tap 'Allow' for location and try again.");
+        else if (error.code === 2) fail("Signal lost. Turn your phone's GPS/Location off and back on, then retry.");
+        else if (error.code === 3) fail("GPS timed out. Move near a window and try again.");
+        else fail("Could not access GPS.");
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
@@ -264,7 +314,7 @@ export default function LecturerDashboard() {
     
     confirm.ask(
       'Update Geofence?',
-      'Update the geofence to your current location? Ensure you are in the lecture hall.',
+      'Update the class anchor to your current location? Stand in the middle of the lecture hall first.',
       async () => {
         setIsUpdatingGeofence(true);
         try {
@@ -272,6 +322,18 @@ export default function LecturerDashboard() {
           
           navigator.geolocation.getCurrentPosition(
             async (position) => {
+              const acc = position.coords.accuracy;
+              if (acc > 50) {
+                confirm.ask(
+                  'GPS Too Weak', 
+                  `Your current accuracy is ±${Math.round(acc)}m. Move near a window or outdoors, then try again.`, 
+                  () => {}, 
+                  { isDangerous: false }
+                );
+                setIsUpdatingGeofence(false);
+                return;
+              }
+
               const { error } = await supabase
                 .from('lecture_sessions')
                 .update({ 
@@ -283,7 +345,10 @@ export default function LecturerDashboard() {
               if (error) {
                 confirm.ask('Error', 'Failed to update geofence.', () => {}, { isDangerous: false });
               } else {
-                confirm.ask('Success', 'Geofence updated to your current location!', () => {}, { isDangerous: false });
+                try {
+                  localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude, ts: Date.now() }));
+                } catch {}
+                confirm.ask('Success', `Geofence updated (±${Math.round(acc)}m accuracy).`, () => {}, { isDangerous: false });
               }
               setIsUpdatingGeofence(false);
             },
@@ -291,7 +356,7 @@ export default function LecturerDashboard() {
               confirm.ask('Error', 'Could not get your GPS location. Ensure location is on.', () => {}, { isDangerous: false });
               setIsUpdatingGeofence(false);
             },
-            { enableHighAccuracy: true, timeout: 15000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
           );
         } catch {
           confirm.ask('Error', 'Error updating location.', () => {}, { isDangerous: false });
@@ -457,12 +522,18 @@ export default function LecturerDashboard() {
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
     const rows = logsToExport.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [
-        sanitize(log.matricNumber), 
-        sanitize(log.status.toUpperCase()), 
-        sanitize(log.time), 
-        "Verified via Secure Platform"
-      ]);
+      .map(log => {
+        const flag = log.status === 'verified' ? 'Verified' 
+          : log.status === 'pending_override' ? 'Raised Hand / Waiver Pending'
+          : log.status === 'flagged' ? `Flagged: ${log.reason || 'Unknown'}`
+          : log.status;
+        return [
+          sanitize(log.matricNumber), 
+          sanitize(log.status.toUpperCase()), 
+          sanitize(log.time), 
+          sanitize(flag)
+        ];
+      });
       
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -735,6 +806,12 @@ export default function LecturerDashboard() {
                 <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 ml-2">
                   <Wifi size={12} /> Live Sync
                 </span>
+
+                {data && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-md border border-gray-200 ml-2" title="Students are measured against this anchor">
+                    <MapPin size={12} /> Anchor: {data.course ? 'set' : 'pending'}
+                  </span>
+                )}
 
                 {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
                   <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">

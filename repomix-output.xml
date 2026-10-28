@@ -160,49 +160,53 @@ tsconfig.json
 <files>
 This section contains the contents of the repository's files.
 
-<file path="app/api/attendance-history/route.ts">
+<file path="app/api/request-override/route.ts">
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const courseCode = searchParams.get('courseCode');
+export async function POST(request: Request) {
+  try {
+    const { sessionId, matricNumber } = await request.json();
+    const cleanMatric = matricNumber.toUpperCase().trim();
 
-  if (!courseCode) return NextResponse.json({ message: "Missing course code" }, { status: 400 });
+    if (!sessionId || !cleanMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
 
-  // 1. Get all past sessions for this course
-  const { data: sessions, error } = await supabase
-    .from('lecture_sessions')
-    .select('session_id, created_at, course_code')
-    .eq('course_code', courseCode)
-    .order('created_at', { ascending: false });
+    // Check if they are already in the system
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id, status')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
 
-  if (error) return NextResponse.json({ message: "Database error" }, { status: 500 });
-  if (!sessions || sessions.length === 0) return NextResponse.json([]);
+    if (existingLog) {
+      if (existingLog.status === 'verified') {
+        return NextResponse.json({ message: "You are already verified." }, { status: 409 });
+      }
+      
+      // Update their failed/flagged status to the appeal queue
+      await supabase.from('attendance_logs').update({ 
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" }) 
+      }).eq('id', existingLog.id);
+      
+    } else {
+      // Insert them directly into the appeal queue
+      await supabase.from('attendance_logs').insert([{
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        status: 'pending_override',
+        device_info: JSON.stringify({ method: "Digital Hand Raise" })
+      }]);
+    }
 
-  const sessionIds = sessions.map(s => s.session_id);
+    return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
 
-  // 2. Get all attendance logs for these sessions to count them
-  const { data: logs } = await supabase
-    .from('attendance_logs')
-    .select('session_id, status')
-    .in('session_id', sessionIds);
-
-  // 3. Calculate counts per session
-  const historyData = sessions.map(session => {
-    const sessionLogs = logs?.filter(l => l.session_id === session.session_id) || [];
-    const verified = sessionLogs.filter(l => l.status === 'verified').length;
-    const flagged = sessionLogs.filter(l => l.status === 'flagged' || l.status === 'pending_override').length;
-
-    return {
-      ...session,
-      total_checkins: sessionLogs.length,
-      verified_count: verified,
-      flagged_count: flagged
-    };
-  });
-
-  return NextResponse.json(historyData);
+  } catch {
+    return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
+  }
 }
 </file>
 
@@ -862,6 +866,18 @@ This version has breaking changes — APIs, conventions, and file structure may 
 @AGENTS.md
 </file>
 
+<file path="next.config.ts">
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: __dirname,
+  },
+};
+
+export default nextConfig;
+</file>
+
 <file path="README.md">
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
@@ -935,6 +951,71 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
     "**/*.mts"
   ],
   "exclude": ["node_modules"]
+}
+</file>
+
+<file path="app/api/attendance-history/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+export async function GET(request: Request) {
+  try {
+    // NEW: Require auth
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const { searchParams } = new URL(request.url);
+    const courseCode = searchParams.get('courseCode');
+
+    if (!courseCode) return NextResponse.json({ message: "Missing course code" }, { status: 400 });
+
+    // NEW: Verify the lecturer owns this course
+    const { data: course } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('course_code', courseCode)
+      .eq('lecturer_id', auth.user.id)
+      .single();
+
+    if (!course) return NextResponse.json({ message: "Course not found or unauthorized" }, { status: 403 });
+
+    // 1. Get all past sessions for this course
+    const { data: sessions, error } = await supabase
+      .from('lecture_sessions')
+      .select('session_id, created_at, course_code')
+      .eq('course_code', courseCode)
+      .order('created_at', { ascending: false });
+
+    if (error) return NextResponse.json({ message: "Database error" }, { status: 500 });
+    if (!sessions || sessions.length === 0) return NextResponse.json([]);
+
+    const sessionIds = sessions.map(s => s.session_id);
+
+    // 2. Get all attendance logs for these sessions to count them
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('session_id, status')
+      .in('session_id', sessionIds);
+
+    // 3. Calculate counts per session
+    const historyData = sessions.map(session => {
+      const sessionLogs = logs?.filter(l => l.session_id === session.session_id) || [];
+      const verified = sessionLogs.filter(l => l.status === 'verified').length;
+      const flagged = sessionLogs.filter(l => l.status === 'flagged' || l.status === 'pending_override').length;
+
+      return {
+        ...session,
+        total_checkins: sessionLogs.length,
+        verified_count: verified,
+        flagged_count: flagged
+      };
+    });
+
+    return NextResponse.json(historyData);
+  } catch {
+    return NextResponse.json({ message: "Failed to load history" }, { status: 500 });
+  }
 }
 </file>
 
@@ -1190,56 +1271,6 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/api/request-override/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-export async function POST(request: Request) {
-  try {
-    const { sessionId, matricNumber } = await request.json();
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    if (!sessionId || !cleanMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    // Check if they are already in the system
-    const { data: existingLog } = await supabase
-      .from('attendance_logs')
-      .select('id, status')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (existingLog) {
-      if (existingLog.status === 'verified') {
-        return NextResponse.json({ message: "You are already verified." }, { status: 409 });
-      }
-      
-      // Update their failed/flagged status to the appeal queue
-      await supabase.from('attendance_logs').update({ 
-        status: 'pending_override',
-        device_info: JSON.stringify({ method: "Digital Hand Raise" }) 
-      }).eq('id', existingLog.id);
-      
-    } else {
-      // Insert them directly into the appeal queue
-      await supabase.from('attendance_logs').insert([{
-        session_id: sessionId,
-        matric_number: cleanMatric,
-        status: 'pending_override',
-        device_info: JSON.stringify({ method: "Digital Hand Raise" })
-      }]);
-    }
-
-    return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
-
-  } catch {
-    return NextResponse.json({ message: "Failed to request appeal" }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/set-rep/route.ts">
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
@@ -1298,6 +1329,94 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/api/webauthn/register/generate/route.ts">
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { generateRegistrationOptions } from '@simplewebauthn/server';
+import { rpName, rpID } from '@/utils/webauthn';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
+import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
+
+export async function POST(request: Request) {
+  try {
+    const ip = getClientIp(request);
+    const limit = RATE_LIMIT_DEFAULTS['webauthn-register-generate'];
+    const rateCheck = checkRateLimit(`reg-gen:${ip}`, limit);
+
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a minute." },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    const { matricNumber } = await request.json();
+    
+    if (!matricNumber || typeof matricNumber !== 'string') {
+      return NextResponse.json({ error: "Matric number required." }, { status: 400 });
+    }
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    // 1. Must be enrolled in at least one course to register
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('matric_number', cleanMatric)
+      .limit(1);
+
+    if (!enrollments || enrollments.length === 0) {
+      return NextResponse.json(
+        { error: "NOT_ENROLLED", message: "Your matric isn't on any roster yet. Ask your lecturer to add you first." },
+        { status: 403, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    // 2. Check if this matric is already registered to a device
+    const { data: existingDevice } = await supabase
+      .from('user_devices')
+      .select('matric_number')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (existingDevice) {
+      // Already registered — they should log in, not register again
+      return NextResponse.json(
+        { error: "ALREADY_REGISTERED", message: "This matric already has a linked phone. Log in instead." },
+        { status: 409, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    // 3. Generate registration options
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: new TextEncoder().encode(cleanMatric),
+      userName: cleanMatric,
+      authenticatorSelection: {
+        residentKey: 'required',
+        userVerification: 'required', 
+      },
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('webauthn_challenge', options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 300,
+      path: '/',
+    });
+
+    return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/api/webauthn/register/verify/route.ts">
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
@@ -1317,6 +1436,14 @@ export async function POST(request: Request) {
 
     if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
+    // NEW: Check for existing device BEFORE verifying
+    // This catches double-tap race conditions
+    const { data: existingDevice } = await supabase
+      .from('user_devices')
+      .select('credential_id')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
     const verification = await verifyRegistrationResponse({
       response: authResponse,
       expectedChallenge,
@@ -1324,30 +1451,40 @@ export async function POST(request: Request) {
       expectedRPID: rpID,
     });
 
-    if (verification.verified && verification.registrationInfo) {
-      const { credential } = verification.registrationInfo;
-
-      const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
-      const immuneKey = `\\x${hex}`;
-
-      const { error: dbError } = await supabase
-        .from('user_devices')
-        .upsert({
-          matric_number: cleanMatric,
-          credential_id: credential.id,
-          public_key: immuneKey, 
-          counter: credential.counter,
-          transports: credential.transports || [],
-          device_hash: 'webauthn-verified', 
-          created_at: new Date().toISOString()
-        }, { onConflict: 'matric_number' });
-
-      if (dbError) throw dbError;
-
-      cookieStore.delete('webauthn_challenge');
-      return NextResponse.json({ verified: true });
+    if (!verification.verified || !verification.registrationInfo) {
+      return NextResponse.json({ verified: false }, { status: 400 });
     }
-    return NextResponse.json({ verified: false }, { status: 400 });
+
+    const { credential } = verification.registrationInfo;
+
+    // NEW: If a device already exists and it's a DIFFERENT credential, reject
+    if (existingDevice && existingDevice.credential_id !== credential.id) {
+      cookieStore.delete('webauthn_challenge');
+      return NextResponse.json(
+        { error: "This matric is already linked to another phone. Ask your lecturer to reset it." },
+        { status: 409 }
+      );
+    }
+
+    const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
+    const immuneKey = `\\x${hex}`;
+
+    const { error: dbError } = await supabase
+      .from('user_devices')
+      .upsert({
+        matric_number: cleanMatric,
+        credential_id: credential.id,
+        public_key: immuneKey,
+        counter: credential.counter,
+        transports: credential.transports || [],
+        device_hash: 'webauthn-verified',
+        created_at: new Date().toISOString()
+      }, { onConflict: 'matric_number' });
+
+    if (dbError) throw dbError;
+
+    cookieStore.delete('webauthn_challenge');
+    return NextResponse.json({ verified: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -2165,74 +2302,6 @@ export function useConfirmModal() {
 }
 </file>
 
-<file path="components/PWAInstaller.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { Share, PlusSquare, X, Download } from 'lucide-react';
-
-interface NavigatorWithStandalone extends Navigator {
-  standalone?: boolean;
-}
-
-export default function PWAInstaller() {
-  const [showPrompt, setShowPrompt] = useState(false);
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const ua = window.navigator.userAgent;
-      const isIosDevice = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
-      
-      const nav = window.navigator as NavigatorWithStandalone;
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
-
-      const wasDismissed = localStorage.getItem('campuscheck_pwa_dismissed') === 'true';
-
-      if (isIosDevice && !isStandalone && !wasDismissed) {
-        setShowPrompt(true);
-      }
-    }, 0);
-
-    return () => clearTimeout(id);
-  }, []);
-
-  const handleDismiss = () => {
-    localStorage.setItem('campuscheck_pwa_dismissed', 'true');
-    setShowPrompt(false);
-  };
-
-  if (!showPrompt) return null;
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 animate-in slide-in-from-bottom-8 duration-500">
-      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-5 max-w-md mx-auto relative">
-        <button 
-          onClick={handleDismiss}
-          className="absolute top-3 right-3 p-1 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200"
-        >
-          <X size={16} />
-        </button>
-
-        <div className="flex items-center gap-3 mb-3">
-          <div className="bg-[#2563EB] p-2 rounded-lg text-white">
-            <Download size={20} />
-          </div>
-          <div>
-            <h3 className="font-bold text-gray-900 text-sm">Install CampusCheck App</h3>
-            <p className="text-xs text-gray-500 font-medium">Required for reliable notifications on iPhone</p>
-          </div>
-        </div>
-
-        <div className="space-y-3 text-sm text-gray-700 font-medium">
-          <p>1. Tap the <strong>Share</strong> button at the bottom of Safari <Share size={14} className="inline mx-1 text-blue-600 mb-1" /></p>
-          <p>2. Scroll down and tap <strong>Add to Home Screen</strong> <PlusSquare size={14} className="inline mx-1 text-gray-800 mb-1" /></p>
-          <p>3. Open the app from your home screen to enable instant alerts!</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="components/PWARegister.tsx">
 'use client';
 import { useEffect } from 'react';
@@ -2521,16 +2590,40 @@ const eslintConfig = defineConfig([
 export default eslintConfig;
 </file>
 
-<file path="next.config.ts">
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  turbopack: {
-    root: __dirname,
+<file path="package.json">
+{
+  "name": "clean-attendance",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
-};
-
-export default nextConfig;
+  "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.0",
+    "@supabase/supabase-js": "^2.106.1",
+    "lucide-react": "^1.16.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
 </file>
 
 <file path="postcss.config.mjs">
@@ -2541,21 +2634,6 @@ const config = {
 };
 
 export default config;
-</file>
-
-<file path="proxy.ts">
-import { NextResponse } from 'next/server';
-
-export function proxy() {
-  // We are removing the Supabase cookie check because it's causing false positives 
-  // with chunked cookies. The app/dashboard/layout.tsx already protects the routes.
-  
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ['/admin/:path*'], 
-};
 </file>
 
 <file path="app/api/admin-login/route.ts">
@@ -2626,6 +2704,105 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Login API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/override-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+export async function POST(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const body = await request.json();
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
+
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
+    if (!session) return NextResponse.json({ message: "Session not found" }, { status: 404 });
+
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    if (!course) return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+    const overrideTimestamp = new Date().toISOString();
+
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      await supabase
+        .from('attendance_logs')
+        .update({
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Updated" }),
+          approved_by: auth.user.id,
+          override_timestamp: overrideTimestamp,
+        })
+        .eq('id', existingLog.id);
+    } else {
+      await supabase
+        .from('attendance_logs')
+        .insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
+          device_hash: 'manual-override',
+          approved_by: auth.user.id,
+          override_timestamp: overrideTimestamp,
+        }]);
+    }
+
+    return NextResponse.json({ message: "Success" });
+  } catch {
+    return NextResponse.json({ message: "Override failed" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/reset-device/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+export async function POST(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const body = await request.json();
+    const rawMatric = body.matricNumber;
+
+    if (!rawMatric) {
+      return NextResponse.json({ message: "Matric number required." }, { status: 400 });
+    }
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    const { error } = await supabase
+      .from('user_devices')
+      .delete()
+      .eq('matric_number', cleanMatric);
+
+    if (error) throw error;
+
+    return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
+
+  } catch {
+    return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
   }
 }
 </file>
@@ -2707,94 +2884,6 @@ export async function POST(request: Request) {
         transports: safeTransports,
       }],
       userVerification: 'preferred',
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 300,
-      path: '/',
-    });
-
-    return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/webauthn/register/generate/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { rpName, rpID } from '@/utils/webauthn';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
-import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
-
-export async function POST(request: Request) {
-  try {
-    const ip = getClientIp(request);
-    const limit = RATE_LIMIT_DEFAULTS['webauthn-register-generate'];
-    const rateCheck = checkRateLimit(`reg-gen:${ip}`, limit);
-
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please wait a minute." },
-        { status: 429, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    const { matricNumber } = await request.json();
-    
-    if (!matricNumber || typeof matricNumber !== 'string') {
-      return NextResponse.json({ error: "Matric number required." }, { status: 400 });
-    }
-
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    // 1. Must be enrolled in at least one course to register
-    const { data: enrollments } = await supabase
-      .from('enrollments')
-      .select('id')
-      .eq('matric_number', cleanMatric)
-      .limit(1);
-
-    if (!enrollments || enrollments.length === 0) {
-      return NextResponse.json(
-        { error: "NOT_ENROLLED", message: "Your matric isn't on any roster yet. Ask your lecturer to add you first." },
-        { status: 403, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    // 2. Check if this matric is already registered to a device
-    const { data: existingDevice } = await supabase
-      .from('user_devices')
-      .select('matric_number')
-      .eq('matric_number', cleanMatric)
-      .maybeSingle();
-
-    if (existingDevice) {
-      // Already registered — they should log in, not register again
-      return NextResponse.json(
-        { error: "ALREADY_REGISTERED", message: "This matric already has a linked phone. Log in instead." },
-        { status: 409, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    // 3. Generate registration options
-    const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: new TextEncoder().encode(cleanMatric),
-      userName: cleanMatric,
-      authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required', 
-      },
     });
 
     const cookieStore = await cookies();
@@ -3037,138 +3126,129 @@ export function rateLimitHeaders(result: RateLimitResult): Record<string, string
 }
 </file>
 
-<file path="package.json">
-{
-  "name": "clean-attendance",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.0",
-    "@supabase/supabase-js": "^2.106.1",
-    "lucide-react": "^1.16.0",
-    "next": "16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.43",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/web-push": "^3.6.4",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+<file path="proxy.ts">
+import { NextResponse } from 'next/server';
+
+export function proxy() {
+  // NOTE: This file is currently a no-op.
+  // 
+  // Route protection is handled by:
+  // 1. `app/dashboard/layout.tsx` — client-side JWT check on `/dashboard/*`
+  // 2. `app/hod/page.tsx` — client-side JWT check on `/hod`
+  // 3. `utils/api-auth.ts` — server-side JWT verification on all API routes
+  // 
+  // If you add a new route that needs protection and can't rely on the layout,
+  // add its matcher below and implement a real cookie check here.
+  
+  return NextResponse.next();
 }
+
+export const config = {
+  matcher: [], // Intentionally empty — protection is handled at the layout level
+};
 </file>
 
-<file path="app/api/override-attendance/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
+<file path="components/PWAInstaller.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { Share, PlusSquare, X, Download } from 'lucide-react';
 
-export async function POST(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
-    const body = await request.json();
-    const sessionId = body.sessionId || body.session_id || body.session;
-    const rawMatric = body.matricNumber || body.matric_number || body.matric;
-
-    if (!sessionId || !rawMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
-    if (!session) return NextResponse.json({ message: "Session not found" }, { status: 404 });
-
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
-    if (!course) return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
-
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
-    const overrideTimestamp = new Date().toISOString();
-
-    const { data: existingLog } = await supabase
-      .from('attendance_logs')
-      .select('id')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (existingLog) {
-      await supabase
-        .from('attendance_logs')
-        .update({
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Manual Override - Updated" }),
-          approved_by: auth.user.id,
-          override_timestamp: overrideTimestamp,
-        })
-        .eq('id', existingLog.id);
-    } else {
-      await supabase
-        .from('attendance_logs')
-        .insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
-          device_hash: 'manual-override',
-          approved_by: auth.user.id,
-          override_timestamp: overrideTimestamp,
-        }]);
-    }
-
-    return NextResponse.json({ message: "Success" });
-  } catch {
-    return NextResponse.json({ message: "Override failed" }, { status: 500 });
-  }
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
 }
-</file>
 
-<file path="app/api/reset-device/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
+export default function PWAInstaller() {
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
-export async function POST(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const ua = window.navigator.userAgent;
+      const iosDevice = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
+      setIsIOS(iosDevice);
 
-    const body = await request.json();
-    const rawMatric = body.matricNumber;
+      const nav = window.navigator as NavigatorWithStandalone;
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 
-    if (!rawMatric) {
-      return NextResponse.json({ message: "Matric number required." }, { status: 400 });
-    }
+      // If they already installed it, never show
+      if (isStandalone) return;
 
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
+      // Count dismissals — not days
+      const dismissalCount = parseInt(localStorage.getItem('campuscheck_pwa_dismiss_count') || '0', 10);
 
-    const { error } = await supabase
-      .from('user_devices')
-      .delete()
-      .eq('matric_number', cleanMatric);
+      // After 3 dismissals, permanently stop
+      if (dismissalCount >= 3) return;
 
-    if (error) throw error;
+      // Only show after they've demonstrated intent:
+      // - Successfully checked into at least 1 class
+      const checkinCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+      if (checkinCount < 1) return;
 
-    return NextResponse.json({ message: "Hardware binding successfully wiped." }, { status: 200 });
+      // Show if enough new check-ins since their last dismissal
+      const lastDismissedAt = parseInt(localStorage.getItem('campuscheck_pwa_last_dismissed_checkin_count') || '0', 10);
+      const requiredCheckinsSinceDismiss = dismissalCount === 0 ? 1 : dismissalCount === 1 ? 3 : 10;
 
-  } catch {
-    return NextResponse.json({ message: "Failed to reset device." }, { status: 500 });
-  }
+      if (checkinCount - lastDismissedAt < requiredCheckinsSinceDismiss) return;
+
+      setShowPrompt(true);
+    }, 0);
+
+    return () => clearTimeout(id);
+  }, []);
+
+  const handleDismiss = () => {
+    const currentCheckins = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+    const currentDismissCount = parseInt(localStorage.getItem('campuscheck_pwa_dismiss_count') || '0', 10);
+
+    localStorage.setItem('campuscheck_pwa_dismiss_count', String(currentDismissCount + 1));
+    localStorage.setItem('campuscheck_pwa_last_dismissed_checkin_count', String(currentCheckins));
+    setShowPrompt(false);
+  };
+
+  if (!showPrompt) return null;
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 animate-in slide-in-from-bottom-8 duration-500">
+      <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-5 max-w-md mx-auto relative">
+        <button
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 p-1 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="flex items-center gap-3 mb-3">
+          <div className="bg-[#2563EB] p-2 rounded-lg text-white">
+            <Download size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">
+              {isIOS ? 'Install CampusCheck App' : 'Add CampusCheck to Home Screen'}
+            </h3>
+            <p className="text-xs text-gray-500 font-medium">
+              {isIOS ? 'Required for reliable notifications on iPhone' : 'Faster check-ins, no browser needed'}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3 text-sm text-gray-700 font-medium">
+          {isIOS ? (
+            <>
+              <p>1. Tap the <strong>Share</strong> button at the bottom of Safari <Share size={14} className="inline mx-1 text-blue-600 mb-1" /></p>
+              <p>2. Scroll down and tap <strong>Add to Home Screen</strong> <PlusSquare size={14} className="inline mx-1 text-gray-800 mb-1" /></p>
+              <p>3. Open the app from your home screen to enable instant alerts!</p>
+            </>
+          ) : (
+            <>
+              <p>1. Tap the <strong>menu icon</strong> (three dots) in Chrome.</p>
+              <p>2. Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</p>
+              <p>3. Open from your home screen for faster access.</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -3277,6 +3357,114 @@ self.addEventListener('notificationclick', function(event) {
 });
 </file>
 
+<file path="app/api/master-export/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+function sanitizeCSV(val: string | number) {
+  const str = String(val);
+  if (/^[=+\-@]/.test(str)) {
+    return `'${str}`;
+  }
+  return str;
+}
+
+export async function GET(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const { searchParams } = new URL(request.url);
+    const courseCode = searchParams.get('courseCode');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
+
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('id, total_planned_classes, max_attendance_score, is_finalized')
+      .eq('course_code', courseCode)
+      .eq('lecturer_id', auth.user.id)
+      .single();
+
+    if (!courseData) {
+      return NextResponse.json({ error: "Course not found or unauthorized" }, { status: 404 });
+    }
+
+    // 1. Get sessions in range
+    let sessionQuery = supabase
+      .from('lecture_sessions')
+      .select('session_id')
+      .eq('course_code', courseCode);
+
+    if (startDate) sessionQuery = sessionQuery.gte('created_at', new Date(startDate).toISOString());
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      sessionQuery = sessionQuery.lte('created_at', end.toISOString());
+    }
+
+    const { data: sessions } = await sessionQuery;
+    if (!sessions || sessions.length === 0) {
+      return NextResponse.json({ message: "No sessions recorded for this timeframe." }, { status: 404 });
+    }
+
+    const sessionIds = sessions.map(s => s.session_id);
+    const totalClassesHeld = sessions.length;
+
+    // 2. Get the roster (small — one row per student)
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('matric_number')
+      .eq('course_id', courseData.id);
+    const roster = enrollments?.map(e => e.matric_number) || [];
+
+    // 3. NEW: Get pre-aggregated counts from the SQL view
+    // Instead of fetching 40,000 log rows, we fetch at most 2,000 rows
+    const { data: counts } = await supabase
+      .from('session_attendance_counts')
+      .select('matric_number, verified_count')
+      .in('session_id', sessionIds);
+
+    // 4. Sum per-student totals
+    const attendanceMap = new Map<string, number>();
+    roster.forEach(matric => attendanceMap.set(matric, 0));
+
+    (counts || []).forEach(row => {
+      if (!attendanceMap.has(row.matric_number)) attendanceMap.set(row.matric_number, 0);
+      attendanceMap.set(row.matric_number, attendanceMap.get(row.matric_number)! + 1);
+    });
+
+    const report = Array.from(attendanceMap.entries()).map(([matric, attended]) => {
+      const percentage = Math.round((attended / totalClassesHeld) * 100);
+      return {
+        matricNumber: sanitizeCSV(matric),
+        totalClasses: totalClassesHeld,
+        attended,
+        percentage,
+        eligible: percentage >= 70 ? 'YES' : 'NO'
+      };
+    });
+
+    report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+
+    return NextResponse.json({
+      course: courseCode,
+      totalClasses: totalClassesHeld,
+      plannedClasses: courseData.total_planned_classes || 15,
+      maxScore: courseData.max_attendance_score || 10,
+      isFinalized: courseData.is_finalized || false,
+      report
+    });
+
+  } catch {
+    return NextResponse.json({ error: "Failed to generate export" }, { status: 500 });
+  }
+}
+</file>
+
 <file path="utils/constants.ts">
 // ─── utils/constants.ts ───
 // Central place for every magic number in the app.
@@ -3319,7 +3507,7 @@ export const RATE_LIMIT_DEFAULTS = {
   'webauthn-register-generate': 5,
   'verify-attendance': 20,
   'request-override': 5,
-  'rep-action': 10,
+  'rep-action': 30,           // Generous: 10 classes × 3 students = 30 req/min
   'rate-session': 10,
 } as const;
 
@@ -3341,18 +3529,18 @@ export const STREAK_TIERS = {
 } as const;
 </file>
 
-<file path="app/api/master-export/route.ts">
+<file path="app/api/dashboard-data/route.ts">
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
 
-// Helper to sanitize CSV cells and prevent CSV Injection
-function sanitizeCSV(val: string | number) {
-  const str = String(val);
-  if (/^[=+\-@]/.test(str)) {
-    return `'${str}`; // Prepend single quote to neutralize formulas
-  }
-  return str;
+interface AttendanceLogRow {
+  id: string;
+  matric_number: string;
+  status: string;
+  check_in_time: string;
+  device_info: string | null;
 }
 
 export async function GET(request: Request) {
@@ -3361,178 +3549,88 @@ export async function GET(request: Request) {
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
-    const courseCode = searchParams.get('courseCode');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const sessionId = searchParams.get('sessionId');
+    
+    // NEW: Get the timezone from the client (fallback to West Africa Time if missing)
+    const clientTimeZone = searchParams.get('timeZone') || 'Africa/Lagos';
 
-    if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
+    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-    const { data: courseData } = await supabase
-      .from('courses')
-      .select('id, total_planned_classes, max_attendance_score, is_finalized')
-      .eq('course_code', courseCode)
-      .eq('lecturer_id', auth.user.id)
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('is_active, course_code, created_at')
+      .eq('session_id', sessionId)
       .single();
 
-    if (!courseData) {
-       return NextResponse.json({ error: "Course not found or unauthorized" }, { status: 404 });
-    }
+    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    let query = supabase.from('lecture_sessions').select('session_id').eq('course_code', courseCode);
-    if (startDate) query = query.gte('created_at', new Date(startDate).toISOString());
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      query = query.lte('created_at', end.toISOString());
-    }
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
-    const { data: sessions } = await query;
-    if (!sessions || sessions.length === 0) {
-      return NextResponse.json({ message: "No sessions recorded for this timeframe." }, { status: 404 });
-    }
+    const courseName = session?.course_code || "Unknown Course";
 
-    const sessionIds = sessions.map(s => s.session_id);
-    const totalClassesHeld = sessions.length;
+    const { data: logs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('check_in_time', { ascending: false });
 
-    const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', courseData.id);
-    const roster = enrollments?.map(e => e.matric_number) || [];
+    const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
+    const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
 
-    const { data: logs } = await supabase.from('attendance_logs').select('matric_number, status').in('session_id', sessionIds).eq('status', 'verified');
+    const matrics = visibleLogs.map(l => l.matric_number);
+    const { data: profiles } = await supabase
+      .from('student_profiles')
+      .select('matric_number, nickname')
+      .in('matric_number', matrics);
 
-    const attendanceMap = new Map<string, number>();
-    roster.forEach((matric: string) => attendanceMap.set(matric, 0));
-
-    (logs || []).forEach(log => {
-      if (!attendanceMap.has(log.matric_number)) attendanceMap.set(log.matric_number, 0);
-      attendanceMap.set(log.matric_number, attendanceMap.get(log.matric_number)! + 1);
-    });
-
-    const report = Array.from(attendanceMap.entries()).map(([matric, attended]) => {
-      const percentage = Math.round((attended / totalClassesHeld) * 100);
-      return { 
-        matricNumber: sanitizeCSV(matric), 
-        totalClasses: totalClassesHeld, 
-        attended, 
-        percentage, 
-        eligible: percentage >= 70 ? 'YES' : 'NO' 
-      };
-    });
-
-    report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+    const nicknameMap = new Map();
+    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
 
     return NextResponse.json({
-        course: courseCode,
-        totalClasses: totalClassesHeld,
-        plannedClasses: courseData.total_planned_classes || 15,
-        maxScore: courseData.max_attendance_score || 10,
-        isFinalized: courseData.is_finalized || false,
-        report
-    });
-
-  } catch {
-    return NextResponse.json({ error: "Failed to generate export" }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/api/rep-action/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { action, sessionId, matricNumber, repMatric } = body;
-
-    // 1. Verify the requester is actually a Class Rep
-    const { data: repProfile } = await supabase
-      .from('student_profiles')
-      .select('is_class_rep')
-      .eq('matric_number', repMatric)
-      .single();
-
-    if (!repProfile?.is_class_rep) {
-      return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
-    }
-
-    // 2. Ensure the Rep is enrolled in the course
-    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
-    if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).single();
-
-    const { data: repEnrollment } = await supabase.from('enrollments')
-      .select('id')
-      .eq('course_id', course?.id)
-      .eq('matric_number', repMatric)
-      .single();
-
-    if (!repEnrollment) {
-      return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
-    }
-
-    if (action === 'log_dead_battery') {
-      if (!sessionId || !matricNumber) {
-        return NextResponse.json({ error: "Missing session or matric" }, { status: 400 });
-      }
-
-      const cleanMatric = matricNumber.toUpperCase().trim();
-
-      // 3. NEW: Ensure the TARGET student is also enrolled in this course
-      const { data: targetEnrollment } = await supabase.from('enrollments')
-        .select('id')
-        .eq('course_id', course?.id)
-        .eq('matric_number', cleanMatric)
-        .single();
-
-      if (!targetEnrollment) {
-        return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
-      }
-
-      // 4. Check the 3-student cap
-      const { count } = await supabase
-        .from('attendance_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('session_id', sessionId)
-        .eq('device_hash', 'rep-battery-log');
-
-      if (count !== null && count >= 3) {
-        return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
-      }
-
-      // 5. Check for existing log
-      const { data: existingLog } = await supabase
-        .from('attendance_logs')
-        .select('id, status')
-        .eq('session_id', sessionId)
-        .eq('matric_number', cleanMatric)
-        .single();
-
-      if (existingLog) {
-        if (existingLog.status === 'verified') {
-           return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
+      course: courseName,
+      isActive: session?.is_active === true,
+      createdAt: session?.created_at || null,
+      hiddenDisqualifiedCount: disqualifiedCount,
+      logs: visibleLogs.map((l) => {
+        let reason = null;
+        let isBiometric = false;
+        
+        if (l.device_info) {
+          try {
+            const info = JSON.parse(l.device_info);
+            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
+            else if (info.verificationMethod === 'skipped') {
+              reason = "Biometric skipped (No hardware lock)";
+              isBiometric = false;
+            } else if (info.verificationMethod === 'biometric') {
+              isBiometric = true;
+            } else if (info.reason) {
+              reason = info.reason;
+            }
+          } catch {}
         }
-        await supabase.from('attendance_logs').update({
-          status: 'pending_override',
-          device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
-          device_hash: 'rep-battery-log'
-        }).eq('id', existingLog.id);
-      } else {
-        await supabase.from('attendance_logs').insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'pending_override',
-          device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
-          device_hash: 'rep-battery-log'
-        }]);
-      }
+        
+        // Use the dynamic client timezone
+        const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: clientTimeZone
+        });
 
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+        return {
+          id: l.id,
+          matricNumber: l.matric_number,
+          nickname: nicknameMap.get(l.matric_number) || null,
+          status: l.status,
+          time: localTimeString,
+          reason,
+          isBiometric
+        };
+      })
+    });
   } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
 </file>
@@ -3897,112 +3995,6 @@ export default function HODPortal() {
 }
 </file>
 
-<file path="app/api/dashboard-data/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
-
-interface AttendanceLogRow {
-  id: string;
-  matric_number: string;
-  status: string;
-  check_in_time: string;
-  device_info: string | null;
-}
-
-export async function GET(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
-    const { searchParams } = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
-    
-    // NEW: Get the timezone from the client (fallback to West Africa Time if missing)
-    const clientTimeZone = searchParams.get('timeZone') || 'Africa/Lagos';
-
-    if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
-
-    const { data: session } = await supabase
-      .from('lecture_sessions')
-      .select('is_active, course_code, created_at')
-      .eq('session_id', sessionId)
-      .single();
-
-    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
-
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
-    if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
-    const courseName = session?.course_code || "Unknown Course";
-
-    const { data: logs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('check_in_time', { ascending: false });
-
-    const visibleLogs = (logs as AttendanceLogRow[] | null || []).filter(l => l.status !== 'disqualified');
-    const disqualifiedCount = (logs as AttendanceLogRow[] | null || []).filter(l => l.status === 'disqualified').length;
-
-    const matrics = visibleLogs.map(l => l.matric_number);
-    const { data: profiles } = await supabase
-      .from('student_profiles')
-      .select('matric_number, nickname')
-      .in('matric_number', matrics);
-
-    const nicknameMap = new Map();
-    (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
-
-    return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true,
-      createdAt: session?.created_at || null,
-      hiddenDisqualifiedCount: disqualifiedCount,
-      logs: visibleLogs.map((l) => {
-        let reason = null;
-        let isBiometric = false;
-        
-        if (l.device_info) {
-          try {
-            const info = JSON.parse(l.device_info);
-            if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
-            else if (info.verificationMethod === 'skipped') {
-              reason = "Biometric skipped (No hardware lock)";
-              isBiometric = false;
-            } else if (info.verificationMethod === 'biometric') {
-              isBiometric = true;
-            } else if (info.reason) {
-              reason = info.reason;
-            }
-          } catch {}
-        }
-        
-        // Use the dynamic client timezone
-        const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: clientTimeZone
-        });
-
-        return {
-          id: l.id,
-          matricNumber: l.matric_number,
-          nickname: nicknameMap.get(l.matric_number) || null,
-          status: l.status,
-          time: localTimeString,
-          reason,
-          isBiometric
-        };
-      })
-    });
-  } catch {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/hod-data/route.ts">
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
@@ -4142,6 +4134,151 @@ export async function GET(request: Request) {
     console.error("HOD API Error:", error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/login/page.tsx">
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        
+        if (signInError) throw signInError;
+        
+        if (data.session) {
+          router.refresh();
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 800);
+        } else {
+          throw new Error("Login successful, but no session was created.");
+        }
+      } else {
+        // SECURE SIGNUP: Hits our new server route
+        const res = await fetch('/api/lecturer-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fullName, department, secretKey })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Registration failed');
+        }
+
+        alert('Registration successful! You can now log in.');
+        setIsLogin(true);
+        setLoading(false);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Authentication failed';
+      setError(msg);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        
+        <div className="mb-4">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+            <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
+          </div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Faculty Access</h1>
+          <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+          
+          <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
+            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
+            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+                  <input aria-label="Full Name" type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
+                  <input aria-label="Department" type="text" required placeholder="Department (e.g., CSC)" value={department} onChange={(e) => setDepartment(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
+                  <input aria-label="Faculty Registration Key" type="password" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                </div>
+              </>
+            )}
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
+              <input aria-label="Email Address" type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
+              <input aria-label="Password" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-700 font-bold text-sm">{error}</p>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-6">
+              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
+              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-8 text-center animate-in fade-in pb-8">
+          <p className="text-xs font-bold text-gray-400">© 2026 CampusCheck. All rights reserved.</p>
+        </div>
+
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -4292,148 +4429,145 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/login/page.tsx">
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+<file path="app/api/rep-action/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
+import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [secretKey, setSecretKey] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export async function POST(request: Request) {
+  try {
+    // Rate limit is 30/min. A real rep will never hit this (they only
+    // log 3 students per class). It exists to catch:
+    // - Stolen session tokens being replayed
+    // - Buggy scripts running on the rep's phone
+    // - Malicious use of DevTools to spam the DB
+    const ip = getClientIp(request);
+    const limit = RATE_LIMIT_DEFAULTS['rep-action'];
+    const rateCheck = checkRateLimit(`rep-action:${ip}`, limit);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      if (isLogin) {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        
-        if (signInError) throw signInError;
-        
-        if (data.session) {
-          router.refresh();
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 800);
-        } else {
-          throw new Error("Login successful, but no session was created.");
-        }
-      } else {
-        // SECURE SIGNUP: Hits our new server route
-        const res = await fetch('/api/lecturer-signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, fullName, department, secretKey })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Registration failed');
-        }
-
-        alert('Registration successful! You can now log in.');
-        setIsLogin(true);
-        setLoading(false);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed';
-      setError(msg);
-      setLoading(false);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: "Too many attempts. Please wait a minute." },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
     }
-  };
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      
-      <div className="w-full max-w-md relative z-10">
-        
-        <div className="mb-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-            <ArrowLeft size={16} /> Back to Hub
-          </Link>
-        </div>
+    const body = await request.json();
+    const { action, sessionId, matricNumber, repMatric } = body;
 
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
-            <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
-          </div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Faculty Access</h1>
-          <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
-        </div>
+    if (!sessionId || !repMatric) {
+      return NextResponse.json({ error: "Missing session or rep" }, { status: 400 });
+    }
 
-        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
-          
-          <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
-            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
-            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
-          </div>
+    // 1. Verify the requester is actually a Class Rep
+    const { data: repProfile } = await supabase
+      .from('student_profiles')
+      .select('is_class_rep')
+      .eq('matric_number', repMatric)
+      .single();
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                  <input aria-label="Full Name" type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
-                  <input aria-label="Department" type="text" required placeholder="Department (e.g., CSC)" value={department} onChange={(e) => setDepartment(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
-                  <input aria-label="Faculty Registration Key" type="password" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
-                </div>
-              </>
-            )}
+    if (!repProfile?.is_class_rep) {
+      return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
+    }
 
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
-              <input aria-label="Email Address" type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
+    // 2. Get the session's EXACT course
+    const { data: session } = await supabase
+      .from('lecture_sessions')
+      .select('course_code, created_at')
+      .eq('session_id', sessionId)
+      .single();
+    if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
-              <input aria-label="Password" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
+    const { data: course } = await supabase
+      .from('courses')
+      .select('id, created_at')
+      .eq('course_code', session.course_code)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
-            {error && (
-              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in">
-                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-red-700 font-bold text-sm">{error}</p>
-              </div>
-            )}
+    if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-6">
-              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
-              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
-            </button>
-          </form>
-        </div>
+    // 3. Rep must be enrolled in the EXACT course row
+    const { data: repEnrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', course.id)
+      .eq('matric_number', repMatric)
+      .maybeSingle();
 
-        <div className="mt-8 text-center animate-in fade-in pb-8">
-          <p className="text-xs font-bold text-gray-400">© 2026 CampusCheck. All rights reserved.</p>
-        </div>
+    if (!repEnrollment) {
+      return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
+    }
 
-      </div>
-    </div>
-  );
+    if (action === 'log_dead_battery') {
+      if (!matricNumber) {
+        return NextResponse.json({ error: "Missing matric" }, { status: 400 });
+      }
+
+      const cleanMatric = matricNumber.toUpperCase().trim();
+
+      // 4. Target must be enrolled in the same course
+      const { data: targetEnrollment } = await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('course_id', course.id)
+        .eq('matric_number', cleanMatric)
+        .maybeSingle();
+
+      if (!targetEnrollment) {
+        return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
+      }
+
+      // 5. Check the 3-DISTINCT-STUDENT cap (not 3 total clicks)
+      const { data: existingClaims } = await supabase
+        .from('attendance_logs')
+        .select('matric_number')
+        .eq('session_id', sessionId)
+        .eq('device_hash', 'rep-battery-log');
+
+      const distinctStudents = new Set(existingClaims?.map(c => c.matric_number) || []);
+
+      // If they already have 3 DIFFERENT students logged, and this is a 4th new one, block it
+      if (distinctStudents.size >= 3 && !distinctStudents.has(cleanMatric)) {
+        return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
+      }
+
+      // 6. Check for existing log for this specific student
+      const { data: existingLog } = await supabase
+        .from('attendance_logs')
+        .select('id, status')
+        .eq('session_id', sessionId)
+        .eq('matric_number', cleanMatric)
+        .maybeSingle();
+
+      if (existingLog) {
+        if (existingLog.status === 'verified') {
+          return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
+        }
+        await supabase.from('attendance_logs').update({
+          status: 'pending_override',
+          device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
+          device_hash: 'rep-battery-log'
+        }).eq('id', existingLog.id);
+      } else {
+        await supabase.from('attendance_logs').insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'pending_override',
+          device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
+          device_hash: 'rep-battery-log'
+        }]);
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 </file>
 
@@ -5026,6 +5160,135 @@ export async function POST(request: Request) {
     console.error("Verification API Error:", error);
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/page.tsx">
+'use client';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
+import Link from 'next/link';
+
+const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
+
+function CheckInWrapper() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  if (!sessionId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+        
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="w-full max-w-md relative z-10">
+          
+          <div className="text-center mb-10 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="bg-[#2563EB] w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-6 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+              <ShieldCheck className="w-12 h-12 text-white z-10" strokeWidth={2.5} />
+              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
+            </div>
+            <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
+            <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+            
+            <div className="space-y-4">
+              <Link 
+                href="/portal" 
+                onClick={() => setIsNavigating(true)}
+                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+              >
+                {isNavigating ? (
+                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
+                ) : (
+                  <LogIn size={22} className="text-white" strokeWidth={3} />
+                )}
+                <span className="font-black text-white text-xl tracking-wide">
+                  {isNavigating ? "Entering..." : "Enter Student Portal"}
+                </span>
+                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
+              </Link>
+              
+              <p className="text-center text-sm font-bold text-gray-500">
+                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
+              </p>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+              <Link 
+                href="/login" 
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
+              >
+                <Lock size={14} /> Faculty Sign In
+              </Link>
+            </div>
+            
+          </div>
+
+          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
+            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
+              <Zap size={20} className="text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Activity size={14} className="text-green-400" /> Live Classes
+              </p>
+              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
+                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-center items-center gap-4 text-xs font-bold text-gray-400 pb-8">
+            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-1 font-medium text-sm">Live Student Check-In</p>
+        </div>
+
+        <StudentCheckInComponent sessionId={sessionId} />
+
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={32}/>
+        <p className="text-gray-500 font-bold animate-pulse">Loading CampusCheck...</p>
+      </div>
+    }>
+      <CheckInWrapper />
+    </Suspense>
+  );
 }
 </file>
 
@@ -6002,135 +6265,6 @@ export default function CourseManagement() {
 }
 </file>
 
-<file path="app/page.tsx">
-'use client';
-import { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
-import Link from 'next/link';
-
-const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
-
-function CheckInWrapper() {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sessionId');
-  const [isNavigating, setIsNavigating] = useState(false);
-
-  if (!sessionId) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-        
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="w-full max-w-md relative z-10">
-          
-          <div className="text-center mb-10 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="bg-[#2563EB] w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-6 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
-              <ShieldCheck className="w-12 h-12 text-white z-10" strokeWidth={2.5} />
-              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
-            </div>
-            <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
-            <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
-            
-            <div className="space-y-4">
-              <Link 
-                href="/portal" 
-                onClick={() => setIsNavigating(true)}
-                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
-              >
-                {isNavigating ? (
-                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
-                ) : (
-                  <LogIn size={22} className="text-white" strokeWidth={3} />
-                )}
-                <span className="font-black text-white text-xl tracking-wide">
-                  {isNavigating ? "Entering..." : "Enter Student Portal"}
-                </span>
-                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
-              </Link>
-              
-              <p className="text-center text-sm font-bold text-gray-500">
-                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
-              </p>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-              <Link 
-                href="/login" 
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
-              >
-                <Lock size={14} /> Faculty Sign In
-              </Link>
-            </div>
-            
-          </div>
-
-          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
-              <Zap size={20} className="text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-sm flex items-center gap-2">
-                <Activity size={14} className="text-green-400" /> Live Classes
-              </p>
-              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex justify-center items-center gap-4 text-xs font-bold text-gray-400 pb-8">
-            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
-            <span className="text-gray-300">•</span>
-            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      
-      <div className="w-full max-w-md relative z-10">
-        
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-1 font-medium text-sm">Live Student Check-In</p>
-        </div>
-
-        <StudentCheckInComponent sessionId={sessionId} />
-
-      </div>
-    </div>
-  );
-}
-
-export default function Page() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={32}/>
-        <p className="text-gray-500 font-bold animate-pulse">Loading CampusCheck...</p>
-      </div>
-    }>
-      <CheckInWrapper />
-    </Suspense>
-  );
-}
-</file>
-
 <file path="components/StudentCheckIn.tsx">
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -6423,6 +6557,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
+        
+        // NEW: Track check-ins for the PWA installer logic
+        const currentCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
+        localStorage.setItem('campuscheck_checkin_count', String(currentCount + 1));
+
       } else if (result.status === 'disqualified') {
         setErrorMessage(result.message || "This attempt has been flagged as invalid.");
         setStatus('disqualified');

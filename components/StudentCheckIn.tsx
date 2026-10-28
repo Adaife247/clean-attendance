@@ -1,3 +1,4 @@
+// components/StudentCheckIn.tsx
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -30,6 +31,7 @@ type Status =
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
+const GPS_MIN_WAIT_FOR_FIRST_PING_MS = 8000;
 const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
@@ -42,10 +44,16 @@ function getMeme(minutesLate: number): { title: string; sub: string; emoji: stri
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /FBAN|FBAV|Instagram|WhatsApp|Line\/|Twitter|Snapchat|LinkedInApp|Pinterest|TikTok/i.test(ua);
+}
+
 export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
@@ -60,6 +68,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isIosFallback, setIsIosFallback] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
+  const [inAppBrowser, setInAppBrowser] = useState(false);
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
@@ -69,7 +78,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
       const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
-      
+
       if (urlMatric) {
         setMatricNumber(urlMatric.toUpperCase());
       } else if (savedMatric) {
@@ -84,8 +93,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
       } else {
         setDeviceType('other');
       }
+
+      if (isInAppBrowser()) {
+        setInAppBrowser(true);
+      }
     }, 0);
-    
+
     return () => clearTimeout(id);
   }, [searchParams]);
 
@@ -101,7 +114,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
-  const checkPermission = useCallback(() => {
+  /**
+   * iOS Safari will not show a location prompt unless the call is made
+   * inside a user gesture. This function is called from the "Continue"
+   * button, not from useEffect. The prewarm watch below still runs
+   * once permission has been granted.
+   */
+  const checkPermissionFromGesture = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsStatus('denied');
       return;
@@ -111,20 +130,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
       () => setGpsStatus('granted'),
       (error) => {
         if (error.code === 1) setGpsStatus('denied');
-        else setGpsStatus('granted'); 
+        else setGpsStatus('granted');
       },
-      { timeout: 1000, maximumAge: 0 }
+      { timeout: 8000, maximumAge: 0, enableHighAccuracy: true }
     );
   }, []);
 
-  useEffect(() => {
-    const id = setTimeout(() => checkPermission(), 0);
-    return () => clearTimeout(id);
-  }, [checkPermission]);
-
+  /**
+   * Prewarm GPS buffer. Only starts once permission has been granted.
+   * On iOS Safari, we also do a one-shot getCurrentPosition to force a
+   * fresh reading — watchPosition alone can silently stall.
+   */
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    if (gpsStatus === 'denied') return;
+    if (gpsStatus !== 'granted') return;
 
     const id = navigator.geolocation.watchPosition(
       (position) => {
@@ -140,6 +159,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
     prewarmWatchIdRef.current = id;
+
+    // iOS Safari boost: force one reading
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        prewarmBufferRef.current.push({
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+        });
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+
     return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, [gpsStatus]);
 
@@ -179,13 +211,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            sessionId: item.session, 
-            matricNumber: item.matric, 
-            telemetry: item.telemetry, 
-            deviceFingerprint: item.fingerprint, 
+          body: JSON.stringify({
+            sessionId: item.session,
+            matricNumber: item.matric,
+            telemetry: item.telemetry,
+            deviceFingerprint: item.fingerprint,
             verificationMethod: item.verificationMethod,
-            userAgent: navigator.userAgent 
+            userAgent: navigator.userAgent
           })
         });
         if (res.ok || res.status === 409) successCount++;
@@ -210,16 +242,27 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
     setStatus('checking');
+    setErrorMessage('');
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      if (res.status === 404) setStatus('needs_setup');
-      else if (res.ok) setStatus('ready');
-      else throw new Error("Failed to verify ledger.");
+      if (res.status === 404) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.error === 'NOT_ENROLLED') {
+          setErrorMessage(data.message || "You are not on any class roster yet.");
+          setStatus('failed');
+          return;
+        }
+        setStatus('needs_setup');
+      } else if (res.ok) {
+        setStatus('ready');
+      } else {
+        throw new Error("Failed to verify ledger.");
+      }
     } catch {
-      setErrorMessage("Network error. Could not connect to database.");
+      setErrorMessage("Network error. Could not connect to the database.");
       setStatus('failed');
     }
   };
@@ -228,7 +271,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     try {
       const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
       if (existingAnchor && existingAnchor !== matricNumber) {
-        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
+        setErrorMessage(`This device is already bound to ${existingAnchor}. Ask your lecturer to reset your device if this is a mistake.`);
         setStatus('failed');
         return;
       }
@@ -238,20 +281,36 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      if (!genRes.ok || options.error) throw new Error(options.error || "Server rejected registration.");
-      
-      const attResp = await startRegistration(options);
+      if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
+
+      let attResp;
+      try {
+        attResp = await startRegistration(options);
+      } catch (err) {
+        const name = err instanceof Error ? err.name : '';
+        if (name === 'NotAllowedError') {
+          throw new Error("Passkey setup was cancelled or timed out. Tap the button again and choose 'Allow' when prompted.");
+        }
+        if (name === 'InvalidStateError') {
+          throw new Error("This phone already has a passkey for CampusCheck. Ask your lecturer to reset your device.");
+        }
+        if (name === 'NotSupportedError') {
+          throw new Error("This browser doesn't support passkeys. Open the link in Chrome (Android) or Safari (iPhone).");
+        }
+        throw err;
+      }
+
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
-      
+
       if (verifyResult.verified) {
         safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
         setStatus('ready');
       } else {
-        throw new Error("Hardware binding failed.");
+        throw new Error("Hardware binding failed. Try again.");
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to register your biometric device.";
@@ -273,49 +332,45 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId, 
-          matricNumber, 
-          telemetry: gpsTelemetry, 
-          deviceFingerprint: fingerprint || 'unknown', 
+        body: JSON.stringify({
+          sessionId,
+          matricNumber,
+          telemetry: gpsTelemetry,
+          deviceFingerprint: fingerprint || 'unknown',
           verificationMethod,
           userAgent: navigator.userAgent
         })
       });
       const result = await response.json();
 
-      if ((response.ok && result.status === 'verified') || response.status === 409) {
+      if (result.status === 'verified' || response.status === 409) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
-        
-        // NEW: Track check-ins for the PWA installer logic
+
         const currentCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
         localStorage.setItem('campuscheck_checkin_count', String(currentCount + 1));
-
-      } else if (result.status === 'disqualified') {
-        setErrorMessage(result.message || "This attempt has been flagged as invalid.");
-        setStatus('disqualified');
-      } else if (result.status === 'flagged' || response.status === 403) {
-        setErrorMessage(result.message || "Verification failed.");
-        setStatus('failed');
       } else {
+        // Show the server's real message — never replace it with generic text.
         setErrorMessage(result.message || "Verification failed.");
-        setStatus('failed');
+        if (result.status === 'disqualified') {
+          setStatus('disqualified');
+        } else {
+          setStatus('failed');
+        }
       }
     } catch (error) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
-        
         if (!existing.some(item => item.session === sessionId)) {
           existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
           safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
         }
         setStatus('offline-queued');
       } else {
-        setErrorMessage("Server connection lost.");
+        setErrorMessage("Connection lost. Check your internet and try again.");
         setStatus('failed');
       }
     }
@@ -323,7 +378,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const executeFinalCheckIn = async () => {
     setStatus('locating');
+    setErrorMessage('');
     setLiveAccuracy(null);
+
+    // iOS Safari prompt fix: this is called from a user gesture
+    checkPermissionFromGesture();
+
     let verificationMethod = 'skipped';
 
     const skipWebAuthn = isIosNonSafari();
@@ -339,7 +399,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           verificationMethod = 'skipped';
         } else {
           const options = await genRes.json();
-          if (options.error) throw new Error(options.error);
+          if (options.error) throw new Error(options.message || options.error);
           const asseResp = await startAuthentication(options);
           const verifyRes = await fetch('/api/webauthn/auth/verify', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -347,21 +407,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
           });
           const verifyResult = await verifyRes.json();
           if (verifyResult.verified) verificationMethod = 'biometric';
-          else throw new Error("Biometric mismatch");
+          else throw new Error("Biometric verification failed.");
         }
       } catch (error) {
-        console.warn("Biometric failed, falling back to flagged mode:", error);
+        console.warn("Biometric step failed, continuing with GPS only:", error);
         verificationMethod = 'skipped';
       }
     } else {
       verificationMethod = 'ios_web';
     }
 
-    if (!navigator.geolocation) { setErrorMessage("Browser doesn't support location."); setStatus('failed'); return; }
+    if (!navigator.geolocation) {
+      setErrorMessage("This browser doesn't support location. Open the link in Chrome or Safari.");
+      setStatus('failed');
+      return;
+    }
 
     const pings: Telemetry[] = [...prewarmBufferRef.current];
-    let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
-    if (pings.length > 0) setLiveAccuracy(Math.round(bestAcc));
+    let bestAcc = pings.reduce((min, p) => (p.acc > 0 ? Math.min(min, p.acc) : min), Infinity);
+    if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
 
     let watchId = 0;
     let didFinish = false;
@@ -374,41 +438,60 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
         sendPayloadToVercel(finalPings, verificationMethod);
       } else {
-        setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS, then try again.");
+        setErrorMessage("Couldn't get any location data. Make sure Location is ON and you're near a window, then try again.");
         setStatus('failed');
       }
     };
 
-    if (pings.length >= 1) { sentAny = true; sendPayloadToVercel(pings, verificationMethod); }
+    // If prewarm buffer already has pings, send immediately
+    if (pings.length >= 1) {
+      sentAny = true;
+      sendPayloadToVercel([...pings], verificationMethod);
+    }
 
     const overallTimeoutId = setTimeout(() => {
       if (!sentAny && pings.length === 0) finishWith(pings);
       else { didFinish = true; if (watchId) navigator.geolocation.clearWatch(watchId); }
     }, GPS_OVERALL_TIMEOUT_MS);
 
+    // Minimum-wait enforcement: if prewarm is empty, wait at least a few
+    // seconds for a single ping before the "no data" failure fires.
+    const firstPingWaitId = setTimeout(() => {
+      if (pings.length === 0 && !didFinish) {
+        finishWith(pings);
+      }
+    }, GPS_MIN_WAIT_FOR_FIRST_PING_MS);
+
     let lastSendTs = Date.now();
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         const acc = position.coords.accuracy;
-        if (acc < bestAcc) bestAcc = acc;
-        setLiveAccuracy(Math.round(bestAcc));
-        pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
+        if (acc > 0 && acc < bestAcc) bestAcc = acc;
+        if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
+        pings.push({
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+        });
 
         const now = Date.now();
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
           lastSendTs = now;
           sentAny = true;
-          sendPayloadToVercel(pings, verificationMethod);
+          sendPayloadToVercel([...pings], verificationMethod);
         }
       },
       (error) => {
         clearTimeout(overallTimeoutId);
+        clearTimeout(firstPingWaitId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (didFinish || sentAny) return;
         didFinish = true;
         if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`); setStatus('failed'); }
+        else {
+          setErrorMessage(`GPS error (code ${error.code}). Turn Location off and back on, then try again.`);
+          setStatus('failed');
+        }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
     );
@@ -423,13 +506,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ sessionId, matricNumber })
       });
       if (response.ok) {
-        setErrorMessage("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setErrorMessage("Appeal sent. Show this screen to your lecturer for visual confirmation.");
         setStatus('idle');
       } else {
-        setErrorMessage("Failed to send appeal. Check network.");
+        const data = await response.json().catch(() => ({}));
+        setErrorMessage(data.message || "Failed to send appeal. Check your connection and try again.");
       }
     } catch {
-      setErrorMessage("Network error.");
+      setErrorMessage("Network error. Check your connection and try again.");
     } finally {
       setIsAppealing(false);
     }
@@ -466,60 +550,68 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
-        {gpsStatus === 'denied' && (
+        {inAppBrowser && (
           <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
             <div className="flex items-start gap-3">
-              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={20} />
               <div>
-                <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
-                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
-                  Your browser is currently blocking location access. Please follow these steps to enable it:
+                <h4 className="font-bold text-red-900 text-sm">Open this link in your browser</h4>
+                <p className="text-xs text-red-700 font-medium mt-1 leading-relaxed">
+                  You opened this link inside another app. Passkey setup does not work in in-app browsers.
+                  Tap the menu (⋮) and choose <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>.
                 </p>
-                
-                <div className="text-xs text-red-800 space-y-1.5 bg-white/50 p-3 rounded-lg border border-red-100">
-                  {deviceType === 'ios' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
-                      <p>1. Open your iPhone <strong>Settings</strong>.</p>
-                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
-                      <p>3. Tap <strong>Location</strong> and select <strong>Allow</strong>.</p>
-                      <p>4. Come back here and tap the button below.</p>
-                    </>
-                  ) : deviceType === 'android' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
-                      <p>1. Tap the <strong>lock icon</strong> next to the website address.</p>
-                      <p>2. Tap <strong>Permissions</strong>.</p>
-                      <p>3. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
-                      <p>4. Refresh this page.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-bold text-[13px]">On Desktop Browser:</p>
-                      <p>1. Click the <strong>lock icon</strong> next to the website address.</p>
-                      <p>2. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
-                      <p>3. Refresh this page.</p>
-                    </>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => { setGpsStatus('prompt'); checkPermission(); }} 
-                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
-                >
-                  I have turned it on, check again
-                </button>
               </div>
             </div>
           </div>
         )}
 
-        {gpsStatus === 'prompt' && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
-            <MapPin className="text-amber-600 shrink-0 mt-0.5" size={20} />
-            <div>
-              <h4 className="font-bold text-amber-900 text-sm">Location Permission Needed</h4>
-              <p className="text-xs text-amber-700 font-medium mt-1">Please tap &quot;Allow&quot; when your browser asks for location access.</p>
+        {gpsStatus === 'denied' && (
+          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
+            <div className="flex items-start gap-3">
+              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <h4 className="font-bold text-red-900 text-sm">Location is blocked</h4>
+                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
+                  Your browser is blocking location access. Follow these steps:
+                </p>
+
+                <div className="text-xs text-red-800 space-y-1.5 bg-white/60 p-3 rounded-lg border border-red-100">
+                  {deviceType === 'ios' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
+                      <p>1. Open iPhone <strong>Settings</strong>.</p>
+                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
+                      <p>3. Tap <strong>Location</strong> → <strong>Allow</strong>.</p>
+                      <p>4. Return here and tap the button below.</p>
+                    </>
+                  ) : deviceType === 'android' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
+                      <p>1. Tap the <strong>lock icon</strong> next to the address.</p>
+                      <p>2. Tap <strong>Permissions</strong>.</p>
+                      <p>3. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                      <p>4. Refresh this page.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-[13px]">On your browser:</p>
+                      <p>1. Click the <strong>lock icon</strong> next to the address.</p>
+                      <p>2. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                      <p>3. Refresh this page.</p>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setGpsStatus('prompt');
+                    checkPermissionFromGesture();
+                  }}
+                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                >
+                  I turned it on — check again
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -546,9 +638,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><ShieldCheck size={32} className="text-[#2563EB]" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Hardware Setup</h3>
-            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
+            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
           </div>
         )}
 
@@ -557,9 +649,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100"><CheckCircle size={32} className="text-green-600" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Identity Confirmed</h3>
             <p className="text-gray-900 font-black text-xl mt-1">{matricNumber}</p>
-            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is securely linked. Ensure you are inside the lecture hall.</p>
+            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
             <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
           </div>
         )}
 
@@ -567,7 +659,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold text-center">
-              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Sending your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
+              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Getting your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
             </p>
             {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
               <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"><Signal size={14} className="text-[#2563EB]" /><span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span></div>
@@ -582,9 +674,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
             <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded.</p>
             {isIosFallback && (
-              <p className="text-xs text-blue-600 font-bold mt-2">Note: Biometrics aren&apos;t supported on this browser. Verified via GPS.</p>
+              <p className="text-xs text-blue-600 font-bold mt-2">Note: biometrics weren&apos;t used on this browser. Verified via GPS.</p>
             )}
-            
+
             <div className="mt-8 space-y-3">
               <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">
                 Rate this Lecture
@@ -644,7 +736,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.</p>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS was captured. Keep this tab open. It will auto-submit when the internet returns.</p>
           </div>
         )}
 
@@ -652,17 +744,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
-              {errorMessage.includes("out of bounds") || errorMessage.includes("away") ? "You are too far away. You must be inside the lecture hall to check in. If you are in the hall, try walking near a window." : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down") ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again." : errorMessage}
+            <p className="text-orange-700 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
+              {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
               <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
-              
+
               <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
                 {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
               </button>
-              
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
+
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over</button>
             </div>
           </div>
         )}
@@ -670,12 +762,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
         {status === 'disqualified' && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <ShieldAlert className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Attempt Disqualified</h3>
+            <h3 className="text-xl font-bold text-gray-900">Attempt Blocked</h3>
             <p className="text-red-700 mt-2 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100">
               {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
-              <p className="text-sm text-gray-600 font-medium">You cannot retry this check-in. Please show this screen to your lecturer.</p>
+              <p className="text-sm text-gray-600 font-medium">Show this screen to your lecturer to be verified manually.</p>
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand
+              </button>
               <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">Return to Portal</button>
             </div>
           </div>
@@ -685,8 +780,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
-            <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
-            <button onClick={() => { checkPermission(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on, Try Again</button>
+            <p className="text-red-600 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
+            <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on — try again</button>
             <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
           </div>
         )}

@@ -1,3 +1,4 @@
+// app/api/webauthn/register/generate/route.ts
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -7,6 +8,11 @@ import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
 import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
+interface ExistingDevice {
+  credential_id: string;
+  transports: string[] | null;
+}
+
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
@@ -15,15 +21,15 @@ export async function POST(request: Request) {
 
     if (!rateCheck.allowed) {
       return NextResponse.json(
-        { error: "Too many requests. Please wait a minute." },
+        { error: 'Too many requests. Please wait a minute.' },
         { status: 429, headers: rateLimitHeaders(rateCheck) }
       );
     }
 
     const { matricNumber } = await request.json();
-    
+
     if (!matricNumber || typeof matricNumber !== 'string') {
-      return NextResponse.json({ error: "Matric number required." }, { status: 400 });
+      return NextResponse.json({ error: 'Matric number required.' }, { status: 400 });
     }
 
     const cleanMatric = matricNumber.toUpperCase().trim();
@@ -37,35 +43,46 @@ export async function POST(request: Request) {
 
     if (!enrollments || enrollments.length === 0) {
       return NextResponse.json(
-        { error: "NOT_ENROLLED", message: "Your matric isn't on any roster yet. Ask your lecturer to add you first." },
+        {
+          error: 'NOT_ENROLLED',
+          message: "Your matric isn't on any roster yet. Ask your lecturer to add you first.",
+        },
         { status: 403, headers: rateLimitHeaders(rateCheck) }
       );
     }
 
-    // 2. Check if this matric is already registered to a device
+    // 2. If already registered, tell the client to log in instead
     const { data: existingDevice } = await supabase
       .from('user_devices')
-      .select('matric_number')
+      .select('credential_id, transports')
       .eq('matric_number', cleanMatric)
-      .maybeSingle();
+      .maybeSingle<ExistingDevice>();
 
     if (existingDevice) {
-      // Already registered — they should log in, not register again
       return NextResponse.json(
-        { error: "ALREADY_REGISTERED", message: "This matric already has a linked phone. Log in instead." },
+        {
+          error: 'ALREADY_REGISTERED',
+          message: 'This matric already has a linked phone. Log in instead.',
+        },
         { status: 409, headers: rateLimitHeaders(rateCheck) }
       );
     }
 
     // 3. Generate registration options
+    //    - attestationType (was previously attestation)
+    //    - residentKey: 'preferred' (was 'required')
+    //    - userVerification: 'preferred' (was 'required')
+    //    - authenticatorAttachment: 'platform'
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
       userID: new TextEncoder().encode(cleanMatric),
       userName: cleanMatric,
+      attestationType: 'none',
       authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required', 
+        authenticatorAttachment: 'platform',
+        residentKey: 'preferred',
+        userVerification: 'preferred',
       },
     });
 
@@ -79,7 +96,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
+    const msg = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
