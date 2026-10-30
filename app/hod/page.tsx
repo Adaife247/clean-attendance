@@ -5,6 +5,7 @@ import { supabase } from '@/utils/supabase';
 import { getLecturerHeaders } from '@/utils/api-client';
 import { ShieldCheck, Users, BookOpen, Star, TrendingUp, AlertTriangle, ArrowLeft, Loader2, BarChart3, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface LecturerStat {
   id: string;
@@ -77,20 +78,20 @@ export default function HODPortal() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={40} />
-        <p className="text-gray-500 font-bold animate-pulse text-lg">Authenticating HOD Clearance...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 transition-colors duration-300">
+        <Loader2 className="animate-spin text-[#2563EB] dark:text-blue-400 mb-4" size={40} />
+        <p className="text-gray-500 dark:text-gray-400 font-bold animate-pulse text-lg">Authenticating HOD Clearance...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <AlertTriangle className="text-red-500 mb-4" size={48} />
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to load Dashboard</h2>
-        <p className="text-gray-500 font-medium text-center mb-6 max-w-md">{error}</p>
-        <button onClick={() => fetchDepartmentData()} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 transition-colors duration-300">
+        <AlertTriangle className="text-red-500 dark:text-red-400 mb-4" size={48} />
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Failed to load Dashboard</h2>
+        <p className="text-gray-500 dark:text-gray-400 font-medium text-center mb-6 max-w-md">{error}</p>
+        <button onClick={() => fetchDepartmentData()} className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-6 py-3 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-100 transition-all">
           Try Again
         </button>
       </div>
@@ -102,123 +103,126 @@ export default function HODPortal() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-8 font-sans transition-colors duration-300">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-[#2563EB] p-2 rounded-lg">
                 <ShieldCheck className="text-white" size={24} />
               </div>
-              <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">HOD Command Center</h1>
+              <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight">HOD Command Center</h1>
             </div>
-            <p className="text-gray-500 font-medium">Department-wide analytics and NUC compliance.</p>
+            <p className="text-gray-500 dark:text-gray-400 font-medium">Department-wide analytics and NUC compliance.</p>
           </div>
-          <Link href="/dashboard" className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-all">
-            <ArrowLeft size={16} /> Back to Lecturer View
-          </Link>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Link href="/dashboard" className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+              <ArrowLeft size={16} /> Back to Lecturer View
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-blue-50 text-[#2563EB] p-4 rounded-xl">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 flex items-center gap-4 transition-colors">
+            <div className="bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 p-4 rounded-xl">
               <Users size={24} />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Lecturers</p>
-              <p className="text-3xl font-black text-gray-900">{stats.length}</p>
+              <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Lecturers</p>
+              <p className="text-3xl font-black text-gray-900 dark:text-white">{stats.length}</p>
             </div>
           </div>
           
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-emerald-50 text-emerald-600 p-4 rounded-xl">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 flex items-center gap-4 transition-colors">
+            <div className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-4 rounded-xl">
               <TrendingUp size={24} />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Dept. Avg Rating</p>
-              <p className="text-3xl font-black text-gray-900">
-                {(stats.reduce((acc, s) => acc + s.avg_rating, 0) / (stats.length || 1)).toFixed(1)} <span className="text-lg text-gray-400">/ 5</span>
+              <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dept. Avg Rating</p>
+              <p className="text-3xl font-black text-gray-900 dark:text-white">
+                {(stats.reduce((acc, s) => acc + s.avg_rating, 0) / (stats.length || 1)).toFixed(1)} <span className="text-lg text-gray-400 dark:text-gray-500">/ 5</span>
               </p>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-4">
-            <div className="bg-purple-50 text-purple-600 p-4 rounded-xl">
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 flex items-center gap-4 transition-colors">
+            <div className="bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 p-4 rounded-xl">
               <BookOpen size={24} />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Sessions</p>
-              <p className="text-3xl font-black text-gray-900">{stats.reduce((acc, s) => acc + s.session_count, 0)}</p>
+              <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Sessions</p>
+              <p className="text-3xl font-black text-gray-900 dark:text-white">{stats.reduce((acc, s) => acc + s.session_count, 0)}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
-                <CheckCircle className="text-[#2563EB]" size={20} /> NUC Exam Compliance
+              <h3 className="text-lg font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                <CheckCircle className="text-[#2563EB] dark:text-blue-400" size={20} /> NUC Exam Compliance
               </h3>
-              <p className="text-sm text-gray-500 font-medium mt-1">Percentage of enrolled students with ≥70% attendance.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">Percentage of enrolled students with ≥70% attendance.</p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-black text-gray-900">{complianceRate}%</p>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Dept. Cleared</p>
+              <p className="text-3xl font-black text-gray-900 dark:text-white">{complianceRate}%</p>
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dept. Cleared</p>
             </div>
           </div>
           
-          <div className="relative w-full h-6 bg-gray-100 rounded-full overflow-hidden border border-gray-200 shadow-inner">
+          <div className="relative w-full h-6 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner transition-colors">
             <div 
               className="absolute top-0 left-0 h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all duration-1000"
               style={{ width: `${complianceRate}%` }}
             />
-            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
+            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30 dark:bg-white/30" style={{ left: '70%' }} />
           </div>
           
           <div className="flex justify-between items-center mt-3 text-sm font-bold">
-            <span className="text-emerald-600 flex items-center gap-1"><CheckCircle size={14}/> {compliance.cleared} Cleared</span>
-            <span className="text-gray-500">{compliance.total} Total Students</span>
-            <span className="text-red-500 flex items-center gap-1"><AlertTriangle size={14}/> {compliance.atRisk} At Risk</span>
+            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle size={14}/> {compliance.cleared} Cleared</span>
+            <span className="text-gray-500 dark:text-gray-400">{compliance.total} Total Students</span>
+            <span className="text-red-500 dark:text-red-400 flex items-center gap-1"><AlertTriangle size={14}/> {compliance.atRisk} At Risk</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <h3 className="font-extrabold text-gray-900 text-lg flex items-center gap-2">
-              <BarChart3 size={18} className="text-[#2563EB]" /> Lecturer Performance
+        <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors">
+          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 flex items-center justify-between">
+            <h3 className="font-extrabold text-gray-900 dark:text-white text-lg flex items-center gap-2">
+              <BarChart3 size={18} className="text-[#2563EB] dark:text-blue-400" /> Lecturer Performance
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                <tr className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500">
                   <th className="px-6 py-4 font-bold">Lecturer Name</th>
                   <th className="px-6 py-4 font-bold text-center">Courses</th>
                   <th className="px-6 py-4 font-bold text-center">Sessions Held</th>
                   <th className="px-6 py-4 font-bold text-right">Student Rating</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {stats.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 font-bold">No lecturers found in this department.</td>
+                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400 font-bold">No lecturers found in this department.</td>
                   </tr>
                 ) : (
                   stats.map((lec) => (
-                    <tr key={lec.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-gray-900">{lec.full_name}</td>
-                      <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.course_count}</td>
-                      <td className="px-6 py-4 text-center font-bold text-gray-600">{lec.session_count}</td>
+                    <tr key={lec.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                      <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{lec.full_name}</td>
+                      <td className="px-6 py-4 text-center font-bold text-gray-600 dark:text-gray-300">{lec.course_count}</td>
+                      <td className="px-6 py-4 text-center font-bold text-gray-600 dark:text-gray-300">{lec.session_count}</td>
                       <td className="px-6 py-4 text-right">
                         {lec.total_ratings > 0 ? (
-                          <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg border border-amber-200">
+                          <div className="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800">
                             <Star size={14} className="fill-amber-400 text-amber-400" />
                             <span className="font-black">{lec.avg_rating}</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600/70">({lec.total_ratings} votes)</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600/70 dark:text-amber-500/70">({lec.total_ratings} votes)</span>
                           </div>
                         ) : (
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-50 px-3 py-1.5 rounded-lg">No ratings yet</span>
+                          <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg">No ratings yet</span>
                         )}
                       </td>
                     </tr>
