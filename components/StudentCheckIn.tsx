@@ -194,7 +194,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => { cancelled = true; clearTimeout(id); };
-  }, [sessionId]);  const syncOfflineQueue = useCallback(async () => {
+  }, [sessionId]);
+
+  const syncOfflineQueue = useCallback(async () => {
     const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
     if (queue.length === 0) return;
     setStatus('syncing');
@@ -216,7 +218,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
-            } catch (err) { 
+      } catch (err) { 
         logger.warn('Offline sync failed for item', err);
         remainingQueue.push(item); 
       }
@@ -531,7 +533,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
-        } catch (err) { 
+    } catch (err) { 
       logger.warn('Rating submission failed', err);
     }
     finally {
@@ -549,15 +551,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="w-full">
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh] transition-colors duration-300">
 
         {inAppBrowser && (
-          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <AlertTriangle className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
               <div>
-                <h4 className="font-bold text-red-900 text-sm">Open this link in your browser</h4>
-                <p className="text-xs text-red-700 font-medium mt-1 leading-relaxed">
+                <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Open this link in your browser</h4>
+                <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 leading-relaxed">
                   You opened this link inside another app. Passkey setup does not work in in-app browsers.
                   Tap the menu (⋮) and choose <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>.
                 </p>
@@ -567,16 +569,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
 
         {gpsStatus === 'denied' && (
-          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
             <div className="flex items-start gap-3">
-              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <MapPin className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
               <div>
-                <h4 className="font-bold text-red-900 text-sm">Location is blocked</h4>
-                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
+                <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Location is blocked</h4>
+                <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 mb-3">
                   Your browser is blocking location access. Follow these steps:
                 </p>
 
-                <div className="text-xs text-red-800 space-y-1.5 bg-white/60 p-3 rounded-lg border border-red-100">
+                <div className="text-xs text-red-800 dark:text-red-200 space-y-1.5 bg-white/60 dark:bg-gray-900/50 p-3 rounded-lg border border-red-100 dark:border-red-800/50">
                   {deviceType === 'ios' ? (
                     <>
                       <p className="font-bold text-[13px]">On iPhone / Safari:</p>
@@ -620,14 +622,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         {status === 'idle' && (
           <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {errorMessage && (
-              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-2 animate-in fade-in">
-                <CheckCircle size={16} className="text-[#2563EB] shrink-0 mt-0.5" />
-                <p className="text-blue-800 font-bold text-sm">{errorMessage}</p>
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 flex items-start gap-2 animate-in fade-in">
+                <CheckCircle size={16} className="text-[#2563EB] dark:text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-blue-800 dark:text-blue-300 font-bold text-sm">{errorMessage}</p>
               </div>
             )}
-            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><User size={18} /></div>
-              <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none placeholder:text-gray-400 text-sm uppercase" />
+            <div className="flex items-center bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white dark:focus-within:bg-gray-800 transition-all overflow-hidden">
+              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400 dark:text-gray-500"><User size={18} /></div>
+              <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 dark:text-white font-bold py-4 pr-4 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-sm uppercase" />
             </div>
             <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
               Continue <ArrowRight size={20} className="text-white/70" />
@@ -637,52 +639,50 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'needs_setup' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><ShieldCheck size={32} className="text-[#2563EB]" /></div>
-            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Hardware Setup</h3>
-            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
+            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-800"><ShieldCheck size={32} className="text-[#2563EB] dark:text-blue-400" /></div>
+            <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Hardware Setup</h3>
+            <p className="text-gray-600 dark:text-gray-400 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900 dark:text-white">{matricNumber}</span> to prevent proxy attendance.</p>
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
-            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Cancel</button>
           </div>
         )}
 
         {status === 'ready' && (
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100"><CheckCircle size={32} className="text-green-600" /></div>
-            <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Identity Confirmed</h3>
-            <p className="text-gray-900 font-black text-xl mt-1">{matricNumber}</p>
-            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
-            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
-            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
+            <div className="w-16 h-16 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100 dark:border-green-800"><CheckCircle size={32} className="text-green-600 dark:text-green-500" /></div>
+            <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Identity Confirmed</h3>
+            <p className="text-gray-900 dark:text-white font-black text-xl mt-1">{matricNumber}</p>
+            <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
+            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Not you? Switch account</button>
           </div>
         )}
 
         {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
           <div className="py-8 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-            <p className="text-gray-700 font-bold text-center">
+            <Loader2 className="w-10 h-10 text-[#2563EB] dark:text-blue-400 animate-spin mb-4" />
+            <p className="text-gray-700 dark:text-gray-300 font-bold text-center">
               {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Getting your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
             </p>
             {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
-              <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"><Signal size={14} className="text-[#2563EB]" /><span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span></div>
+              <div className="flex items-center gap-2 mt-3 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800"><Signal size={14} className="text-[#2563EB] dark:text-blue-400" /><span className="text-xs font-bold text-[#2563EB] dark:text-blue-400">±{liveAccuracy}m accuracy</span></div>
             )}
           </div>
-        )}
-
-        {status === 'success' && (
-          <div className="py-6 text-center">
-            <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-4" />
-            <h3 className="text-2xl font-bold text-gray-900">Verified!</h3>
-            <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
-            <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded.</p>
+        )}        {status === 'success' && (
+          <div className="py-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <CheckCircle className="w-20 h-20 text-green-500 dark:text-green-400 mx-auto mb-4" />
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Verified!</h3>
+            <p className="text-green-700 dark:text-green-400 font-bold mt-2 bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100 dark:border-green-800">{matricNumber}</p>
+            <p className="text-gray-500 dark:text-gray-400 mt-4 text-sm font-medium">Attendance recorded.</p>
             {isIosFallback && (
-              <p className="text-xs text-blue-600 font-bold mt-2">Note: biometrics weren&apos;t used on this browser. Verified via GPS.</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 font-bold mt-2">Note: biometrics weren&apos;t used on this browser. Verified via GPS.</p>
             )}
 
             <div className="mt-8 space-y-3">
-              <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">
+              <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
                 Rate this Lecture
               </button>
-              <button onClick={() => router.push('/portal')} className="w-full bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-all">
+              <button onClick={() => router.push('/portal')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
                 Return to Portal
               </button>
             </div>
@@ -691,23 +691,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'rating' && (
           <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-2xl p-5 text-center mb-6">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors">
               <p className="text-4xl mb-2">{memeData.meme.emoji}</p>
-              <h3 className="text-xl font-extrabold text-blue-900">{memeData.meme.title}</h3>
-              <p className="text-sm text-blue-700 font-medium mt-1">{memeData.meme.sub}</p>
+              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
               {sessionCreatedAt && (
-                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
+                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
               )}
             </div>
 
             <div className="text-center">
-              <h4 className="font-extrabold text-gray-900 text-lg">How was this lecture?</h4>
-              <p className="text-xs text-gray-500 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
+              <h4 className="font-extrabold text-gray-900 dark:text-white text-lg">How was this lecture?</h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
 
               <div className="flex justify-center gap-2 mt-5">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button key={star} onClick={() => setRatingStars(star)} className="transition-transform active:scale-90" aria-label={`Rate ${star} stars`}>
-                    <Star size={36} className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} strokeWidth={1.5} />
+                    <Star size={36} className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 dark:text-gray-600'} strokeWidth={1.5} />
                   </button>
                 ))}
               </div>
@@ -717,15 +717,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
                   {RATING_TAGS.map((tag) => {
                     const active = ratingTags.includes(tag);
                     return (
-                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`}>{tag}</button>
+                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}>{tag}</button>
                     );
                   })}
                 </div>
               )}
 
               <div className="flex gap-2 mt-6">
-                <button onClick={() => submitRating(true)} disabled={isSubmittingRating} className="flex-1 bg-white text-gray-600 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all text-sm disabled:opacity-50">Skip</button>
-                <button onClick={() => submitRating(false)} disabled={isSubmittingRating || ratingStars === 0} className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                <button onClick={() => submitRating(true)} disabled={isSubmittingRating} className="flex-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm disabled:opacity-50">Skip</button>
+                <button onClick={() => submitRating(false)} disabled={isSubmittingRating || ratingStars === 0} className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
                   {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
                 </button>
               </div>
@@ -734,62 +734,62 @@ export default function StudentCheckIn({ sessionId }: Props) {
         )}
 
         {status === 'offline-queued' && (
-          <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
-            <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS was captured. Keep this tab open. It will auto-submit when the internet returns.</p>
+          <div className="py-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 px-4 text-center transition-colors">
+            <WifiOff className="w-16 h-16 text-[#2563EB] dark:text-blue-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-blue-900 dark:text-white">Saved Offline</h3>
+            <p className="text-blue-700 dark:text-blue-300 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS was captured. Keep this tab open. It will auto-submit when the internet returns.</p>
           </div>
         )}
 
         {status === 'failed' && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            <p className="text-orange-700 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Verification Failed</h3>
+            <p className="text-orange-700 dark:text-orange-300 mt-2 text-sm font-bold bg-orange-50 dark:bg-orange-900/20 p-3 rounded-xl border border-orange-100 dark:border-orange-800 transition-colors">
               {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
-              <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
+              <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
 
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                 {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
               </button>
 
-              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over</button>
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">Start Over</button>
             </div>
           </div>
         )}
 
         {status === 'disqualified' && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <ShieldAlert className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Attempt Blocked</h3>
-            <p className="text-red-700 mt-2 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100">
+            <ShieldAlert className="w-16 h-16 text-red-600 dark:text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Attempt Blocked</h3>
+            <p className="text-red-700 dark:text-red-300 mt-2 text-sm font-bold bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-800 transition-colors">
               {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
-              <p className="text-sm text-gray-600 font-medium">Show this screen to your lecturer to be verified manually.</p>
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Show this screen to your lecturer to be verified manually.</p>
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                 {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand
               </button>
-              <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">Return to Portal</button>
+              <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Return to Portal</button>
             </div>
           </div>
         )}
 
         {status === 'denied' && (
-          <div className="py-4 text-center">
+          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
-            <p className="text-red-600 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
-            <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on — try again</button>
-            <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Location Blocked</h3>
+            <p className="text-red-600 dark:text-red-400 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
+            <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all">I turned it on — try again</button>
+            <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Go Back</button>
           </div>
         )}
       </div>
 
       <div className="mt-6 text-center space-y-4">
-        <p className="text-xs font-semibold text-gray-400">Make sure you are physically inside the lecture hall before checking in.</p>
+        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">Make sure you are physically inside the lecture hall before checking in.</p>
       </div>
     </div>
   );
