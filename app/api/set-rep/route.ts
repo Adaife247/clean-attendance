@@ -32,20 +32,43 @@ export async function POST(request: Request) {
 
     if (!enrollment) return NextResponse.json({ error: "Student is not enrolled in this course" }, { status: 403 });
 
-    // 3. Unset any previous rep for this course
+    // 3. Unset any previous rep for this course (by checking all enrolled students)
     const { data: enrolledStudents } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
     if (enrolledStudents) {
       const allMatrics = enrolledStudents.map(e => e.matric_number);
-      await supabase.from('student_profiles').update({ is_class_rep: false }).in('matric_number', allMatrics).eq('is_class_rep', true);
+      // Update the ones who currently have is_class_rep = true to false
+      await supabase
+        .from('student_profiles')
+        .update({ is_class_rep: false })
+        .in('matric_number', allMatrics)
+        .eq('is_class_rep', true);
     }
 
     // 4. Set the new rep
-    const { error: repError } = await supabase.from('student_profiles').upsert(
-      { matric_number: cleanMatric, is_class_rep: true },
-      { onConflict: 'matric_number' }
-    );
+    // FIX (B2 §5): Use update() instead of upsert() to prevent wiping their nickname, department, level, etc.
+    // First, check if the profile exists.
+    const { data: existingProfile } = await supabase
+      .from('student_profiles')
+      .select('matric_number')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
 
-    if (repError) throw repError;
+    if (existingProfile) {
+      // Profile exists, just update the flag
+      const { error: updateError } = await supabase
+        .from('student_profiles')
+        .update({ is_class_rep: true })
+        .eq('matric_number', cleanMatric);
+      
+      if (updateError) throw updateError;
+    } else {
+      // Profile doesn't exist yet, create a minimal one
+      const { error: insertError } = await supabase
+        .from('student_profiles')
+        .insert({ matric_number: cleanMatric, is_class_rep: true });
+        
+      if (insertError) throw insertError;
+    }
 
     return NextResponse.json({ success: true });
 
