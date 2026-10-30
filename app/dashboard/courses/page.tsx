@@ -208,9 +208,7 @@ export default function CourseManagement() {
     } finally {
       setIsSettingRep(false);
     }
-  };
-
-  const handleOpenModal = async (course: Course) => {
+  };  const handleOpenModal = async (course: Course) => {
     setEditingCourse(course);
     setEditCode(course.course_code);
     setEditPlanned(course.total_planned_classes || 15);
@@ -350,8 +348,16 @@ export default function CourseManagement() {
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
+        
         if (uniqueMatrics.length === 0) {
           confirm.ask('Invalid File', 'No valid matric numbers found.', () => {}, { isDangerous: false });
+          setUploadingId(null);
+          e.target.value = '';
+          return;
+        }
+
+        if (uniqueMatrics.length > 5000) {
+          confirm.ask('File Too Large', 'Maximum 5,000 students per upload.', () => {}, { isDangerous: false });
           setUploadingId(null);
           e.target.value = '';
           return;
@@ -519,28 +525,26 @@ export default function CourseManagement() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin" />
+        <Loader2 className="w-10 h-10 text-[#2563EB] dark:text-blue-400 animate-spin" />
       </div>
     );
-  }
+  }  return (
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 dark:bg-gray-950 min-h-screen transition-colors duration-300">
 
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
-
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-          <Users className="text-[#2563EB]" size={28} /> Course & Student Management
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
+        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+          <Users className="text-[#2563EB] dark:text-blue-400" size={28} /> Course & Student Management
         </h1>
-        <p className="text-gray-500 mt-1 font-medium">
+        <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium">
           Manage course rosters, grant medical waivers, and wipe device locks.
         </p>
       </div>
 
       {/* SECTION 1: COURSE REGISTRY */}
-      <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
-          <BookOpen className="text-[#2563EB]" size={24}/>
-          <h2 className="text-xl font-extrabold text-gray-900">Course Registry & Rosters</h2>
+      <div className="bg-white dark:bg-gray-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
+        <div className="flex items-center gap-2 mb-8 border-b border-gray-100 dark:border-gray-800 pb-4">
+          <BookOpen className="text-[#2563EB] dark:text-blue-400" size={24}/>
+          <h2 className="text-xl font-extrabold text-gray-900 dark:text-white">Course Registry & Rosters</h2>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -548,77 +552,77 @@ export default function CourseManagement() {
           {/* LEFT COLUMN: Create Course */}
           <div className="lg:col-span-7 space-y-4">
             <div className="flex items-center gap-2">
-              <div className="bg-blue-100 text-[#2563EB] w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Establish New Course</h3>
+              <div className="bg-blue-100 dark:bg-blue-900/40 text-[#2563EB] dark:text-blue-400 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Establish New Course</h3>
             </div>
             
-            <div className="space-y-4 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+            <div className="space-y-4 bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-800">
               <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Course Code</label>
+                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">Course Code</label>
                 <input
                   aria-label="Course Code"
                   type="text"
                   placeholder="e.g., CSC 301"
                   value={newCourseCode}
                   onChange={(e) => setNewCourseCode(e.target.value)}
-                  className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+                  className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
                 />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Department</label>
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">Department</label>
                   <div className="relative">
                     <select
                       aria-label="Department"
                       value={newDept}
                       onChange={(e) => setNewDept(e.target.value)}
-                      className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                      className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                     >
                       <option value="" disabled>Select Dept</option>
                       {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
-                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Level</label>
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">Level</label>
                   <div className="relative">
                     <select
                       aria-label="Level"
                       value={newLevel}
                       onChange={(e) => setNewLevel(e.target.value)}
-                      className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                      className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                     >
                       <option value="" disabled>Select Level</option>
                       {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
-                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Planned Lectures</label>
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">Planned Lectures</label>
                   <input
                     aria-label="Planned Lectures"
                     type="number"
                     placeholder="15"
                     value={plannedClasses}
                     onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-[#2563EB] transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Max CA Marks</label>
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 ml-1">Max CA Marks</label>
                   <input
                     aria-label="Max CA Marks"
                     type="number"
                     placeholder="10"
                     value={maxScore}
                     onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-[#2563EB] transition-all"
                   />
                 </div>
               </div>
@@ -639,20 +643,20 @@ export default function CourseManagement() {
             {/* Add Single Student */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Add Single Student</h3>
+                <div className="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Add Single Student</h3>
               </div>
-              <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 space-y-3">
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-3">
                 <div className="relative">
                   <select
                     aria-label="Course for Adding Student"
                     value={targetCourseId}
                     onChange={(e) => setTargetCourseId(e.target.value)}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
                   >
                     {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
                   </select>
-                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -661,13 +665,13 @@ export default function CourseManagement() {
                     placeholder="Matric Number"
                     value={singleMatric}
                     onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
                   />
                   <button
                     aria-label="Add Single Student"
                     onClick={handleSingleStudentAdd}
                     disabled={isAddingSingle || !singleMatric.trim()}
-                    className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
+                    className="bg-gray-900 dark:bg-gray-700 text-white px-5 py-3 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
                   >
                     {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
                   </button>
@@ -678,20 +682,20 @@ export default function CourseManagement() {
             {/* Designate Rep */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className="bg-amber-100 text-amber-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
-                <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">Designate Class Rep <Star size={14} className="fill-amber-500 text-amber-500" /></h3>
+                <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
+                <h3 className="text-sm font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">Designate Class Rep <Star size={14} className="fill-amber-500 text-amber-500" /></h3>
               </div>
-              <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 space-y-3">
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-5 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-3">
                 <div className="relative">
                   <select
                     aria-label="Course for Designating Rep"
                     value={repCourseCode}
                     onChange={(e) => setRepCourseCode(e.target.value)}
-                    className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 p-3 rounded-xl outline-none font-bold text-amber-900 dark:text-amber-100 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
                   >
                     {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
                   </select>
-                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-amber-600 pointer-events-none" />
+                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-amber-600 dark:text-amber-400 pointer-events-none" />
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -701,7 +705,7 @@ export default function CourseManagement() {
                     value={repMatricInput}
                     onChange={(e) => setRepMatricInput(e.target.value.toUpperCase())}
                     onKeyDown={(e) => e.key === 'Enter' && handleQuickSetRep()}
-                    className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
+                    className="w-full bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 p-3 rounded-xl outline-none font-bold text-amber-900 dark:text-amber-100 placeholder:text-amber-400 dark:placeholder:text-amber-600 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
                   />
                   <button
                     aria-label="Make Class Rep"
@@ -720,40 +724,40 @@ export default function CourseManagement() {
 
         {/* Course Cards */}
         {courses.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-12 pt-8 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-12 pt-8 border-t border-gray-100 dark:border-gray-800">
             {courses.map(course => (
-              <div key={course.id} className="bg-white p-5 rounded-xl border border-gray-200 relative group flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
+              <div key={course.id} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 relative group flex flex-col justify-between shadow-sm hover:shadow-md transition-all">
                 
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h4 className="font-extrabold text-gray-900 text-lg">{course.course_code}</h4>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">
+                    <h4 className="font-extrabold text-gray-900 dark:text-white text-lg">{course.course_code}</h4>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-1">
                       {course.department || 'N/A'} • {course.level ? `${course.level}L` : 'N/A'}
                     </p>
                   </div>
                   
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button aria-label={`Delete ${course.course_code}`} onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-2 bg-gray-50 text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
+                    <button aria-label={`Delete ${course.course_code}`} onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-2 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-md shadow-sm border border-gray-200 dark:border-gray-600 transition-colors">
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
 
                 <div className="mb-4">
-                  <p className="text-sm font-bold text-gray-600">{course.total_planned_classes} Planned Classes • {course.max_attendance_score} CA Marks</p>
-                  <p className="text-sm font-bold text-[#2563EB] mt-1">{courseCounts[course.id] || 0} Students Enrolled</p>
+                  <p className="text-sm font-bold text-gray-600 dark:text-gray-300">{course.total_planned_classes} Planned Classes • {course.max_attendance_score} CA Marks</p>
+                  <p className="text-sm font-bold text-[#2563EB] dark:text-blue-400 mt-1">{courseCounts[course.id] || 0} Students Enrolled</p>
                 </div>
                 
                 <div className="flex gap-2">
                   <button 
                     onClick={() => handleOpenModal(course)} 
-                    className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-100 transition-all shadow-sm flex items-center justify-center gap-1"
+                    className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-100 dark:hover:bg-gray-600 transition-all shadow-sm flex items-center justify-center gap-1"
                   >
                     <Edit3 size={14} /> Manage
                   </button>
-                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-100 transition-all shadow-sm">
+                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all shadow-sm">
                     {uploadingId === course.id
-                      ? <Loader2 size={14} className="animate-spin text-[#2563EB]" />
+                      ? <Loader2 size={14} className="animate-spin text-[#2563EB] dark:text-blue-400" />
                       : <FileSpreadsheet size={14} />}
                     {uploadingId === course.id ? "Syncing..." : "Upload"}
                     <input
@@ -769,21 +773,19 @@ export default function CourseManagement() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
+      </div>      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
       {editingCourse && (
-        <div className="fixed inset-0 bg-gray-900/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl border border-gray-100 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-gray-900/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-colors">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
             
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-3xl">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-3xl">
               <div>
-                <h2 className="text-xl font-black text-gray-900">{editingCourse.course_code}</h2>
-                <p className="text-xs font-bold text-gray-500 uppercase">
+                <h2 className="text-xl font-black text-gray-900 dark:text-white">{editingCourse.course_code}</h2>
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">
                   {editingCourse.department || 'N/A'} • {editingCourse.level ? `${editingCourse.level}L` : 'N/A'}
                 </p>
               </div>
-              <button aria-label="Close Modal" onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
+              <button aria-label="Close Modal" onClick={() => setEditingCourse(null)} className="p-2 bg-white dark:bg-gray-800 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-200 dark:border-gray-700 transition-all">
                 <X size={20} />
               </button>
             </div>
@@ -791,48 +793,48 @@ export default function CourseManagement() {
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
               {/* Edit Course Details */}
               <div className="space-y-4">
-                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Course Details</h3>
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-2">Course Details</h3>
                 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Course Code</label>
-                  <input aria-label="Edit Course Code" type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Course Code</label>
+                  <input aria-label="Edit Course Code" type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Planned Lectures</label>
-                    <input aria-label="Edit Planned Lectures" type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Planned Lectures</label>
+                    <input aria-label="Edit Planned Lectures" type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Marks</label>
-                    <input aria-label="Edit Max CA Marks" type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Max CA Marks</label>
+                    <input aria-label="Edit Max CA Marks" type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-[#2563EB] transition-all" />
                   </div>
                 </div>
 
-                <button onClick={handleSaveModal} disabled={actioningId === editingCourse.id} className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all shadow-md active:scale-[0.98]">
+                <button onClick={handleSaveModal} disabled={actioningId === editingCourse.id} className="w-full bg-gray-900 dark:bg-gray-700 text-white font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 transition-all shadow-md active:scale-[0.98]">
                   {actioningId === editingCourse.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : "Save Changes"}
                 </button>
               </div>
 
               {/* Manage Students */}
               <div className="space-y-4">
-                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2 flex justify-between items-center">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-2 flex justify-between items-center">
                   Enrolled Students
-                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">{modalStudents.length}</span>
+                  <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full text-[10px]">{modalStudents.length}</span>
                 </h3>
                 
                 {isLoadingStudents ? (
-                  <div className="flex justify-center py-6"><Loader2 className="animate-spin text-[#2563EB]" size={24} /></div>
+                  <div className="flex justify-center py-6"><Loader2 className="animate-spin text-[#2563EB] dark:text-blue-400" size={24} /></div>
                 ) : modalStudents.length === 0 ? (
-                  <p className="text-center text-gray-500 text-sm font-medium py-4">No students enrolled yet.</p>
+                  <p className="text-center text-gray-500 dark:text-gray-400 text-sm font-medium py-4">No students enrolled yet.</p>
                 ) : (
-                  <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                  <div className="max-h-60 overflow-y-auto border border-gray-100 dark:border-gray-800 rounded-xl divide-y divide-gray-50 dark:divide-gray-800">
                     {modalStudents.map(matric => (
-                      <div key={matric} className="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                      <div key={matric} className="p-3 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-800 text-sm">{matric}</span>
+                          <span className="font-bold text-gray-800 dark:text-gray-200 text-sm">{matric}</span>
                           {repMatric === matric && (
-                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 uppercase flex items-center gap-1">
+                            <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 uppercase flex items-center gap-1">
                               <Star size={10} className="fill-amber-500 text-amber-500" /> Rep
                             </span>
                           )}
@@ -841,7 +843,7 @@ export default function CourseManagement() {
                           <button 
                             aria-label={`Remove ${matric}`}
                             onClick={() => handleRemoveStudent(matric)} 
-                            className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                            className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 p-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -857,10 +859,10 @@ export default function CourseManagement() {
       )}
 
       {/* SECTION 2: THE MICROSCOPE */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-          <Search className="text-[#2563EB]" size={20}/>
-          <h2 className="text-lg font-bold text-gray-900">Student Diagnostics & Waivers</h2>
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
+        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 dark:border-gray-800 pb-4">
+          <Search className="text-[#2563EB] dark:text-blue-400" size={20}/>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Student Diagnostics & Waivers</h2>
         </div>
 
         <div className="flex flex-col md:flex-row gap-3 mb-6">
@@ -868,7 +870,7 @@ export default function CourseManagement() {
             aria-label="Select Course for Diagnostics"
             value={auditCourseCode}
             onChange={(e) => setAuditCourseCode(e.target.value)}
-            className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
+            className="md:w-48 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white cursor-pointer transition-colors"
           >
             {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
           </select>
@@ -879,12 +881,12 @@ export default function CourseManagement() {
               placeholder="Search Matric Number (e.g., CSC/2021/001)"
               value={auditMatric}
               onChange={(e) => setAuditMatric(e.target.value.toUpperCase())}
-              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
             />
             <button
               onClick={handleStudentAudit}
               disabled={isAuditing || !auditMatric.trim()}
-              className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md"
+              className="bg-gray-900 dark:bg-gray-700 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md"
             >
               {isAuditing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
               View Record
@@ -893,27 +895,27 @@ export default function CourseManagement() {
         </div>
 
         {auditRecords && (
-          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-            <div className="p-4 border-b border-gray-200 bg-white">
-              <h3 className="font-extrabold text-gray-900 text-lg">Audit Trail: {auditMatric}</h3>
-              <p className="text-xs text-gray-500 font-bold">{auditCourseCode} Semester History</p>
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in slide-in-from-bottom-4 transition-colors">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <h3 className="font-extrabold text-gray-900 dark:text-white text-lg">Audit Trail: {auditMatric}</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{auditCourseCode} Semester History</p>
             </div>
             <div className="max-h-80 overflow-y-auto p-4 space-y-2">
               {auditRecords.map((record, i) => (
-                <div key={i} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
+                <div key={i} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-3 rounded-lg flex justify-between items-center shadow-sm transition-colors">
                   <div>
-                    <p className="font-bold text-gray-900 text-sm">{record.date}</p>
+                    <p className="font-bold text-gray-900 dark:text-white text-sm">{record.date}</p>
                     <div className="mt-1">
                       {record.status === 'verified' ? (
-                        <span className="text-[10px] uppercase font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                        <span className="text-[10px] uppercase font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
                           <CheckCircle size={10}/> Attended / Excused
                         </span>
                       ) : record.status === 'absent' ? (
-                        <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-md">
                           Absent
                         </span>
                       ) : (
-                        <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                        <span className="text-[10px] uppercase font-bold text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
                           <AlertTriangle size={10}/> Flagged
                         </span>
                       )}
@@ -922,7 +924,7 @@ export default function CourseManagement() {
                   {record.status !== 'verified' && (
                     <button
                       onClick={() => grantMedicalWaiver(record)}
-                      className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-100 transition-colors flex items-center gap-1.5 shadow-sm"
+                      className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors flex items-center gap-1.5 shadow-sm"
                     >
                       <ShieldCheck size={14}/> Grant Medical Waiver
                     </button>
@@ -935,12 +937,12 @@ export default function CourseManagement() {
       </div>
 
       {/* SECTION 3: HARDWARE SECURITY */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-200">
-        <div className="flex items-center gap-2 mb-4 border-b border-red-100 pb-3">
-          <Fingerprint className="text-red-500" size={20}/>
-          <h2 className="text-lg font-bold text-red-700">Wipe Device Lock</h2>
+      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-red-200 dark:border-red-900/50 transition-colors">
+        <div className="flex items-center gap-2 mb-4 border-b border-red-100 dark:border-red-900/50 pb-3">
+          <Fingerprint className="text-red-500 dark:text-red-400" size={20}/>
+          <h2 className="text-lg font-bold text-red-700 dark:text-red-400">Wipe Device Lock</h2>
         </div>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.
         </p>
 
@@ -951,12 +953,12 @@ export default function CourseManagement() {
             placeholder="Matric Number"
             value={wipeMatric}
             onChange={(e) => setWipeMatric(e.target.value.toUpperCase())}
-            className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all"
+            className="w-full bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/50 p-3 rounded-xl outline-none font-bold text-red-900 dark:text-red-100 placeholder:text-red-300 dark:placeholder:text-red-800 focus:ring-2 focus:ring-red-500 uppercase transition-all"
           />
           <button
             onClick={handleDeviceReset}
             disabled={isWiping || !wipeMatric.trim()}
-            className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+            className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-8 py-3 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
           >
             {isWiping ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
             Wipe Device
