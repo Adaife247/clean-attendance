@@ -18,8 +18,10 @@ export const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
 export const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 export const ACTIVE_SESSION_KEY = 'active_attendance_session';
 export const PREWARM_STALE_MS = 15_000; // 15s
+
 // ── Student Portal ──
 export const PORTAL_UNLOCK_GRACE_MS = 15 * 60 * 1000; // 15 minutes
+
 // ── Academic ──
 export const NUC_MIN_ELIGIBLE_PERCENTAGE = 70;
 export const DEFAULT_PLANNED_CLASSES = 15;
@@ -31,26 +33,43 @@ export const ADMIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 8; // 8 hours
 export const WEBAUTHN_CHALLENGE_COOKIE = 'webauthn_challenge';
 export const WEBAUTHN_CHALLENGE_MAX_AGE_SECONDS = 300; // 5 min
 
-// ── Rate limiting (in-memory) ──
+// ── Student JWT (Batch 3) ──
+export const STUDENT_JWT_TTL_SECONDS = 30 * 60; // 30 minutes
+export const STUDENT_JWT_ISSUER = 'campuscheck';
+export const STUDENT_JWT_AUDIENCE = 'campuscheck-student';
+
+// ── Rate limiting (Upstash in prod, in-memory fallback in dev) ──
 export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 export const RATE_LIMIT_DEFAULTS = {
-  'admin-login': 5,           // 5 attempts/min per IP
+  'admin-login': 5,               // 5 attempts/min per IP
   'webauthn-auth-generate': 15,
   'webauthn-register-generate': 5,
   'verify-attendance': 20,
   'request-override': 5,
-  'rep-action': 30,           // Generous: 10 classes × 3 students = 30 req/min
+  'rep-action': 30,               // Generous: 10 classes × 3 students = 30 req/min
   'rate-session': 10,
+  'post-feed': 10,
 } as const;
 
 // ── Storage keys ──
+// Every localStorage/sessionStorage key in the app lives here.
+// NEVER write a raw string key in a component.
 export const STORAGE_KEYS = {
+  // Persistent (localStorage) — survives browser close
   studentMatric: 'campuscheck_student_matric',
   deviceAnchor: 'campuscheck_device_anchor',
   offlineQueue: 'attendance_offline_queue',
   anchorCache: 'campuscheck_anchor_cache',
   activeSession: 'active_attendance_session',
   authToken: 'campuscheck_auth_token',
+  portalUnlockedAt: 'campuscheck_portal_unlocked_at',
+  checkinCount: 'campuscheck_checkin_count',
+  feedLastSeen: 'campuscheck_feed_last_seen',
+  pwaDismissCount: 'campuscheck_pwa_dismiss_count',
+  pwaLastDismissedCheckinCount: 'campuscheck_pwa_last_dismissed_checkin_count',
+
+  // Session-scoped (sessionStorage) — dies on tab close
+  studentJwt: 'campuscheck_student_jwt',
 } as const;
 
 // ── Student status meme tiers (attendance streak) ──
