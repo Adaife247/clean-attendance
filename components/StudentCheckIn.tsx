@@ -177,9 +177,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    const fetchMeta = async () => {
+        const fetchMeta = async () => {
       try {
-        const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`);
+        // NEW: Pass the student token so we can read the session start time
+                const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);

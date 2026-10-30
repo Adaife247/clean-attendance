@@ -225,6 +225,7 @@ export default function StudentPortal() {
         : (stats.total_planned > 0 ? stats.total_planned : (total_held > 0 ? total_held : 1));
 
       const percentage = Math.round((attended / denominator) * 100);
+      
       const maxAbsences = Math.floor(denominator * 0.30);
       const currentAbsences = denominator - attended;
       const skipsLeft = Math.max(0, maxAbsences - currentAbsences);
@@ -261,9 +262,7 @@ export default function StudentPortal() {
 
     finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
     setRecords(finalRecords);
-  }, []);
-
-  useEffect(() => {
+  }, []);  useEffect(() => {
     const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
     const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
     const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
@@ -284,7 +283,6 @@ export default function StudentPortal() {
     }
   }, [fetchStudentData]);
 
-  // NEW: Active 15-minute countdown timer
   useEffect(() => {
     if (!records) return;
 
@@ -292,7 +290,6 @@ export default function StudentPortal() {
       const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
       const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
       
-      // If the time has passed, lock the portal
       if (Date.now() - lastUnlockedTime >= PORTAL_UNLOCK_GRACE_MS) {
         safeStorage.remove('campuscheck_portal_unlocked_at');
         setRecords(null);
@@ -304,7 +301,6 @@ export default function StudentPortal() {
       }
     };
 
-    // Check every 30 seconds
     const interval = setInterval(checkLockTimer, 30000);
     return () => clearInterval(interval);
   }, [records]);
@@ -404,6 +400,10 @@ export default function StudentPortal() {
       safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
       safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
 
+      if (verifyResult.token) {
+        safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
+      }
+
       await fetchStudentData(cleanMatric);
       setUnlockState('unlocked');
 
@@ -455,6 +455,10 @@ export default function StudentPortal() {
 
       const verifyResult = await verifyRes.json();
       if (!verifyResult.verified) throw new Error("Biometric verification failed.");
+
+      if (verifyResult.token) {
+        safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
+      }
 
       safeStorage.setString('campuscheck_portal_unlocked_at', String(getCurrentTimestamp()));
       await fetchStudentData(cleanMatric);
@@ -542,7 +546,7 @@ export default function StudentPortal() {
     
     setIsLoggingBattery(true);
     try {
-            const headers = getStudentHeaders();
+      const headers = getStudentHeaders();
       const res = await fetch('/api/rep-action', {
         method: 'POST', headers,
         body: JSON.stringify({
@@ -688,9 +692,7 @@ export default function StudentPortal() {
     return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
   };
 
-  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
-
-  const renderUnlockForm = () => {
+  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);  const renderUnlockForm = () => {
     if (unlockState === 'not_enrolled') {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
@@ -835,7 +837,7 @@ export default function StudentPortal() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Class is live: {activeLiveSession.course}</p>
                 <p className="font-bold text-emerald-900">You&apos;re checked in.</p>
-                                {liveSessionCheckedInAt && (
+                {liveSessionCheckedInAt && (
                   <p className="text-[10px] text-emerald-600 font-semibold">
                     Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
                   </p>

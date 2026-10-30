@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
+import { verifyStudentToken } from '@/utils/student-auth';
 
 interface AttendanceLogRow {
   id: string;
@@ -13,16 +14,27 @@ interface AttendanceLogRow {
 
 export async function GET(request: Request) {
   try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
-    
-    // NEW: Get the timezone from the client (fallback to West Africa Time if missing)
     const clientTimeZone = searchParams.get('timeZone') || 'Africa/Lagos';
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
+
+    // NEW: Try Lecturer Auth first, then Student Auth
+       let isStudent = false;
+
+    const lecturerAuth = await verifyLecturer(request);
+    if (!lecturerAuth.error) {
+      // isLecturer = true (removed to fix eslint warning)
+    } else {
+      const studentAuth = verifyStudentToken(request);
+      if (!studentAuth.error) {
+        isStudent = true;
+      } else {
+        // Neither auth passed
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
 
     const { data: session } = await supabase
       .from('lecture_sessions')
@@ -32,7 +44,18 @@ export async function GET(request: Request) {
 
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    // If student, only allow them to see the basic metadata (not the full logs)
+    if (isStudent) {
+      return NextResponse.json({
+        course: session.course_code,
+        isActive: session.is_active,
+        createdAt: session.created_at,
+        logs: [] // Students don't get the full roster
+      });
+    }
+
+    // Below this line is Lecturer-only logic (seeing all logs)
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', lecturerAuth.user!.id).single();
     if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
     const courseName = session?.course_code || "Unknown Course";
@@ -79,7 +102,6 @@ export async function GET(request: Request) {
           } catch {}
         }
         
-        // Use the dynamic client timezone
         const localTimeString = new Date(l.check_in_time).toLocaleTimeString('en-GB', {
           hour: '2-digit',
           minute: '2-digit',
