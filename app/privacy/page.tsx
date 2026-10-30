@@ -1,6 +1,5 @@
 // ─── app/privacy/page.tsx ───
-// ⚠️ IMPORTANT: This is a TEMPLATE. You MUST review it with a legal advisor
-// before shipping to real students, and fill in every [BRACKETED] field.
+// ⚠️ IMPORTANT: This is a TEMPLATE. Review with a legal advisor before shipping.
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -23,17 +22,17 @@ export default function PrivacyPage() {
 
         <h1 className="text-3xl font-black text-gray-900 mb-2">Privacy Policy</h1>
         <p className="text-sm text-gray-500 font-medium mb-8">
-          Last updated: [DATE]
+          Last updated: {new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
 
         <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Who we are</h2>
             <p>
-              CampusCheck is operated by [YOUR INSTITUTION / COMPANY LEGAL NAME],
-              located at [ADDRESS]. Contact:{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
+              CampusCheck is operated by [EDIT: YOUR INSTITUTION NAME], located at
+              [EDIT: YOUR INSTITUTION ADDRESS]. Contact:{' '}
+              <a href="mailto:[EDIT: PRIVACY EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: PRIVACY EMAIL]
               </a>
               .
             </p>
@@ -63,18 +62,19 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Where data is stored</h2>
             <p>
-              Data is stored in Supabase ([REGION]) and processed via Vercel
-              ([REGION]). Both providers are GDPR/NDPR-compliant and use
-              encryption in transit and at rest.
+              Data is stored in Supabase (AWS, EU region) and processed via Vercel
+              (Global Edge Network). Both providers are GDPR/NDPR-compliant and
+              use encryption in transit and at rest.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Retention</h2>
             <p>
-              Attendance records are retained for [X MONTHS] to support
-              institutional audits, then deleted. Device fingerprints are
-              purged when you request a device reset via your lecturer.
+              Attendance records are retained for the duration of your academic
+              programme plus one (1) year to support institutional audits, then
+              deleted. Device fingerprints are purged when you request a device
+              reset via your lecturer.
             </p>
           </section>
 
@@ -83,8 +83,8 @@ export default function PrivacyPage() {
             <p>
               You can request a copy of your data, correction of inaccuracies,
               or full deletion by emailing{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
+              <a href="mailto:[EDIT: PRIVACY EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: PRIVACY EMAIL]
               </a>
               . If you believe your data has been misused, you may contact your
               institution&apos;s data protection officer.

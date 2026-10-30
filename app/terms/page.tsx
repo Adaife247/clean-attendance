@@ -22,7 +22,7 @@ export default function TermsPage() {
 
         <h1 className="text-3xl font-black text-gray-900 mb-2">Terms of Service</h1>
         <p className="text-sm text-gray-500 font-medium mb-8">
-          Last updated: [DATE]
+          Last updated: {new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
 
         <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
@@ -38,8 +38,8 @@ export default function TermsPage() {
             <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Eligibility</h2>
             <p>
               CampusCheck is available only to students and lecturers of
-              [INSTITUTION]. Accounts must be linked to a valid matriculation
-              number.
+              [EDIT: YOUR INSTITUTION]. Accounts must be linked to a valid
+              matriculation number.
             </p>
           </section>
 
@@ -88,8 +88,8 @@ export default function TermsPage() {
             <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Contact</h2>
             <p>
               Questions? Email{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
+              <a href="mailto:[EDIT: SUPPORT EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: SUPPORT EMAIL]
               </a>
               .
             </p>
