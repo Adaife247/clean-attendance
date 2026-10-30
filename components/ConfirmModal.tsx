@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertTriangle, Info, X } from 'lucide-react';
-import { ReactNode, useState, useCallback } from 'react';
+import { ReactNode, useState, useCallback, useEffect, useRef } from 'react';
 
 export interface ConfirmModalConfig {
   isOpen: boolean;
@@ -20,6 +20,44 @@ interface ConfirmModalProps {
 }
 
 export function ConfirmModal({ config, onClose }: ConfirmModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Trap focus and handle Escape key
+  useEffect(() => {
+    if (!config.isOpen) return;
+
+    // Focus the cancel button when opened (safer than focusing destructive action)
+    setTimeout(() => cancelBtnRef.current?.focus(), 50);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        config.onCancel?.();
+      }
+      
+      // Basic focus trap
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const firstElement = focusableElements[0] as HTMLElement;
+        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [config.isOpen, config, onClose]);
+
   if (!config.isOpen) return null;
 
   const handleConfirm = () => {
@@ -44,6 +82,7 @@ export function ConfirmModal({ config, onClose }: ConfirmModalProps) {
       onClick={handleCancel}
     >
       <div
+        ref={modalRef}
         className="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
@@ -77,17 +116,18 @@ export function ConfirmModal({ config, onClose }: ConfirmModalProps) {
         </div>
         <div className="p-4 bg-gray-50 flex gap-2">
           <button
+            ref={cancelBtnRef}
             onClick={handleCancel}
-            className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-all text-sm"
+            className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-100 transition-all text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
           >
             {config.cancelLabel ?? 'Cancel'}
           </button>
           <button
             onClick={handleConfirm}
-            className={`flex-1 font-bold py-3 rounded-xl text-sm shadow-md transition-all ${
+            className={`flex-1 font-bold py-3 rounded-xl text-sm shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-1 ${
               danger
-                ? 'bg-red-600 text-white hover:bg-red-700'
-                : 'bg-[#2563EB] text-white hover:bg-blue-700'
+                ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500'
+                : 'bg-[#2563EB] text-white hover:bg-blue-700 focus:ring-blue-500'
             }`}
           >
             {config.confirmLabel ?? 'Confirm'}
