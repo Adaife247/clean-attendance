@@ -17,10 +17,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // NEW: Require student auth
     const auth = verifyStudentToken(request);
     if (auth.error) return auth.error;
-    const repMatric = auth.matric!; // Trust the token over the body
+    const repMatric = auth.matric!; 
 
     const body = await request.json();
     const { action, sessionId, matricNumber } = body;
@@ -99,28 +98,31 @@ export async function POST(request: Request) {
 
       const { data: existingLog } = await supabase
         .from('attendance_logs')
-        .select('id, status')
+        .select('status')
         .eq('session_id', sessionId)
         .eq('matric_number', cleanMatric)
         .maybeSingle();
 
-      if (existingLog) {
-        if (existingLog.status === 'verified') {
-          return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
-        }
-        await supabase.from('attendance_logs').update({
-          status: 'pending_override',
-          device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
-          device_hash: 'rep-battery-log'
-        }).eq('id', existingLog.id);
-      } else {
-        await supabase.from('attendance_logs').insert([{
+      if (existingLog?.status === 'verified') {
+        return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
+      }
+
+      // NEW: Use upsert to prevent race conditions
+      const { error: upsertError } = await supabase
+        .from('attendance_logs')
+        .upsert({
           session_id: sessionId,
           matric_number: cleanMatric,
           status: 'pending_override',
           device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
           device_hash: 'rep-battery-log'
-        }]);
+        }, { 
+          onConflict: 'session_id,matric_number',
+          ignoreDuplicates: false 
+        });
+
+      if (upsertError) {
+         return NextResponse.json({ error: "Database error" }, { status: 500 });
       }
 
       return NextResponse.json({ success: true });

@@ -22,18 +22,11 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/**
- * Returns only telemetry pings that are physically plausible.
- * Rejects null-island coordinates and absurd accuracy values.
- * A ping with acc=0 is "unknown accuracy" and is accepted (many Android
- * devices report 0 rather than null when accuracy isn't available).
- * A ping with acc>2000 is considered garbage (GPS failure).
- */
 function getValidPings(telemetry: Telemetry[]): Telemetry[] {
   return (telemetry || []).filter((t) => {
     if (typeof t.lat !== 'number' || typeof t.lng !== 'number') return false;
     if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return false;
-    if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false; // null island
+    if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false;
     if (typeof t.acc !== 'number') return false;
     if (t.acc < 0) return false;
     if (t.acc > 2000) return false;
@@ -41,12 +34,6 @@ function getValidPings(telemetry: Telemetry[]): Telemetry[] {
   });
 }
 
-/**
- * Conservative spoof detection. Requires at least 3 anomalous jumps
- * between pings that are (a) accurate, (b) close in time.
- * Returns true only when the pattern is unambiguous.
- * Even when true, callers must NOT disqualify — only flag.
- */
 function detectLikelySpoof(pings: Telemetry[]): boolean {
   const accurate = pings.filter(t => t.acc > 0 && t.acc <= 50);
   if (accurate.length < 4) return false;
@@ -86,7 +73,6 @@ export async function POST(request: Request) {
     const validPings = getValidPings(telemetry);
 
     if (validPings.length === 0) {
-      // 200 not 400: this is a legitimate "GPS hasn't fired yet" case.
       return NextResponse.json({
         status: 'failed',
         message: "No usable GPS reading was received. Keep Location on, move near a window, and try again in 5 seconds.",
@@ -146,7 +132,7 @@ export async function POST(request: Request) {
 
     const { data: existingLog } = await supabase
       .from('attendance_logs')
-      .select('id, status, device_info')
+      .select('id, status')
       .eq('session_id', sessionId)
       .eq('matric_number', cleanMatric)
       .single();
@@ -155,7 +141,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
-    // ── Compute best distance from anchor ──
     let bestDistance = Infinity;
     let bestAccuracy: number | null = null;
     for (const ping of validPings) {
@@ -166,16 +151,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Radius: expand slightly when the GPS reading itself is weak ──
-    // Replaces the previous UA-based iOS bump with an accuracy-based one.
     const isWeakSignal = bestAccuracy !== null && bestAccuracy > 100;
     const allowedRadius = isWeakSignal ? 500 : GEOFENCE_RADIUS_METERS;
     const hardBlockRadius = isWeakSignal ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
 
-    // ── Soft spoof signal: flag, never disqualify ──
     const spoofSuspected = detectLikelySpoof(validPings);
 
-    // ── IP shortcut: same network as the lecturer means "in the room" ──
     const isOnSameNetwork = session.anchor_ip && session.anchor_ip === ip;
 
     let finalStatus = 'absent';
@@ -201,12 +182,6 @@ export async function POST(request: Request) {
       responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m). Move closer and try again.`;
     }
 
-    // ── If this student was previously disqualified, do NOT block them ──
-    // A disqualification from GPS instability is not a valid reason to
-    // permanently lock a student out. We re-evaluate every attempt.
-    // (The only hard disqualification source — proxy-device-reuse — has been
-    // removed because the client never supplied the required data.)
-
     const deviceInfoPayload = JSON.stringify({
       telemetry: validPings,
       evaluatedDistance: Math.round(bestDistance),
@@ -219,20 +194,23 @@ export async function POST(request: Request) {
       isIOS,
     });
 
-    if (existingLog) {
-      await supabase.from('attendance_logs').update({
-        status: finalStatus,
-        device_info: deviceInfoPayload,
-        device_hash: deviceFingerprint || 'unknown-hardware',
-      }).eq('id', existingLog.id);
-    } else {
-      await supabase.from('attendance_logs').insert([{
+    // NEW: Use upsert to prevent race conditions
+    const { error: upsertError } = await supabase
+      .from('attendance_logs')
+      .upsert({
         session_id: sessionId,
         matric_number: cleanMatric,
         status: finalStatus,
         device_info: deviceInfoPayload,
         device_hash: deviceFingerprint || 'unknown-hardware',
-      }]);
+      }, { 
+        onConflict: 'session_id,matric_number',
+        ignoreDuplicates: false 
+      });
+
+    if (upsertError) {
+      console.error("Upsert failed:", upsertError);
+      return NextResponse.json({ status: 'failed', message: "Database error. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json({
