@@ -10,6 +10,7 @@ import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
+import { getStudentHeaders } from '@/utils/api-client';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -114,12 +115,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
-  /**
-   * iOS Safari will not show a location prompt unless the call is made
-   * inside a user gesture. This function is called from the "Continue"
-   * button, not from useEffect. The prewarm watch below still runs
-   * once permission has been granted.
-   */
   const checkPermissionFromGesture = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsStatus('denied');
@@ -136,11 +131,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     );
   }, []);
 
-  /**
-   * Prewarm GPS buffer. Only starts once permission has been granted.
-   * On iOS Safari, we also do a one-shot getCurrentPosition to force a
-   * fresh reading — watchPosition alone can silently stall.
-   */
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     if (gpsStatus !== 'granted') return;
@@ -160,7 +150,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     );
     prewarmWatchIdRef.current = id;
 
-    // iOS Safari boost: force one reading
     navigator.geolocation.getCurrentPosition(
       (position) => {
         prewarmBufferRef.current.push({
@@ -349,10 +338,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
 
-        const currentCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
-        localStorage.setItem('campuscheck_checkin_count', String(currentCount + 1));
+        const currentCount = parseInt(localStorage.getItem(STORAGE_KEYS.checkinCount) || '0', 10);
+        localStorage.setItem(STORAGE_KEYS.checkinCount, String(currentCount + 1));
       } else {
-        // Show the server's real message — never replace it with generic text.
         setErrorMessage(result.message || "Verification failed.");
         if (result.status === 'disqualified') {
           setStatus('disqualified');
@@ -381,7 +369,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setErrorMessage('');
     setLiveAccuracy(null);
 
-    // iOS Safari prompt fix: this is called from a user gesture
     checkPermissionFromGesture();
 
     let verificationMethod = 'skipped';
@@ -406,8 +393,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
             body: JSON.stringify({ matricNumber, authResponse: asseResp })
           });
           const verifyResult = await verifyRes.json();
-          if (verifyResult.verified) verificationMethod = 'biometric';
-          else throw new Error("Biometric verification failed.");
+          
+          // NEW: Save token on success
+          if (verifyResult.verified) {
+            verificationMethod = 'biometric';
+            if (verifyResult.token) {
+              safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
+            }
+          } else {
+            throw new Error("Biometric verification failed.");
+          }
         }
       } catch (error) {
         console.warn("Biometric step failed, continuing with GPS only:", error);
@@ -443,7 +438,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     };
 
-    // If prewarm buffer already has pings, send immediately
     if (pings.length >= 1) {
       sentAny = true;
       sendPayloadToVercel([...pings], verificationMethod);
@@ -454,8 +448,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       else { didFinish = true; if (watchId) navigator.geolocation.clearWatch(watchId); }
     }, GPS_OVERALL_TIMEOUT_MS);
 
-    // Minimum-wait enforcement: if prewarm is empty, wait at least a few
-    // seconds for a single ping before the "no data" failure fires.
     const firstPingWaitId = setTimeout(() => {
       if (pings.length === 0 && !didFinish) {
         finishWith(pings);
@@ -501,25 +493,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsAppealing(true);
     setErrorMessage('');
     try {
+      // NEW: Attach the token header
+      const headers = getStudentHeaders();
       const response = await fetch('/api/request-override', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, matricNumber })
+        method: 'POST', headers,
+        body: JSON.stringify({ sessionId })
       });
       if (response.ok) {
         setErrorMessage("Appeal sent. Show this screen to your lecturer for visual confirmation.");
         setStatus('idle');
       } else {
         const data = await response.json().catch(() => ({}));
-        setErrorMessage(data.message || "Failed to send appeal. Check your connection and try again.");
+        setErrorMessage(data.message || data.error || "Failed to send appeal. Check your connection and try again.");
       }
     } catch {
       setErrorMessage("Network error. Check your connection and try again.");
     } finally {
       setIsAppealing(false);
     }
-  };
-
-  const toggleTag = (tag: string) => {
+  };  const toggleTag = (tag: string) => {
     setRatingTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
@@ -527,9 +519,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsSubmittingRating(true);
     try {
       if (!skip) {
+        // NEW: Attach the token header
+        const headers = getStudentHeaders();
         await fetch('/api/rate-session', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, matricNumber, rating: ratingStars, tags: ratingTags })
+          method: 'POST', headers,
+          body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
     } catch {}

@@ -1,25 +1,28 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyStudentToken } from '@/utils/student-auth';
 
 interface RateBody {
   sessionId: string;
-  matricNumber: string;
   rating: number;
   tags: string[];
 }
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as RateBody;
-    const { sessionId, matricNumber, rating, tags } = body;
+    const auth = verifyStudentToken(request);
+    if (auth.error) return auth.error;
 
-    if (!sessionId || !matricNumber || typeof rating !== 'number' || rating < 1 || rating > 5) {
+    const body = (await request.json()) as RateBody;
+    const { sessionId, rating, tags } = body;
+    
+    // Trust the matric from the token
+    const cleanMatric = auth.matric!;
+
+    if (!sessionId || typeof rating !== 'number' || rating < 1 || rating > 5) {
       return NextResponse.json({ error: 'Invalid rating payload' }, { status: 400 });
     }
 
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    // NEW: Verify the student actually checked in and was verified
     const { data: log } = await supabase
       .from('attendance_logs')
       .select('status')

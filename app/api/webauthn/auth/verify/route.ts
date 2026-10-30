@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { rpID, origin } from '@/utils/webauthn';
+import { signStudentToken } from '@/utils/student-auth';
 
 export async function POST(request: Request) {
   try {
@@ -52,7 +53,11 @@ export async function POST(request: Request) {
           .eq('matric_number', cleanMatric);
 
         cookieStore.delete('webauthn_challenge');
-        return NextResponse.json({ verified: true });
+        
+        // NEW: Mint the token!
+        const token = signStudentToken(cleanMatric);
+        
+        return NextResponse.json({ verified: true, token });
       }
     } catch (cryptoError) {
       const msg = cryptoError instanceof Error ? cryptoError.message : "Unknown crypto error";

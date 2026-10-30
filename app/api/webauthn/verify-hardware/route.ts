@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyStudentToken } from '@/utils/student-auth';
 
 export async function POST(request: Request) {
   try {
-    // 1. We moved the client setup INSIDE the function!
-    // Now Next.js won't crash during the build phase.
+    // NEW: Auth check
+    const auth = verifyStudentToken(request);
+    if (auth.error) return auth.error;
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -14,18 +17,20 @@ export async function POST(request: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 2. The rest of the logic remains exactly the same
     const body = await request.json();
-    const { matricNumber, hardwareFingerprint } = body;
+    const { hardwareFingerprint } = body;
 
-    if (!matricNumber || !hardwareFingerprint) {
+    if (!hardwareFingerprint) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
+
+    // Trust the matric from the token, not the request body
+    const cleanMatric = auth.matric!;
 
     const { data, error } = await supabase
       .from('students')
       .select('hardware_fingerprint')
-      .eq('matric_number', matricNumber)
+      .eq('matric_number', cleanMatric)
       .single();
 
     if (error || !data) {
@@ -39,7 +44,7 @@ export async function POST(request: Request) {
     }
 
   } catch (error) {
-    const e = error as Error; // Fixed the "any" type error here too!
+    const e = error as Error; 
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

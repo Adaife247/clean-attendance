@@ -1329,94 +1329,6 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/api/webauthn/register/generate/route.ts">
-export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { rpName, rpID } from '@/utils/webauthn';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
-import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
-
-export async function POST(request: Request) {
-  try {
-    const ip = getClientIp(request);
-    const limit = RATE_LIMIT_DEFAULTS['webauthn-register-generate'];
-    const rateCheck = checkRateLimit(`reg-gen:${ip}`, limit);
-
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please wait a minute." },
-        { status: 429, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    const { matricNumber } = await request.json();
-    
-    if (!matricNumber || typeof matricNumber !== 'string') {
-      return NextResponse.json({ error: "Matric number required." }, { status: 400 });
-    }
-
-    const cleanMatric = matricNumber.toUpperCase().trim();
-
-    // 1. Must be enrolled in at least one course to register
-    const { data: enrollments } = await supabase
-      .from('enrollments')
-      .select('id')
-      .eq('matric_number', cleanMatric)
-      .limit(1);
-
-    if (!enrollments || enrollments.length === 0) {
-      return NextResponse.json(
-        { error: "NOT_ENROLLED", message: "Your matric isn't on any roster yet. Ask your lecturer to add you first." },
-        { status: 403, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    // 2. Check if this matric is already registered to a device
-    const { data: existingDevice } = await supabase
-      .from('user_devices')
-      .select('matric_number')
-      .eq('matric_number', cleanMatric)
-      .maybeSingle();
-
-    if (existingDevice) {
-      // Already registered — they should log in, not register again
-      return NextResponse.json(
-        { error: "ALREADY_REGISTERED", message: "This matric already has a linked phone. Log in instead." },
-        { status: 409, headers: rateLimitHeaders(rateCheck) }
-      );
-    }
-
-    // 3. Generate registration options
-    const options = await generateRegistrationOptions({
-      rpName,
-      rpID,
-      userID: new TextEncoder().encode(cleanMatric),
-      userName: cleanMatric,
-      authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'required', 
-      },
-    });
-
-    const cookieStore = await cookies();
-    cookieStore.set('webauthn_challenge', options.challenge, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 300,
-      path: '/',
-    });
-
-    return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/webauthn/register/verify/route.ts">
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
@@ -2902,6 +2814,111 @@ export async function POST(request: Request) {
 }
 </file>
 
+<file path="app/api/webauthn/register/generate/route.ts">
+// app/api/webauthn/register/generate/route.ts
+export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { generateRegistrationOptions } from '@simplewebauthn/server';
+import { rpName, rpID } from '@/utils/webauthn';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
+import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
+
+interface ExistingDevice {
+  credential_id: string;
+  transports: string[] | null;
+}
+
+export async function POST(request: Request) {
+  try {
+    const ip = getClientIp(request);
+    const limit = RATE_LIMIT_DEFAULTS['webauthn-register-generate'];
+    const rateCheck = checkRateLimit(`reg-gen:${ip}`, limit);
+
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a minute.' },
+        { status: 429, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    const { matricNumber } = await request.json();
+
+    if (!matricNumber || typeof matricNumber !== 'string') {
+      return NextResponse.json({ error: 'Matric number required.' }, { status: 400 });
+    }
+
+    const cleanMatric = matricNumber.toUpperCase().trim();
+
+    // 1. Must be enrolled in at least one course to register
+    const { data: enrollments } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('matric_number', cleanMatric)
+      .limit(1);
+
+    if (!enrollments || enrollments.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'NOT_ENROLLED',
+          message: "Your matric isn't on any roster yet. Ask your lecturer to add you first.",
+        },
+        { status: 403, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    // 2. If already registered, tell the client to log in instead
+    const { data: existingDevice } = await supabase
+      .from('user_devices')
+      .select('credential_id, transports')
+      .eq('matric_number', cleanMatric)
+      .maybeSingle<ExistingDevice>();
+
+    if (existingDevice) {
+      return NextResponse.json(
+        {
+          error: 'ALREADY_REGISTERED',
+          message: 'This matric already has a linked phone. Log in instead.',
+        },
+        { status: 409, headers: rateLimitHeaders(rateCheck) }
+      );
+    }
+
+    // 3. Generate registration options
+    //    - attestationType (was previously attestation)
+    //    - residentKey: 'preferred' (was 'required')
+    //    - userVerification: 'preferred' (was 'required')
+    //    - authenticatorAttachment: 'platform'
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userID: new TextEncoder().encode(cleanMatric),
+      userName: cleanMatric,
+      attestationType: 'none',
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform',
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+      },
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set('webauthn_challenge', options.challenge, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 300,
+      path: '/',
+    });
+
+    return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/globals.css">
 @import "tailwindcss";
 
@@ -3465,6 +3482,126 @@ export async function GET(request: Request) {
 }
 </file>
 
+<file path="app/dashboard/layout.tsx">
+'use client';
+import { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { 
+  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
+} from 'lucide-react';
+import Link from 'next/link';
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHod, setIsHod] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+      
+      const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
+      if (data?.department) setIsHod(true);
+    };
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
+  const navItems = [
+    { name: 'Live Radar', href: '/dashboard', icon: Radio },
+    { name: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
+    { name: 'Course & Student Management', href: '/dashboard/courses', icon: Users },
+    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
+  ];
+
+  if (isHod) {
+    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
+  }
+
+  return (
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
+      
+      {/* Mobile Top Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
+          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
+            <LogOut size={18} strokeWidth={2.5} />
+          </button>
+          <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Sidebar */}
+      <aside className={`
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 transition-transform duration-300 ease-in-out
+        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
+        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
+      `}>
+        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100 shrink-0">
+          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+            <ShieldCheck size={22} strokeWidth={2.5} />
+          </div>
+          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            // Explicitly check if the path matches exactly
+            const isActive = pathname === item.href;
+            return (
+              <Link 
+                key={item.name} 
+                href={item.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
+                  isActive 
+                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
+            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
+        {children}
+      </main>
+
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+    </div>
+  );
+}
+</file>
+
 <file path="utils/constants.ts">
 // ─── utils/constants.ts ───
 // Central place for every magic number in the app.
@@ -3632,126 +3769,6 @@ export async function GET(request: Request) {
   } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
-}
-</file>
-
-<file path="app/dashboard/layout.tsx">
-'use client';
-import { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { 
-  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
-} from 'lucide-react';
-import Link from 'next/link';
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isHod, setIsHod] = useState(false);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-      
-      const { data } = await supabase.from('lecturers').select('department').eq('id', session.user.id).single();
-      if (data?.department) setIsHod(true);
-    };
-    checkAuth();
-  }, [router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  };
-
-  const navItems = [
-    { name: 'Live Radar', href: '/dashboard', icon: Radio },
-    { name: 'Broadcast', href: '/dashboard/broadcast', icon: Megaphone },
-    { name: 'Course & Student Management', href: '/dashboard/courses', icon: Users },
-    { name: 'Analytics & Reports', href: '/dashboard/analytics', icon: BarChart3 },
-  ];
-
-  if (isHod) {
-    navItems.push({ name: 'HOD Command Center', href: '/hod', icon: Award });
-  }
-
-  return (
-    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden font-sans">
-      
-      {/* Mobile Top Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="text-[#2563EB]" size={24} strokeWidth={2.5} />
-          <span className="font-extrabold text-gray-900 text-lg tracking-tight">CampusCheck</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button aria-label="Logout" onClick={handleLogout} className="p-2 text-red-600 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">
-            <LogOut size={18} strokeWidth={2.5} />
-          </button>
-          <button aria-label="Toggle Menu" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 border border-gray-200">
-            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar */}
-      <aside className={`
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
-        md:translate-x-0 transition-transform duration-300 ease-in-out
-        fixed md:static top-16 md:top-0 left-0 h-[calc(100vh-4rem)] md:h-screen w-64 
-        bg-white border-r border-gray-200 flex flex-col z-40 shadow-xl md:shadow-none
-      `}>
-        <div className="hidden md:flex h-20 items-center gap-3 px-6 border-b border-gray-100 shrink-0">
-          <div className="bg-[#2563EB] text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
-            <ShieldCheck size={22} strokeWidth={2.5} />
-          </div>
-          <span className="font-extrabold text-gray-900 text-xl tracking-tight">CampusCheck</span>
-        </div>
-
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
-            // Explicitly check if the path matches exactly
-            const isActive = pathname === item.href;
-            return (
-              <Link 
-                key={item.name} 
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold text-sm transition-all ${
-                  isActive 
-                    ? 'bg-[#2563EB] text-white shadow-md shadow-blue-500/20' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="hidden md:block p-4 border-t border-gray-100 shrink-0 bg-white">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-sm bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all">
-            <LogOut size={16} strokeWidth={2.5} /> Secure Logout
-          </button>
-        </div>
-      </aside>
-
-      <main className="flex-1 h-screen overflow-y-auto pt-16 md:pt-0">
-        {children}
-      </main>
-
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 bg-gray-900/20 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
-      )}
-    </div>
-  );
 }
 </file>
 
@@ -4134,6 +4151,398 @@ export async function GET(request: Request) {
     console.error("HOD API Error:", error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/dashboard/analytics/page.tsx">
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import { 
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock
+} from 'lucide-react';
+import { supabase } from '@/utils/supabase';
+
+interface CourseRow {
+  id: string;
+  course_code: string;
+  max_attendance_score: number;
+  is_finalized: boolean;
+}
+
+interface StudentReportRow {
+  matricNumber: string;
+  totalClasses: number;
+  attended: number;
+  percentage: number;
+  eligible: 'YES' | 'NO';
+}
+
+interface ReportData {
+  course: string;
+  totalClasses: number;
+  plannedClasses: number;
+  maxScore: number;
+  isFinalized: boolean;
+  report: StudentReportRow[];
+}
+
+export default function AnalyticsPage() {
+  const [courses, setCourses] = useState<CourseRow[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
+
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showWatchlist, setShowWatchlist] = useState(false);
+
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [lockGrades, setLockGrades] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const getHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token || ''}`
+    };
+  };
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      const { data } = await supabase.from('courses').select('id, course_code, max_attendance_score, is_finalized');
+      if (data && data.length > 0) {
+        setCourses(data);
+        setSelectedCourseCode(data[0].course_code);
+        setSelectedCourse(data[0]);
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const code = e.target.value;
+    setSelectedCourseCode(code);
+    const course = courses.find(c => c.course_code === code);
+    if (course) setSelectedCourse(course);
+  };
+
+  const fetchReportData = useCallback(async (useFilters: boolean = false) => {
+    if (!selectedCourseCode) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
+      if (useFilters) {
+        if (startDate) url += `&startDate=${startDate}`;
+        if (endDate) url += `&endDate=${endDate}`;
+      }
+      const headers = await getHeaders();
+      const response = await fetch(url, { headers });
+
+      if (response.status === 404) {
+        setReportData(null);
+        setErrorMessage("No classes found for this timeframe.");
+        return;
+      }
+
+      if (!response.ok) throw new Error("Failed to load analytics.");
+
+      const data = await response.json();
+      setReportData(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load analytics.";
+      setErrorMessage(message);
+      setReportData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCourseCode, startDate, endDate]);
+
+  useEffect(() => {
+    if (!selectedCourseCode) return;
+    const id = setTimeout(() => { fetchReportData(false); }, 0);
+    return () => clearTimeout(id);
+  }, [selectedCourseCode, fetchReportData]);
+
+  const handleDownload = async (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report || !selectedCourse) return;
+    
+    if (lockGrades && !selectedCourse.is_finalized) {
+      if (reportData.totalClasses < reportData.plannedClasses) {
+        const confirm = window.confirm(`⚠️ WARNING: You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}.\n\nIf you lock grades now, the system will calculate final scores based on the ${reportData.totalClasses} actual classes held.\n\nDo you want to proceed?`);
+        if (!confirm) return;
+      } else {
+        const confirm = window.confirm(`Are you sure? This will finalize the semester and lock CA scores. No more sessions can be held for this course.`);
+        if (!confirm) return;
+      }
+    }
+
+    setIsDownloading(true);
+
+    if (lockGrades && !selectedCourse.is_finalized) {
+      setIsFinalizing(true);
+      const { error } = await supabase
+        .from('courses')
+        .update({ is_finalized: true })
+        .eq('id', selectedCourse.id);
+      
+      if (error) {
+        alert("Failed to lock grades in the database.");
+        setIsFinalizing(false);
+        setIsDownloading(false);
+        return;
+      }
+      
+      setCourses(prev => prev.map(c => c.id === selectedCourse.id ? { ...c, is_finalized: true } : c));
+      setSelectedCourse(prev => prev ? { ...prev, is_finalized: true } : null);
+      setLockGrades(false); 
+    }
+
+    const maxScore = reportData.maxScore || 10;
+    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
+    const datePrinted = new Date().toLocaleDateString();
+    const finalStatus = (selectedCourse.is_finalized || lockGrades) ? "FINALIZED" : "LIVE (UNFINALIZED)";
+
+    const header = [
+      [`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`],
+      [`Course Code:`, selectedCourseCode],
+      [`Reporting Period:`, timeLabel],
+      [`Total Classes Held:`, reportData.totalClasses],
+      [`Date Generated:`, datePrinted],
+      [],
+      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", `CA SCORE (/${maxScore})`, "REMARK"]
+    ];
+
+    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+
+    const rows = sortedReport.map((s, index) => {
+      const caScore = ((s.percentage / 100) * maxScore).toFixed(1);
+      return [
+        index + 1,
+        s.matricNumber,
+        s.totalClasses,
+        s.attended,
+        s.percentage,
+        caScore,
+        s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
+      ];
+    });
+
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setIsFinalizing(false);
+    setIsDownloading(false);
+  };
+
+  const applyCustomDates = () => { fetchReportData(true); };
+
+  const atRiskStudents: StudentReportRow[] = reportData?.report?.filter(s => s.eligible === 'NO') || [];
+  const maxScore = reportData?.maxScore || 10;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
+
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
+            </h1>
+            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
+          </div>
+          <select
+            aria-label="Select Course for Analytics"
+            value={selectedCourseCode}
+            onChange={handleCourseChange}
+            disabled={courses.length === 0}
+            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer"
+          >
+            {courses.length === 0
+              ? <option>No Courses Found</option>
+              : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
+            }
+          </select>
+        </div>
+
+        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-green-100 p-4 rounded-xl text-green-700">
+              <FileSpreadsheet size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
+              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
+            </div>
+          </div>
+
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Lock className="text-blue-600 mt-0.5 shrink-0" size={20} />
+              <div>
+                <p className="font-bold text-blue-900 text-sm">Lock Final Grades</p>
+                <p className="text-xs text-blue-700 font-medium mt-0.5">Check this to permanently calculate CA scores and end the semester for this course.</p>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm">
+              <input 
+                type="checkbox" 
+                checked={lockGrades || selectedCourse?.is_finalized} 
+                onChange={(e) => setLockGrades(e.target.checked)}
+                disabled={selectedCourse?.is_finalized}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                {selectedCourse?.is_finalized ? "Finalized" : "Lock Grades"}
+              </span>
+            </label>
+          </div>
+
+          <button
+            onClick={() => handleDownload(true)}
+            disabled={isDownloading || isFinalizing || !reportData}
+            className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6"
+          >
+            {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
+            Download Full Semester CSV
+          </button>
+
+          <div className="border-t border-gray-100 pt-6">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200"
+            >
+              <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
+              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showAdvanced && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    min={startDate}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                  />
+                </div>
+                <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
+                  <button
+                    onClick={applyCustomDates}
+                    className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm"
+                  >
+                    Apply Filters
+                  </button>
+                  <button
+                    onClick={() => handleDownload(false)}
+                    disabled={isDownloading || isFinalizing || !reportData}
+                    className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"
+                  >
+                    <Download size={16} /> Export Range
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setShowWatchlist(!showWatchlist)}
+            className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  {atRiskStudents.length > 0
+                    ? `${atRiskStudents.length} students currently below 70%`
+                    : "All students are eligible for the exam."}
+                </p>
+              </div>
+            </div>
+            <div className="text-gray-400">
+              {showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+            </div>
+          </button>
+
+          {showWatchlist && (
+            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center h-32">
+                  <Loader2 className="animate-spin text-[#2563EB]" size={24}/>
+                </div>
+              ) : atRiskStudents.length === 0 ? (
+                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left whitespace-nowrap min-w-125">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                        <th className="px-6 py-3 font-bold">Matric Number</th>
+                        <th className="px-6 py-3 font-bold text-center">Attendance</th>
+                        <th className="px-6 py-3 font-bold text-right">CA Score</th>
+                        <th className="px-6 py-3 font-bold text-right">Standing</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {atRiskStudents.map((student, i) => (
+                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
+                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
+                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
+                          <td className="px-6 py-3 text-right font-bold text-gray-600">
+                            {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">
+                              {student.percentage}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {errorMessage && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
+            <p className="text-red-700 font-bold text-sm">{errorMessage}</p>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -4571,399 +4980,8 @@ export async function POST(request: Request) {
 }
 </file>
 
-<file path="app/dashboard/analytics/page.tsx">
-'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { 
-  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock
-} from 'lucide-react';
-import { supabase } from '@/utils/supabase';
-
-interface CourseRow {
-  id: string;
-  course_code: string;
-  max_attendance_score: number;
-  is_finalized: boolean;
-}
-
-interface StudentReportRow {
-  matricNumber: string;
-  totalClasses: number;
-  attended: number;
-  percentage: number;
-  eligible: 'YES' | 'NO';
-}
-
-interface ReportData {
-  course: string;
-  totalClasses: number;
-  plannedClasses: number;
-  maxScore: number;
-  isFinalized: boolean;
-  report: StudentReportRow[];
-}
-
-export default function AnalyticsPage() {
-  const [courses, setCourses] = useState<CourseRow[]>([]);
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
-  const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
-
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showWatchlist, setShowWatchlist] = useState(false);
-
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isFinalizing, setIsFinalizing] = useState(false);
-  const [lockGrades, setLockGrades] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const getHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token || ''}`
-    };
-  };
-
-  useEffect(() => {
-    const fetchCourses = async () => {
-      const { data } = await supabase.from('courses').select('id, course_code, max_attendance_score, is_finalized');
-      if (data && data.length > 0) {
-        setCourses(data);
-        setSelectedCourseCode(data[0].course_code);
-        setSelectedCourse(data[0]);
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    setSelectedCourseCode(code);
-    const course = courses.find(c => c.course_code === code);
-    if (course) setSelectedCourse(course);
-  };
-
-  const fetchReportData = useCallback(async (useFilters: boolean = false) => {
-    if (!selectedCourseCode) return;
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
-      if (useFilters) {
-        if (startDate) url += `&startDate=${startDate}`;
-        if (endDate) url += `&endDate=${endDate}`;
-      }
-      const headers = await getHeaders();
-      const response = await fetch(url, { headers });
-
-      if (response.status === 404) {
-        setReportData(null);
-        setErrorMessage("No classes found for this timeframe.");
-        return;
-      }
-
-      if (!response.ok) throw new Error("Failed to load analytics.");
-
-      const data = await response.json();
-      setReportData(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load analytics.";
-      setErrorMessage(message);
-      setReportData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedCourseCode, startDate, endDate]);
-
-  useEffect(() => {
-    if (!selectedCourseCode) return;
-    const id = setTimeout(() => { fetchReportData(false); }, 0);
-    return () => clearTimeout(id);
-  }, [selectedCourseCode, fetchReportData]);
-
-  const handleDownload = async (isFullSemester: boolean) => {
-    if (!reportData || !reportData.report || !selectedCourse) return;
-    
-    if (lockGrades && !selectedCourse.is_finalized) {
-      if (reportData.totalClasses < reportData.plannedClasses) {
-        const confirm = window.confirm(`⚠️ WARNING: You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}.\n\nIf you lock grades now, the system will calculate final scores based on the ${reportData.totalClasses} actual classes held.\n\nDo you want to proceed?`);
-        if (!confirm) return;
-      } else {
-        const confirm = window.confirm(`Are you sure? This will finalize the semester and lock CA scores. No more sessions can be held for this course.`);
-        if (!confirm) return;
-      }
-    }
-
-    setIsDownloading(true);
-
-    if (lockGrades && !selectedCourse.is_finalized) {
-      setIsFinalizing(true);
-      const { error } = await supabase
-        .from('courses')
-        .update({ is_finalized: true })
-        .eq('id', selectedCourse.id);
-      
-      if (error) {
-        alert("Failed to lock grades in the database.");
-        setIsFinalizing(false);
-        setIsDownloading(false);
-        return;
-      }
-      
-      setCourses(prev => prev.map(c => c.id === selectedCourse.id ? { ...c, is_finalized: true } : c));
-      setSelectedCourse(prev => prev ? { ...prev, is_finalized: true } : null);
-      setLockGrades(false); 
-    }
-
-    const maxScore = reportData.maxScore || 10;
-    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
-    const datePrinted = new Date().toLocaleDateString();
-    const finalStatus = (selectedCourse.is_finalized || lockGrades) ? "FINALIZED" : "LIVE (UNFINALIZED)";
-
-    const header = [
-      [`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`],
-      [`Course Code:`, selectedCourseCode],
-      [`Reporting Period:`, timeLabel],
-      [`Total Classes Held:`, reportData.totalClasses],
-      [`Date Generated:`, datePrinted],
-      [],
-      ["S/N", "MATRICULATION NUMBER", "TOTAL CLASSES", "ATTENDED", "PERCENTAGE (%)", `CA SCORE (/${maxScore})`, "REMARK"]
-    ];
-
-    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
-
-    const rows = sortedReport.map((s, index) => {
-      const caScore = ((s.percentage / 100) * maxScore).toFixed(1);
-      return [
-        index + 1,
-        s.matricNumber,
-        s.totalClasses,
-        s.attended,
-        s.percentage,
-        caScore,
-        s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
-      ];
-    });
-
-    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setIsFinalizing(false);
-    setIsDownloading(false);
-  };
-
-  const applyCustomDates = () => { fetchReportData(true); };
-
-  const atRiskStudents: StudentReportRow[] = reportData?.report?.filter(s => s.eligible === 'NO') || [];
-  const maxScore = reportData?.maxScore || 10;
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
-
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-          <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
-              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
-            </h1>
-            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
-          </div>
-          <select
-            aria-label="Select Course for Analytics"
-            value={selectedCourseCode}
-            onChange={handleCourseChange}
-            disabled={courses.length === 0}
-            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer"
-          >
-            {courses.length === 0
-              ? <option>No Courses Found</option>
-              : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
-            }
-          </select>
-        </div>
-
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="bg-green-100 p-4 rounded-xl text-green-700">
-              <FileSpreadsheet size={28} />
-            </div>
-            <div>
-              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
-              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
-            </div>
-          </div>
-
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <Lock className="text-blue-600 mt-0.5 shrink-0" size={20} />
-              <div>
-                <p className="font-bold text-blue-900 text-sm">Lock Final Grades</p>
-                <p className="text-xs text-blue-700 font-medium mt-0.5">Check this to permanently calculate CA scores and end the semester for this course.</p>
-              </div>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm">
-              <input 
-                type="checkbox" 
-                checked={lockGrades || selectedCourse?.is_finalized} 
-                onChange={(e) => setLockGrades(e.target.checked)}
-                disabled={selectedCourse?.is_finalized}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                {selectedCourse?.is_finalized ? "Finalized" : "Lock Grades"}
-              </span>
-            </label>
-          </div>
-
-          <button
-            onClick={() => handleDownload(true)}
-            disabled={isDownloading || isFinalizing || !reportData}
-            className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6"
-          >
-            {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
-            Download Full Semester CSV
-          </button>
-
-          <div className="border-t border-gray-100 pt-6">
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200"
-            >
-              <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
-              {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {showAdvanced && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
-                  />
-                </div>
-                <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
-                  <button
-                    onClick={applyCustomDates}
-                    className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm"
-                  >
-                    Apply Filters
-                  </button>
-                  <button
-                    onClick={() => handleDownload(false)}
-                    disabled={isDownloading || isFinalizing || !reportData}
-                    className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"
-                  >
-                    <Download size={16} /> Export Range
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setShowWatchlist(!showWatchlist)}
-            className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
-              </div>
-              <div>
-                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
-                <p className="text-xs text-gray-500 font-medium mt-0.5">
-                  {atRiskStudents.length > 0
-                    ? `${atRiskStudents.length} students currently below 70%`
-                    : "All students are eligible for the exam."}
-                </p>
-              </div>
-            </div>
-            <div className="text-gray-400">
-              {showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
-            </div>
-          </button>
-
-          {showWatchlist && (
-            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center h-32">
-                  <Loader2 className="animate-spin text-[#2563EB]" size={24}/>
-                </div>
-              ) : atRiskStudents.length === 0 ? (
-                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                  <table className="w-full text-left whitespace-nowrap min-w-125">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
-                        <th className="px-6 py-3 font-bold">Matric Number</th>
-                        <th className="px-6 py-3 font-bold text-center">Attendance</th>
-                        <th className="px-6 py-3 font-bold text-right">CA Score</th>
-                        <th className="px-6 py-3 font-bold text-right">Standing</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {atRiskStudents.map((student, i) => (
-                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
-                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
-                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
-                          <td className="px-6 py-3 text-right font-bold text-gray-600">
-                            {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
-                          </td>
-                          <td className="px-6 py-3 text-right">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">
-                              {student.percentage}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {errorMessage && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
-            <p className="text-red-700 font-bold text-sm">{errorMessage}</p>
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="app/api/verify-attendance/route.ts">
+// app/api/verify-attendance/route.ts
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
@@ -4987,6 +5005,44 @@ function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: num
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+/**
+ * Returns only telemetry pings that are physically plausible.
+ * Rejects null-island coordinates and absurd accuracy values.
+ * A ping with acc=0 is "unknown accuracy" and is accepted (many Android
+ * devices report 0 rather than null when accuracy isn't available).
+ * A ping with acc>2000 is considered garbage (GPS failure).
+ */
+function getValidPings(telemetry: Telemetry[]): Telemetry[] {
+  return (telemetry || []).filter((t) => {
+    if (typeof t.lat !== 'number' || typeof t.lng !== 'number') return false;
+    if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return false;
+    if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false; // null island
+    if (typeof t.acc !== 'number') return false;
+    if (t.acc < 0) return false;
+    if (t.acc > 2000) return false;
+    return true;
+  });
+}
+
+/**
+ * Conservative spoof detection. Requires at least 3 anomalous jumps
+ * between pings that are (a) accurate, (b) close in time.
+ * Returns true only when the pattern is unambiguous.
+ * Even when true, callers must NOT disqualify — only flag.
+ */
+function detectLikelySpoof(pings: Telemetry[]): boolean {
+  const accurate = pings.filter(t => t.acc > 0 && t.acc <= 50);
+  if (accurate.length < 4) return false;
+
+  let anomalousJumps = 0;
+  for (let i = 1; i < accurate.length; i++) {
+    const drift = getDistanceInMeters(accurate[i - 1].lat, accurate[i - 1].lng, accurate[i].lat, accurate[i].lng);
+    const dt = Math.abs(accurate[i].timestamp - accurate[i - 1].timestamp) / 1000;
+    if (dt > 0 && dt < 2 && drift / dt > 200) anomalousJumps++;
+  }
+  return anomalousJumps >= 3;
+}
+
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
@@ -4995,23 +5051,31 @@ export async function POST(request: Request) {
 
     if (!rateCheck.allowed) {
       return NextResponse.json(
-        { message: "Too many requests. Please wait a minute." },
+        { status: 'failed', message: "Too many attempts. Please wait a minute and try again." },
         { status: 429, headers: rateLimitHeaders(rateCheck) }
       );
     }
 
     const body = await request.json();
-    const { sessionId, matricNumber, telemetry, hardwareFingerprint, deviceFingerprint, verificationMethod, userAgent } = body;
-    
+    const { sessionId, matricNumber, telemetry, deviceFingerprint, verificationMethod, userAgent } = body;
+
     if (!matricNumber || !sessionId) {
-      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+      return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
     }
 
     const isIOS = /iPad|iPhone|iPod/.test(userAgent || '');
     const cleanMatric = matricNumber.toUpperCase().trim();
 
-    if (!telemetry || telemetry.length === 0) {
-      return NextResponse.json({ message: "Invalid payload" }, { status: 400 });
+    const validPings = getValidPings(telemetry);
+
+    if (validPings.length === 0) {
+      // 200 not 400: this is a legitimate "GPS hasn't fired yet" case.
+      return NextResponse.json({
+        status: 'failed',
+        message: "No usable GPS reading was received. Keep Location on, move near a window, and try again in 5 seconds.",
+        distance: null,
+        maxAllowedDistance: GEOFENCE_RADIUS_METERS,
+      }, { status: 200, headers: rateLimitHeaders(rateCheck) });
     }
 
     const { data: session, error: sessionError } = await supabase
@@ -5020,9 +5084,15 @@ export async function POST(request: Request) {
       .eq('session_id', sessionId)
       .single();
 
-    if (sessionError || !session) return NextResponse.json({ message: "Invalid or expired session link." }, { status: 404 });
-    if (session.is_active !== true) return NextResponse.json({ message: "Attendance window has been manually closed." }, { status: 403 });
-    if (session.expires_at && new Date() > new Date(session.expires_at)) return NextResponse.json({ message: "Time's up. The attendance window has closed." }, { status: 403 });
+    if (sessionError || !session) {
+      return NextResponse.json({ status: 'failed', message: "This check-in link is no longer valid." }, { status: 404 });
+    }
+    if (session.is_active !== true) {
+      return NextResponse.json({ status: 'failed', message: "Attendance for this class has been closed." }, { status: 403 });
+    }
+    if (session.expires_at && new Date() > new Date(session.expires_at)) {
+      return NextResponse.json({ status: 'failed', message: "Time is up. The attendance window has closed." }, { status: 403 });
+    }
 
     const opensAfter = session.checkin_opens_after_minutes ?? 10;
     if (opensAfter > 0 && session.created_at) {
@@ -5031,15 +5101,31 @@ export async function POST(request: Request) {
       const elapsedMinutes = (now - sessionStart) / 60000;
       if (elapsedMinutes < opensAfter) {
         const remaining = Math.ceil(opensAfter - elapsedMinutes);
-        return NextResponse.json({ message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}. Wait until the lecture has started.` }, { status: 403 });
+        return NextResponse.json({
+          status: 'failed',
+          message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}.`
+        }, { status: 403 });
       }
     }
 
     const { data: courseRow } = await supabase.from('courses').select('id').eq('course_code', session.course_code).limit(1).maybeSingle();
-    if (!courseRow) return NextResponse.json({ message: "Course configuration error." }, { status: 500 });
+    if (!courseRow) {
+      return NextResponse.json({ status: 'failed', message: "Course configuration error. Contact your lecturer." }, { status: 500 });
+    }
 
-    const { data: enrollment } = await supabase.from('enrollments').select('id').eq('course_id', courseRow.id).eq('matric_number', cleanMatric).maybeSingle();
-    if (!enrollment) return NextResponse.json({ message: `You are not registered for ${session.course_code}. Please contact your lecturer.` }, { status: 403 });
+    const { data: enrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', courseRow.id)
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (!enrollment) {
+      return NextResponse.json({
+        status: 'failed',
+        message: `You are not registered for ${session.course_code}. Contact your lecturer.`
+      }, { status: 403 });
+    }
 
     const { data: existingLog } = await supabase
       .from('attendance_logs')
@@ -5049,100 +5135,78 @@ export async function POST(request: Request) {
       .single();
 
     if (existingLog && existingLog.status === 'verified') {
-      return NextResponse.json({ message: "You have already checked in to this session." }, { status: 409 });
+      return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
-    let disqualificationReason: string | null = null;
-
-    if (hardwareFingerprint && hardwareFingerprint !== 'unknown-hardware') {
-      const { data: ghostLogs } = await supabase
-        .from('attendance_logs')
-        .select('matric_number')
-        .eq('session_id', sessionId)
-        .eq('device_hash', hardwareFingerprint)
-        .eq('status', 'verified');
-
-      if (ghostLogs && ghostLogs.length > 0) {
-        disqualificationReason = 'proxy-device-reuse';
+    // ── Compute best distance from anchor ──
+    let bestDistance = Infinity;
+    let bestAccuracy: number | null = null;
+    for (const ping of validPings) {
+      const dist = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, ping.lat, ping.lng);
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        bestAccuracy = ping.acc > 0 ? ping.acc : bestAccuracy;
       }
     }
 
-    let isSpoofed = false;
-    const validPings = (telemetry as Telemetry[]).filter((t: Telemetry) => t.acc > 0);
-    const pingsToUse = validPings.length > 0 ? validPings : telemetry;
+    // ── Radius: expand slightly when the GPS reading itself is weak ──
+    // Replaces the previous UA-based iOS bump with an accuracy-based one.
+    const isWeakSignal = bestAccuracy !== null && bestAccuracy > 100;
+    const allowedRadius = isWeakSignal ? 500 : GEOFENCE_RADIUS_METERS;
+    const hardBlockRadius = isWeakSignal ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
 
-    for (let i = 1; i < pingsToUse.length; i++) {
-      const drift = getDistanceInMeters(pingsToUse[i-1].lat, pingsToUse[i-1].lng, pingsToUse[i].lat, pingsToUse[i].lng);
-      const timeDeltaSec = Math.abs(pingsToUse[i].timestamp - pingsToUse[i-1].timestamp) / 1000;
-      if (timeDeltaSec > 0 && drift / timeDeltaSec > 200) isSpoofed = true;
-    }
+    // ── Soft spoof signal: flag, never disqualify ──
+    const spoofSuspected = detectLikelySpoof(validPings);
 
-    if (isSpoofed) {
-      disqualificationReason = 'gps-spoof-pattern';
-    }
-
-    // THE IP CHECK: If they are on the same network as the lecturer, they are inside.
+    // ── IP shortcut: same network as the lecturer means "in the room" ──
     const isOnSameNetwork = session.anchor_ip && session.anchor_ip === ip;
 
-    // THE iOS SPECIAL CASE
-    const allowedRadius = isIOS ? 500 : GEOFENCE_RADIUS_METERS;
-    const hardBlockRadius = isIOS ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
-
-    let bestDistance = Infinity;
-    for (let i = 0; i < pingsToUse.length; i++) {
-      const ping = pingsToUse[i];
-      const dist = getDistanceInMeters(session.anchor_latitude, session.anchor_longitude, ping.lat, ping.lng);
-      if (dist < bestDistance) bestDistance = dist;
-    }
-
     let finalStatus = 'absent';
-    let responseMessage = `You are ${Math.round(bestDistance)}m away (max: ${allowedRadius}m).`;
+    let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
 
-    if (disqualificationReason) {
-      finalStatus = 'disqualified';
-      responseMessage = "This attempt has been flagged as invalid. Please see your lecturer in person.";
-    } else if (isOnSameNetwork || bestDistance <= allowedRadius) {
-      finalStatus = 'verified';
-      responseMessage = isOnSameNetwork ? "Verified via Campus Wi-Fi" : (verificationMethod === 'skipped' ? "Verified via GPS (No Biometrics)" : "Verified");
+    if (isOnSameNetwork || bestDistance <= allowedRadius) {
+      if (spoofSuspected) {
+        finalStatus = 'flagged';
+        responseMessage = "You're close enough, but your location signal was unstable. Your lecturer will review this.";
+      } else {
+        finalStatus = 'verified';
+        responseMessage = isOnSameNetwork
+          ? "Verified via campus Wi-Fi."
+          : (verificationMethod === 'skipped'
+              ? "Verified via GPS (biometrics skipped)."
+              : "Verified.");
+      }
     } else if (bestDistance > hardBlockRadius) {
       finalStatus = 'flagged';
-      responseMessage = "You are too far from the lecture hall.";
+      responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor. You must be inside the lecture hall (allowed: ${allowedRadius}m).`;
     } else {
       finalStatus = 'flagged';
-      responseMessage = `You are ${Math.round(bestDistance)}m away. You must be inside the lecture hall.`;
+      responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m). Move closer and try again.`;
     }
 
-    if (existingLog) {
-      if (existingLog.status === 'disqualified') {
-        finalStatus = 'disqualified';
-        responseMessage = "This attempt was previously disqualified. See your lecturer in person.";
-      } else {
-        try {
-          const prevInfo = existingLog.device_info ? JSON.parse(existingLog.device_info) : {};
-          if (prevInfo.disqualificationReason) {
-            finalStatus = 'disqualified';
-            responseMessage = "This attempt was previously disqualified. See your lecturer in person.";
-          }
-        } catch {}
-      }
-    }
+    // ── If this student was previously disqualified, do NOT block them ──
+    // A disqualification from GPS instability is not a valid reason to
+    // permanently lock a student out. We re-evaluate every attempt.
+    // (The only hard disqualification source — proxy-device-reuse — has been
+    // removed because the client never supplied the required data.)
 
-    const deviceInfoPayload = JSON.stringify({ 
-      telemetry, 
-      evaluatedDistance: Math.round(bestDistance), 
-      distanceMeters: Math.round(bestDistance), 
-      deviceFingerprint, 
+    const deviceInfoPayload = JSON.stringify({
+      telemetry: validPings,
+      evaluatedDistance: Math.round(bestDistance),
+      distanceMeters: Math.round(bestDistance),
+      bestAccuracy,
+      deviceFingerprint,
       verificationMethod,
-      disqualificationReason,
+      spoofSuspected,
+      isOnSameNetwork,
       isIOS,
-      isOnSameNetwork
     });
 
     if (existingLog) {
       await supabase.from('attendance_logs').update({
         status: finalStatus,
         device_info: deviceInfoPayload,
-        device_hash: hardwareFingerprint || 'unknown-hardware',
+        device_hash: deviceFingerprint || 'unknown-hardware',
       }).eq('id', existingLog.id);
     } else {
       await supabase.from('attendance_logs').insert([{
@@ -5150,145 +5214,22 @@ export async function POST(request: Request) {
         matric_number: cleanMatric,
         status: finalStatus,
         device_info: deviceInfoPayload,
-        device_hash: hardwareFingerprint || 'unknown-hardware',
+        device_hash: deviceFingerprint || 'unknown-hardware',
       }]);
     }
 
-    return NextResponse.json({ status: finalStatus, distance: Math.round(bestDistance), message: responseMessage }, { status: 200, headers: rateLimitHeaders(rateCheck) });
+    return NextResponse.json({
+      status: finalStatus,
+      distance: Math.round(bestDistance),
+      accuracy: bestAccuracy,
+      maxAllowedDistance: allowedRadius,
+      message: responseMessage,
+    }, { status: 200, headers: rateLimitHeaders(rateCheck) });
 
   } catch (error) {
     console.error("Verification API Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ status: 'failed', message: "Server error. Please try again." }, { status: 500 });
   }
-}
-</file>
-
-<file path="app/page.tsx">
-'use client';
-import { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
-import Link from 'next/link';
-
-const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
-
-function CheckInWrapper() {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('sessionId');
-  const [isNavigating, setIsNavigating] = useState(false);
-
-  if (!sessionId) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-        
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="w-full max-w-md relative z-10">
-          
-          <div className="text-center mb-10 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="bg-[#2563EB] w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-6 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
-              <ShieldCheck className="w-12 h-12 text-white z-10" strokeWidth={2.5} />
-              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
-            </div>
-            <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
-            <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
-            
-            <div className="space-y-4">
-              <Link 
-                href="/portal" 
-                onClick={() => setIsNavigating(true)}
-                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
-              >
-                {isNavigating ? (
-                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
-                ) : (
-                  <LogIn size={22} className="text-white" strokeWidth={3} />
-                )}
-                <span className="font-black text-white text-xl tracking-wide">
-                  {isNavigating ? "Entering..." : "Enter Student Portal"}
-                </span>
-                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
-              </Link>
-              
-              <p className="text-center text-sm font-bold text-gray-500">
-                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
-              </p>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-              <Link 
-                href="/login" 
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
-              >
-                <Lock size={14} /> Faculty Sign In
-              </Link>
-            </div>
-            
-          </div>
-
-          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
-              <Zap size={20} className="text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-sm flex items-center gap-2">
-                <Activity size={14} className="text-green-400" /> Live Classes
-              </p>
-              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
-                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex justify-center items-center gap-4 text-xs font-bold text-gray-400 pb-8">
-            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
-            <span className="text-gray-300">•</span>
-            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      
-      <div className="w-full max-w-md relative z-10">
-        
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
-            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
-          </div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 mt-1 font-medium text-sm">Live Student Check-In</p>
-        </div>
-
-        <StudentCheckInComponent sessionId={sessionId} />
-
-      </div>
-    </div>
-  );
-}
-
-export default function Page() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={32}/>
-        <p className="text-gray-500 font-bold animate-pulse">Loading CampusCheck...</p>
-      </div>
-    }>
-      <CheckInWrapper />
-    </Suspense>
-  );
 }
 </file>
 
@@ -6265,7 +6206,137 @@ export default function CourseManagement() {
 }
 </file>
 
+<file path="app/page.tsx">
+'use client';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity } from 'lucide-react';
+import Link from 'next/link';
+
+const StudentCheckInComponent = dynamic(() => import('../components/StudentCheckIn'), { ssr: false });
+
+function CheckInWrapper() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  if (!sessionId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+        
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="w-full max-w-md relative z-10">
+          
+          <div className="text-center mb-10 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="bg-[#2563EB] w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-6 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+              <ShieldCheck className="w-12 h-12 text-white z-10" strokeWidth={2.5} />
+              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
+            </div>
+            <h1 className="text-4xl font-black text-gray-900 tracking-tight">CampusCheck</h1>
+            <p className="text-gray-700 mt-2 font-bold text-lg">Secure Attendance & Clearance</p>
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+            
+            <div className="space-y-4">
+              <Link 
+                href="/portal" 
+                onClick={() => setIsNavigating(true)}
+                className={`group relative w-full flex items-center justify-center gap-2 py-5 px-6 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
+              >
+                {isNavigating ? (
+                  <Loader2 size={22} className="text-white animate-spin" strokeWidth={3} />
+                ) : (
+                  <LogIn size={22} className="text-white" strokeWidth={3} />
+                )}
+                <span className="font-black text-white text-xl tracking-wide">
+                  {isNavigating ? "Entering..." : "Enter Student Portal"}
+                </span>
+                {!isNavigating && <ArrowRight size={22} className="text-white group-hover:translate-x-1 transition-all absolute right-6" strokeWidth={3} />}
+              </Link>
+              
+              <p className="text-center text-sm font-bold text-gray-500">
+                Check your <span className="text-[#2563EB]">Eligibility Status</span> & attendance records
+              </p>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+              <Link 
+                href="/login" 
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 w-full min-h-11 text-sm font-bold text-[#2563EB] bg-white border-2 border-[#2563EB] hover:bg-blue-50 transition-colors uppercase tracking-wider rounded-xl"
+              >
+                <Lock size={14} /> Faculty Sign In
+              </Link>
+            </div>
+            
+          </div>
+
+          <div className="mt-8 bg-gray-900 text-white p-5 rounded-2xl flex gap-4 items-center shadow-lg animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
+            <div className="bg-white/10 p-2.5 rounded-xl shrink-0">
+              <Zap size={20} className="text-white" />
+            </div>
+            <div>
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Activity size={14} className="text-green-400" /> Live Classes
+              </p>
+              <p className="text-xs text-gray-300 font-medium mt-1 leading-relaxed">
+                When you log in, if your lecturer has started a class, a <strong className="text-white">&quot;Live Now&quot;</strong> banner will appear on your portal.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-center items-center gap-4 text-xs font-bold text-gray-400 pb-8">
+            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-[#2563EB] w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-5 relative overflow-hidden">
+            <ShieldCheck className="w-8 h-8 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
+          </div>
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">CampusCheck</h1>
+          <p className="text-gray-500 mt-1 font-medium text-sm">Live Student Check-In</p>
+        </div>
+
+        <StudentCheckInComponent sessionId={sessionId} />
+
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin text-[#2563EB] mb-4" size={32}/>
+        <p className="text-gray-500 font-bold animate-pulse">Loading CampusCheck...</p>
+      </div>
+    }>
+      <CheckInWrapper />
+    </Suspense>
+  );
+}
+</file>
+
 <file path="components/StudentCheckIn.tsx">
+// components/StudentCheckIn.tsx
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -6298,6 +6369,7 @@ type Status =
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
+const GPS_MIN_WAIT_FOR_FIRST_PING_MS = 8000;
 const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
@@ -6310,10 +6382,16 @@ function getMeme(minutesLate: number): { title: string; sub: string; emoji: stri
   return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
 }
 
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /FBAN|FBAV|Instagram|WhatsApp|Line\/|Twitter|Snapchat|LinkedInApp|Pinterest|TikTok/i.test(ua);
+}
+
 export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
@@ -6328,6 +6406,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
   const [isIosFallback, setIsIosFallback] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
+  const [inAppBrowser, setInAppBrowser] = useState(false);
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
@@ -6337,7 +6416,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
       const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
-      
+
       if (urlMatric) {
         setMatricNumber(urlMatric.toUpperCase());
       } else if (savedMatric) {
@@ -6352,8 +6431,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
       } else {
         setDeviceType('other');
       }
+
+      if (isInAppBrowser()) {
+        setInAppBrowser(true);
+      }
     }, 0);
-    
+
     return () => clearTimeout(id);
   }, [searchParams]);
 
@@ -6369,7 +6452,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return isIOS && isNotSafari;
   };
 
-  const checkPermission = useCallback(() => {
+  /**
+   * iOS Safari will not show a location prompt unless the call is made
+   * inside a user gesture. This function is called from the "Continue"
+   * button, not from useEffect. The prewarm watch below still runs
+   * once permission has been granted.
+   */
+  const checkPermissionFromGesture = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setGpsStatus('denied');
       return;
@@ -6379,20 +6468,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
       () => setGpsStatus('granted'),
       (error) => {
         if (error.code === 1) setGpsStatus('denied');
-        else setGpsStatus('granted'); 
+        else setGpsStatus('granted');
       },
-      { timeout: 1000, maximumAge: 0 }
+      { timeout: 8000, maximumAge: 0, enableHighAccuracy: true }
     );
   }, []);
 
-  useEffect(() => {
-    const id = setTimeout(() => checkPermission(), 0);
-    return () => clearTimeout(id);
-  }, [checkPermission]);
-
+  /**
+   * Prewarm GPS buffer. Only starts once permission has been granted.
+   * On iOS Safari, we also do a one-shot getCurrentPosition to force a
+   * fresh reading — watchPosition alone can silently stall.
+   */
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-    if (gpsStatus === 'denied') return;
+    if (gpsStatus !== 'granted') return;
 
     const id = navigator.geolocation.watchPosition(
       (position) => {
@@ -6408,6 +6497,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
     prewarmWatchIdRef.current = id;
+
+    // iOS Safari boost: force one reading
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        prewarmBufferRef.current.push({
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+        });
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+
     return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, [gpsStatus]);
 
@@ -6447,13 +6549,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            sessionId: item.session, 
-            matricNumber: item.matric, 
-            telemetry: item.telemetry, 
-            deviceFingerprint: item.fingerprint, 
+          body: JSON.stringify({
+            sessionId: item.session,
+            matricNumber: item.matric,
+            telemetry: item.telemetry,
+            deviceFingerprint: item.fingerprint,
             verificationMethod: item.verificationMethod,
-            userAgent: navigator.userAgent 
+            userAgent: navigator.userAgent
           })
         });
         if (res.ok || res.status === 409) successCount++;
@@ -6478,16 +6580,27 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
     setStatus('checking');
+    setErrorMessage('');
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      if (res.status === 404) setStatus('needs_setup');
-      else if (res.ok) setStatus('ready');
-      else throw new Error("Failed to verify ledger.");
+      if (res.status === 404) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.error === 'NOT_ENROLLED') {
+          setErrorMessage(data.message || "You are not on any class roster yet.");
+          setStatus('failed');
+          return;
+        }
+        setStatus('needs_setup');
+      } else if (res.ok) {
+        setStatus('ready');
+      } else {
+        throw new Error("Failed to verify ledger.");
+      }
     } catch {
-      setErrorMessage("Network error. Could not connect to database.");
+      setErrorMessage("Network error. Could not connect to the database.");
       setStatus('failed');
     }
   };
@@ -6496,7 +6609,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     try {
       const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
       if (existingAnchor && existingAnchor !== matricNumber) {
-        setErrorMessage(`Security Block: This physical device is already bound to ${existingAnchor}.`);
+        setErrorMessage(`This device is already bound to ${existingAnchor}. Ask your lecturer to reset your device if this is a mistake.`);
         setStatus('failed');
         return;
       }
@@ -6506,20 +6619,36 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      if (!genRes.ok || options.error) throw new Error(options.error || "Server rejected registration.");
-      
-      const attResp = await startRegistration(options);
+      if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
+
+      let attResp;
+      try {
+        attResp = await startRegistration(options);
+      } catch (err) {
+        const name = err instanceof Error ? err.name : '';
+        if (name === 'NotAllowedError') {
+          throw new Error("Passkey setup was cancelled or timed out. Tap the button again and choose 'Allow' when prompted.");
+        }
+        if (name === 'InvalidStateError') {
+          throw new Error("This phone already has a passkey for CampusCheck. Ask your lecturer to reset your device.");
+        }
+        if (name === 'NotSupportedError') {
+          throw new Error("This browser doesn't support passkeys. Open the link in Chrome (Android) or Safari (iPhone).");
+        }
+        throw err;
+      }
+
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber, authResponse: attResp })
       });
       const verifyResult = await verifyRes.json();
-      
+
       if (verifyResult.verified) {
         safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
         setStatus('ready');
       } else {
-        throw new Error("Hardware binding failed.");
+        throw new Error("Hardware binding failed. Try again.");
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to register your biometric device.";
@@ -6541,49 +6670,45 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          sessionId, 
-          matricNumber, 
-          telemetry: gpsTelemetry, 
-          deviceFingerprint: fingerprint || 'unknown', 
+        body: JSON.stringify({
+          sessionId,
+          matricNumber,
+          telemetry: gpsTelemetry,
+          deviceFingerprint: fingerprint || 'unknown',
           verificationMethod,
           userAgent: navigator.userAgent
         })
       });
       const result = await response.json();
 
-      if ((response.ok && result.status === 'verified') || response.status === 409) {
+      if (result.status === 'verified' || response.status === 409) {
         triggerSuccessVibration();
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
-        
-        // NEW: Track check-ins for the PWA installer logic
+
         const currentCount = parseInt(localStorage.getItem('campuscheck_checkin_count') || '0', 10);
         localStorage.setItem('campuscheck_checkin_count', String(currentCount + 1));
-
-      } else if (result.status === 'disqualified') {
-        setErrorMessage(result.message || "This attempt has been flagged as invalid.");
-        setStatus('disqualified');
-      } else if (result.status === 'flagged' || response.status === 403) {
-        setErrorMessage(result.message || "Verification failed.");
-        setStatus('failed');
       } else {
+        // Show the server's real message — never replace it with generic text.
         setErrorMessage(result.message || "Verification failed.");
-        setStatus('failed');
+        if (result.status === 'disqualified') {
+          setStatus('disqualified');
+        } else {
+          setStatus('failed');
+        }
       }
     } catch (error) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
-        
         if (!existing.some(item => item.session === sessionId)) {
           existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
           safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
         }
         setStatus('offline-queued');
       } else {
-        setErrorMessage("Server connection lost.");
+        setErrorMessage("Connection lost. Check your internet and try again.");
         setStatus('failed');
       }
     }
@@ -6591,7 +6716,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const executeFinalCheckIn = async () => {
     setStatus('locating');
+    setErrorMessage('');
     setLiveAccuracy(null);
+
+    // iOS Safari prompt fix: this is called from a user gesture
+    checkPermissionFromGesture();
+
     let verificationMethod = 'skipped';
 
     const skipWebAuthn = isIosNonSafari();
@@ -6607,7 +6737,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           verificationMethod = 'skipped';
         } else {
           const options = await genRes.json();
-          if (options.error) throw new Error(options.error);
+          if (options.error) throw new Error(options.message || options.error);
           const asseResp = await startAuthentication(options);
           const verifyRes = await fetch('/api/webauthn/auth/verify', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -6615,21 +6745,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
           });
           const verifyResult = await verifyRes.json();
           if (verifyResult.verified) verificationMethod = 'biometric';
-          else throw new Error("Biometric mismatch");
+          else throw new Error("Biometric verification failed.");
         }
       } catch (error) {
-        console.warn("Biometric failed, falling back to flagged mode:", error);
+        console.warn("Biometric step failed, continuing with GPS only:", error);
         verificationMethod = 'skipped';
       }
     } else {
       verificationMethod = 'ios_web';
     }
 
-    if (!navigator.geolocation) { setErrorMessage("Browser doesn't support location."); setStatus('failed'); return; }
+    if (!navigator.geolocation) {
+      setErrorMessage("This browser doesn't support location. Open the link in Chrome or Safari.");
+      setStatus('failed');
+      return;
+    }
 
     const pings: Telemetry[] = [...prewarmBufferRef.current];
-    let bestAcc = pings.reduce((min, p) => Math.min(min, p.acc), 9999);
-    if (pings.length > 0) setLiveAccuracy(Math.round(bestAcc));
+    let bestAcc = pings.reduce((min, p) => (p.acc > 0 ? Math.min(min, p.acc) : min), Infinity);
+    if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
 
     let watchId = 0;
     let didFinish = false;
@@ -6642,41 +6776,60 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
         sendPayloadToVercel(finalPings, verificationMethod);
       } else {
-        setErrorMessage("Couldn't get any location data. Pull down your menu and turn on Location/GPS, then try again.");
+        setErrorMessage("Couldn't get any location data. Make sure Location is ON and you're near a window, then try again.");
         setStatus('failed');
       }
     };
 
-    if (pings.length >= 1) { sentAny = true; sendPayloadToVercel(pings, verificationMethod); }
+    // If prewarm buffer already has pings, send immediately
+    if (pings.length >= 1) {
+      sentAny = true;
+      sendPayloadToVercel([...pings], verificationMethod);
+    }
 
     const overallTimeoutId = setTimeout(() => {
       if (!sentAny && pings.length === 0) finishWith(pings);
       else { didFinish = true; if (watchId) navigator.geolocation.clearWatch(watchId); }
     }, GPS_OVERALL_TIMEOUT_MS);
 
+    // Minimum-wait enforcement: if prewarm is empty, wait at least a few
+    // seconds for a single ping before the "no data" failure fires.
+    const firstPingWaitId = setTimeout(() => {
+      if (pings.length === 0 && !didFinish) {
+        finishWith(pings);
+      }
+    }, GPS_MIN_WAIT_FOR_FIRST_PING_MS);
+
     let lastSendTs = Date.now();
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         const acc = position.coords.accuracy;
-        if (acc < bestAcc) bestAcc = acc;
-        setLiveAccuracy(Math.round(bestAcc));
-        pings.push({ lat: position.coords.latitude, lng: position.coords.longitude, alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp });
+        if (acc > 0 && acc < bestAcc) bestAcc = acc;
+        if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
+        pings.push({
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+        });
 
         const now = Date.now();
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
           lastSendTs = now;
           sentAny = true;
-          sendPayloadToVercel(pings, verificationMethod);
+          sendPayloadToVercel([...pings], verificationMethod);
         }
       },
       (error) => {
         clearTimeout(overallTimeoutId);
+        clearTimeout(firstPingWaitId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (didFinish || sentAny) return;
         didFinish = true;
         if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS error (Code ${error.code}). Move near a window, or turn Location off and back on, then try again.`); setStatus('failed'); }
+        else {
+          setErrorMessage(`GPS error (code ${error.code}). Turn Location off and back on, then try again.`);
+          setStatus('failed');
+        }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
     );
@@ -6691,13 +6844,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ sessionId, matricNumber })
       });
       if (response.ok) {
-        setErrorMessage("Appeal sent! Please look at the lecturer for visual confirmation.");
+        setErrorMessage("Appeal sent. Show this screen to your lecturer for visual confirmation.");
         setStatus('idle');
       } else {
-        setErrorMessage("Failed to send appeal. Check network.");
+        const data = await response.json().catch(() => ({}));
+        setErrorMessage(data.message || "Failed to send appeal. Check your connection and try again.");
       }
     } catch {
-      setErrorMessage("Network error.");
+      setErrorMessage("Network error. Check your connection and try again.");
     } finally {
       setIsAppealing(false);
     }
@@ -6734,60 +6888,68 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh]">
 
-        {gpsStatus === 'denied' && (
+        {inAppBrowser && (
           <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
             <div className="flex items-start gap-3">
-              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={20} />
               <div>
-                <h4 className="font-bold text-red-900 text-sm">Location is Blocked</h4>
-                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
-                  Your browser is currently blocking location access. Please follow these steps to enable it:
+                <h4 className="font-bold text-red-900 text-sm">Open this link in your browser</h4>
+                <p className="text-xs text-red-700 font-medium mt-1 leading-relaxed">
+                  You opened this link inside another app. Passkey setup does not work in in-app browsers.
+                  Tap the menu (⋮) and choose <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>.
                 </p>
-                
-                <div className="text-xs text-red-800 space-y-1.5 bg-white/50 p-3 rounded-lg border border-red-100">
-                  {deviceType === 'ios' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
-                      <p>1. Open your iPhone <strong>Settings</strong>.</p>
-                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
-                      <p>3. Tap <strong>Location</strong> and select <strong>Allow</strong>.</p>
-                      <p>4. Come back here and tap the button below.</p>
-                    </>
-                  ) : deviceType === 'android' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
-                      <p>1. Tap the <strong>lock icon</strong> next to the website address.</p>
-                      <p>2. Tap <strong>Permissions</strong>.</p>
-                      <p>3. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
-                      <p>4. Refresh this page.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-bold text-[13px]">On Desktop Browser:</p>
-                      <p>1. Click the <strong>lock icon</strong> next to the website address.</p>
-                      <p>2. Find <strong>Location</strong> and change it to <strong>Allow</strong>.</p>
-                      <p>3. Refresh this page.</p>
-                    </>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => { setGpsStatus('prompt'); checkPermission(); }} 
-                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
-                >
-                  I have turned it on, check again
-                </button>
               </div>
             </div>
           </div>
         )}
 
-        {gpsStatus === 'prompt' && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-4">
-            <MapPin className="text-amber-600 shrink-0 mt-0.5" size={20} />
-            <div>
-              <h4 className="font-bold text-amber-900 text-sm">Location Permission Needed</h4>
-              <p className="text-xs text-amber-700 font-medium mt-1">Please tap &quot;Allow&quot; when your browser asks for location access.</p>
+        {gpsStatus === 'denied' && (
+          <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-xl animate-in slide-in-from-top-4">
+            <div className="flex items-start gap-3">
+              <MapPin className="text-red-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <h4 className="font-bold text-red-900 text-sm">Location is blocked</h4>
+                <p className="text-xs text-red-700 font-medium mt-1 mb-3">
+                  Your browser is blocking location access. Follow these steps:
+                </p>
+
+                <div className="text-xs text-red-800 space-y-1.5 bg-white/60 p-3 rounded-lg border border-red-100">
+                  {deviceType === 'ios' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
+                      <p>1. Open iPhone <strong>Settings</strong>.</p>
+                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
+                      <p>3. Tap <strong>Location</strong> → <strong>Allow</strong>.</p>
+                      <p>4. Return here and tap the button below.</p>
+                    </>
+                  ) : deviceType === 'android' ? (
+                    <>
+                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
+                      <p>1. Tap the <strong>lock icon</strong> next to the address.</p>
+                      <p>2. Tap <strong>Permissions</strong>.</p>
+                      <p>3. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                      <p>4. Refresh this page.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-[13px]">On your browser:</p>
+                      <p>1. Click the <strong>lock icon</strong> next to the address.</p>
+                      <p>2. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                      <p>3. Refresh this page.</p>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setGpsStatus('prompt');
+                    checkPermissionFromGesture();
+                  }}
+                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                >
+                  I turned it on — check again
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -6814,9 +6976,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100"><ShieldCheck size={32} className="text-[#2563EB]" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Hardware Setup</h3>
-            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to securely link this specific phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
+            <p className="text-gray-600 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900">{matricNumber}</span> to prevent proxy attendance.</p>
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Cancel</button>
           </div>
         )}
 
@@ -6825,9 +6987,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100"><CheckCircle size={32} className="text-green-600" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">Identity Confirmed</h3>
             <p className="text-gray-900 font-black text-xl mt-1">{matricNumber}</p>
-            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is securely linked. Ensure you are inside the lecture hall.</p>
+            <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
             <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
-            <button onClick={() => setStatus('idle')} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
+            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 font-bold py-3 hover:text-gray-800 transition-all text-sm">Not you? Switch account</button>
           </div>
         )}
 
@@ -6835,7 +6997,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-8 flex flex-col items-center">
             <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
             <p className="text-gray-700 font-bold text-center">
-              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Sending your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
+              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Getting your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
             </p>
             {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
               <div className="flex items-center gap-2 mt-3 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"><Signal size={14} className="text-[#2563EB]" /><span className="text-xs font-bold text-[#2563EB]">±{liveAccuracy}m accuracy</span></div>
@@ -6850,9 +7012,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <p className="text-green-700 font-bold mt-2 bg-green-50 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100">{matricNumber}</p>
             <p className="text-gray-500 mt-4 text-sm font-medium">Attendance recorded.</p>
             {isIosFallback && (
-              <p className="text-xs text-blue-600 font-bold mt-2">Note: Biometrics aren&apos;t supported on this browser. Verified via GPS.</p>
+              <p className="text-xs text-blue-600 font-bold mt-2">Note: biometrics weren&apos;t used on this browser. Verified via GPS.</p>
             )}
-            
+
             <div className="mt-8 space-y-3">
               <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">
                 Rate this Lecture
@@ -6912,7 +7074,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 bg-blue-50 rounded-2xl border border-blue-100 px-4 text-center">
             <WifiOff className="w-16 h-16 text-[#2563EB] mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900">Saved Offline</h3>
-            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS secured. Keep this tab open. It will auto-submit when internet returns.</p>
+            <p className="text-blue-700 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS was captured. Keep this tab open. It will auto-submit when the internet returns.</p>
           </div>
         )}
 
@@ -6920,17 +7082,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Verification Failed</h3>
-            <p className="text-orange-600 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
-              {errorMessage.includes("out of bounds") || errorMessage.includes("away") ? "You are too far away. You must be inside the lecture hall to check in. If you are in the hall, try walking near a window." : errorMessage.includes("Location Blocked") || errorMessage.includes("any location data") || errorMessage.includes("pull down") ? "Your GPS is off or blocked. Pull down your phone menu, turn on Location, and click Try Again." : errorMessage}
+            <p className="text-orange-700 mt-2 text-sm font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">
+              {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
               <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
-              
+
               <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
                 {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
               </button>
-              
-              <button onClick={() => setStatus('idle')} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over Completely</button>
+
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full bg-white text-gray-900 border border-gray-200 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-all shadow-sm">Start Over</button>
             </div>
           </div>
         )}
@@ -6938,12 +7100,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
         {status === 'disqualified' && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <ShieldAlert className="w-16 h-16 text-red-600 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900">Attempt Disqualified</h3>
+            <h3 className="text-xl font-bold text-gray-900">Attempt Blocked</h3>
             <p className="text-red-700 mt-2 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100">
               {errorMessage}
             </p>
             <div className="mt-6 space-y-3">
-              <p className="text-sm text-gray-600 font-medium">You cannot retry this check-in. Please show this screen to your lecturer.</p>
+              <p className="text-sm text-gray-600 font-medium">Show this screen to your lecturer to be verified manually.</p>
+              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 text-orange-800 font-bold py-3.5 rounded-xl hover:bg-orange-100 disabled:opacity-50 transition-all border border-orange-100">
+                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand
+              </button>
               <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-all shadow-md">Return to Portal</button>
             </div>
           </div>
@@ -6953,8 +7118,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-4 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-900">Location Blocked</h3>
-            <p className="text-red-600 mt-2 text-sm font-medium">Please allow location access in your browser settings to verify your presence.</p>
-            <button onClick={() => { checkPermission(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on, Try Again</button>
+            <p className="text-red-600 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
+            <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all">I turned it on — try again</button>
             <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white text-gray-900 border border-gray-200 font-bold py-3 rounded-xl hover:bg-gray-50 transition-all">Go Back</button>
           </div>
         )}
@@ -7186,45 +7351,95 @@ export default function LecturerDashboard() {
       }
     };
 
+    // Fast path: use a recent anchor from localStorage if it's fresh.
     try {
       const cached = localStorage.getItem(ANCHOR_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached) as { lat: number; lng: number; ts: number };
         if (Date.now() - parsed.ts < ANCHOR_CACHE_MAX_AGE_MS) {
-          setSetupError("Using cached location..."); executeSessionCreation(parsed.lat, parsed.lng); return;
+          setSetupError("Using cached location..."); 
+          executeSessionCreation(parsed.lat, parsed.lng); 
+          return;
         }
       }
     } catch {}
 
+    // Fast path: use a recent prewarm fix if it's fresh.
     if (prewarmPosRef.current && Date.now() - prewarmPosRef.current.ts < 15000) {
-      setSetupError(`Using recent fix (±${Math.round(prewarmPosRef.current.acc)}m)...`);
-      executeSessionCreation(prewarmPosRef.current.lat, prewarmPosRef.current.lng); return;
+      const snapshot = prewarmPosRef.current;
+      setSetupError(`Using recent fix (±${Math.round(snapshot.acc)}m)...`);
+      executeSessionCreation(snapshot.lat, snapshot.lng); 
+      return;
     }
 
-    let watchId = 0, bestLat = 0, bestLng = 0, bestAcc = 9999;
+    // Slow path: collect multiple readings and require them to agree.
+    setSetupError("Getting a stable GPS fix...");
+    const readings: { lat: number; lng: number; acc: number }[] = [];
+    let watchId = 0;
+    let finished = false;
+
+    const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
+
+    const finish = (lat: number, lng: number) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      executeSessionCreation(lat, lng);
+    };
+
+    const fail = (msg: string) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      setSetupError(msg);
+      setIsStarting(false);
+    };
+
     const timeoutId = setTimeout(() => {
-      if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
-      if (bestAcc !== 9999) executeSessionCreation(bestLat, bestLng);
-      else { setSetupError("Couldn't get a location fix. Move near a window and try again."); setIsStarting(false); }
-    }, 20000);
+      if (finished) return;
+      if (readings.length >= 3) {
+        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+        finish(lat, lng);
+      } else {
+        fail("Couldn't get a stable GPS fix. Move near a window or outdoors, then try again.");
+      }
+    }, 25000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const currentAcc = position.coords.accuracy;
-        if (currentAcc < bestAcc) {
-          bestAcc = currentAcc; bestLat = position.coords.latitude; bestLng = position.coords.longitude;
-          setSetupError(`Locking on... ±${Math.round(bestAcc)}m`);
+        if (finished) return;
+        const acc = position.coords.accuracy;
+        if (acc > 50) {
+          setSetupError(`GPS accuracy is ±${Math.round(acc)}m — too weak. Move near a window.`);
+          return;
         }
-        if (bestAcc <= 100) { clearTimeout(timeoutId); navigator.geolocation.clearWatch(watchId); executeSessionCreation(bestLat, bestLng); }
+        readings.push({ lat: position.coords.latitude, lng: position.coords.longitude, acc });
+
+        if (readings.length >= 3) {
+          const latSpread = Math.max(...readings.map(r => r.lat)) - Math.min(...readings.map(r => r.lat));
+          const lngSpread = Math.max(...readings.map(r => r.lng)) - Math.min(...readings.map(r => r.lng));
+          // ~30m ≈ 0.0003 degrees
+          if (latSpread < 0.0003 && lngSpread < 0.0003) {
+            clearTimeout(timeoutId);
+            const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+            const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+            finish(lat, lng);
+            return;
+          }
+          // Readings disagree — drop the oldest and keep collecting
+          readings.shift();
+          setSetupError(`GPS is still settling (±${Math.round(acc)}m)...`);
+        } else {
+          setSetupError(`Stabilizing GPS fix (${readings.length}/3, ±${Math.round(acc)}m)...`);
+        }
       },
       (error) => {
         clearTimeout(timeoutId);
-        if (watchId !== 0) navigator.geolocation.clearWatch(watchId);
-        if (error.code === 1) setSetupError("Permission Denied: You must click 'Allow' for location.");
-        else if (error.code === 2) setSetupError("Signal Lost: Turn on your phone's GPS/Location.");
-        else if (error.code === 3) setSetupError("Timeout: GPS took too long. Try moving near a window.");
-        else setSetupError("Failed to grab GPS.");
-        setIsStarting(false);
+        if (error.code === 1) fail("Permission Denied: tap 'Allow' for location and try again.");
+        else if (error.code === 2) fail("Signal lost. Turn your phone's GPS/Location off and back on, then retry.");
+        else if (error.code === 3) fail("GPS timed out. Move near a window and try again.");
+        else fail("Could not access GPS.");
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
@@ -7235,7 +7450,7 @@ export default function LecturerDashboard() {
     
     confirm.ask(
       'Update Geofence?',
-      'Update the geofence to your current location? Ensure you are in the lecture hall.',
+      'Update the class anchor to your current location? Stand in the middle of the lecture hall first.',
       async () => {
         setIsUpdatingGeofence(true);
         try {
@@ -7243,6 +7458,18 @@ export default function LecturerDashboard() {
           
           navigator.geolocation.getCurrentPosition(
             async (position) => {
+              const acc = position.coords.accuracy;
+              if (acc > 50) {
+                confirm.ask(
+                  'GPS Too Weak', 
+                  `Your current accuracy is ±${Math.round(acc)}m. Move near a window or outdoors, then try again.`, 
+                  () => {}, 
+                  { isDangerous: false }
+                );
+                setIsUpdatingGeofence(false);
+                return;
+              }
+
               const { error } = await supabase
                 .from('lecture_sessions')
                 .update({ 
@@ -7254,7 +7481,10 @@ export default function LecturerDashboard() {
               if (error) {
                 confirm.ask('Error', 'Failed to update geofence.', () => {}, { isDangerous: false });
               } else {
-                confirm.ask('Success', 'Geofence updated to your current location!', () => {}, { isDangerous: false });
+                try {
+                  localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude, ts: Date.now() }));
+                } catch {}
+                confirm.ask('Success', `Geofence updated (±${Math.round(acc)}m accuracy).`, () => {}, { isDangerous: false });
               }
               setIsUpdatingGeofence(false);
             },
@@ -7262,7 +7492,7 @@ export default function LecturerDashboard() {
               confirm.ask('Error', 'Could not get your GPS location. Ensure location is on.', () => {}, { isDangerous: false });
               setIsUpdatingGeofence(false);
             },
-            { enableHighAccuracy: true, timeout: 15000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
           );
         } catch {
           confirm.ask('Error', 'Error updating location.', () => {}, { isDangerous: false });
@@ -7428,12 +7658,18 @@ export default function LecturerDashboard() {
       ["Matric Number", "Status", "Timestamp", "Security Flag"]
     ];
     const rows = logsToExport.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
-      .map(log => [
-        sanitize(log.matricNumber), 
-        sanitize(log.status.toUpperCase()), 
-        sanitize(log.time), 
-        "Verified via Secure Platform"
-      ]);
+      .map(log => {
+        const flag = log.status === 'verified' ? 'Verified' 
+          : log.status === 'pending_override' ? 'Raised Hand / Waiver Pending'
+          : log.status === 'flagged' ? `Flagged: ${log.reason || 'Unknown'}`
+          : log.status;
+        return [
+          sanitize(log.matricNumber), 
+          sanitize(log.status.toUpperCase()), 
+          sanitize(log.time), 
+          sanitize(flag)
+        ];
+      });
       
     const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -7706,6 +7942,12 @@ export default function LecturerDashboard() {
                 <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 ml-2">
                   <Wifi size={12} /> Live Sync
                 </span>
+
+                {data && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-md border border-gray-200 ml-2" title="Students are measured against this anchor">
+                    <MapPin size={12} /> Anchor: {data.course ? 'set' : 'pending'}
+                  </span>
+                )}
 
                 {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
                   <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">

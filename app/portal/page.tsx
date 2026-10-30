@@ -13,6 +13,7 @@ import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
 import { usePushNotifications } from '@/utils/usePushNotifications';
 import PWAInstaller from '@/components/PWAInstaller';
+import { getStudentHeaders } from '@/utils/api-client';
 
 interface CourseRecord {
   course_code: string;
@@ -541,13 +542,13 @@ export default function StudentPortal() {
     
     setIsLoggingBattery(true);
     try {
+            const headers = getStudentHeaders();
       const res = await fetch('/api/rep-action', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers,
         body: JSON.stringify({
           action: 'log_dead_battery',
           sessionId: activeLiveSession.sessionId,
-          matricNumber: repBatteryMatric,
-          repMatric: matricNumber
+          matricNumber: repBatteryMatric
         })
       });
       const data = await res.json();

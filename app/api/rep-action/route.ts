@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
 import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
+import { verifyStudentToken } from '@/utils/student-auth';
 
 export async function POST(request: Request) {
   try {
@@ -16,11 +17,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { action, sessionId, matricNumber, repMatric } = body;
+    // NEW: Require student auth
+    const auth = verifyStudentToken(request);
+    if (auth.error) return auth.error;
+    const repMatric = auth.matric!; // Trust the token over the body
 
-    if (!sessionId || !repMatric) {
-      return NextResponse.json({ error: "Missing session or rep" }, { status: 400 });
+    const body = await request.json();
+    const { action, sessionId, matricNumber } = body;
+
+    if (!sessionId) {
+      return NextResponse.json({ error: "Missing session" }, { status: 400 });
     }
 
     const { data: repProfile } = await supabase
