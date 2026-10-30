@@ -47,14 +47,23 @@ export async function POST(request: Request) {
       });
 
       if (verification.verified) {
+        // NEW: Counter Clone Check
+        const newCounter = verification.authenticationInfo.newCounter;
+        const oldCounter = Number(device.counter);
+        
+        // 0 means the authenticator doesn't support counters (common on some iPhones). 
+        // If it does support counters, it must be strictly greater than the old one.
+        if (newCounter > 0 && newCounter <= oldCounter) {
+           return NextResponse.json({ error: "Security error: Hardware counter mismatch (possible cloned device)." }, { status: 401 });
+        }
+
         await supabase
           .from('user_devices')
-          .update({ counter: verification.authenticationInfo.newCounter })
+          .update({ counter: newCounter })
           .eq('matric_number', cleanMatric);
 
         cookieStore.delete('webauthn_challenge');
         
-        // NEW: Mint the token!
         const token = signStudentToken(cleanMatric);
         
         return NextResponse.json({ verified: true, token });
