@@ -687,29 +687,31 @@ export default function StudentPortal() {
   };
 
   const getShieldColor = (pct: number) => {
-    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700', bg: 'bg-emerald-50/50', border: 'border-emerald-200' };
-    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700', bg: 'bg-amber-50/50', border: 'border-amber-200' };
-    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700', bg: 'bg-red-50/50', border: 'border-red-200' };
+    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50/50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' };
+    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50/50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800' };
+    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700 dark:text-red-400', bg: 'bg-red-50/50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' };
   };
 
-  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);  const renderUnlockForm = () => {
+  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
+
+  const renderUnlockForm = () => {
     if (unlockState === 'not_enrolled') {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto border border-red-100">
-            <AlertTriangle className="text-red-600" size={32} />
+          <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto border border-red-100 dark:border-red-800">
+            <AlertTriangle className="text-red-600 dark:text-red-500" size={32} />
           </div>
-          <h3 className="text-xl font-extrabold text-gray-900">Not on any roster yet</h3>
-          <p className="text-sm text-gray-600 font-medium leading-relaxed">
-            Your matric <span className="font-black text-gray-900">{matricNumber}</span> isn&apos;t enrolled in any course yet.
+          <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">Not on any roster yet</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-medium leading-relaxed">
+            Your matric <span className="font-black text-gray-900 dark:text-white">{matricNumber}</span> isn&apos;t enrolled in any course yet.
           </p>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2">What to do:</p>
-            <p className="text-sm text-amber-800 font-medium leading-relaxed">
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-left">
+            <p className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider mb-2">What to do:</p>
+            <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
               Ask your lecturer to upload the class roster with your matric number. Once they do, come back here and try again.
             </p>
           </div>
-          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all">
+          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
             Try a Different Matric
           </button>
         </div>
@@ -719,39 +721,39 @@ export default function StudentPortal() {
     if (unlockState === 'needs_setup') {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto border border-blue-100">
-            <Smartphone className="text-[#2563EB]" size={32} />
+          <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto border border-blue-100 dark:border-blue-800">
+            <Smartphone className="text-[#2563EB] dark:text-blue-400" size={32} />
           </div>
-          <h3 className="text-xl font-extrabold text-gray-900">Let&apos;s set up this phone</h3>
-          <p className="text-sm text-gray-600 font-medium leading-relaxed">
-            We&apos;ll link this phone to <span className="font-black text-gray-900">{matricNumber}</span> so only you can check in from it.
+          <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">Let&apos;s set up this phone</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-medium leading-relaxed">
+            We&apos;ll link this phone to <span className="font-black text-gray-900 dark:text-white">{matricNumber}</span> so only you can check in from it.
           </p>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-left space-y-2">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4 text-left space-y-2">
             <div className="flex items-start gap-2">
               <span className="text-lg">📱</span>
-              <p className="text-xs text-blue-900 font-medium">One-time setup — you won&apos;t do this again on this phone.</p>
+              <p className="text-xs text-blue-900 dark:text-blue-300 font-medium">One-time setup — you won&apos;t do this again on this phone.</p>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-lg">🔒</span>
-              <p className="text-xs text-blue-900 font-medium">Your fingerprint never leaves your device. We only store a security key.</p>
+              <p className="text-xs text-blue-900 dark:text-blue-300 font-medium">Your fingerprint never leaves your device. We only store a security key.</p>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-lg">🔄</span>
-              <p className="text-xs text-blue-900 font-medium">Changing phones later? Ask your lecturer to reset your device.</p>
+              <p className="text-xs text-blue-900 dark:text-blue-300 font-medium">Changing phones later? Ask your lecturer to reset your device.</p>
             </div>
           </div>
 
           {unlockError && (
-            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-              <p className="text-red-700 font-bold text-sm">{unlockError}</p>
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800">
+              <p className="text-red-700 dark:text-red-400 font-bold text-sm">{unlockError}</p>
             </div>
           )}
 
           <button onClick={handleRegister} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all">
             <Fingerprint size={20} /> Link This Phone
           </button>
-          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full text-gray-500 font-bold py-2 hover:text-gray-800 transition-all text-sm">
+          <button onClick={() => { setUnlockState('idle'); setUnlockError(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-2 hover:text-gray-800 dark:hover:text-white transition-all text-sm">
             Cancel
           </button>
         </div>
@@ -761,8 +763,8 @@ export default function StudentPortal() {
     if (unlockState === 'authenticating') {
       return (
         <div className="py-8 flex flex-col items-center">
-          <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin mb-4" />
-          <p className="text-gray-700 font-bold text-center">Verifying...</p>
+          <Loader2 className="w-10 h-10 text-[#2563EB] dark:text-blue-400 animate-spin mb-4" />
+          <p className="text-gray-700 dark:text-gray-300 font-bold text-center">Verifying...</p>
         </div>
       );
     }
@@ -770,7 +772,7 @@ export default function StudentPortal() {
     return (
       <>
         <div className="relative mb-4">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400 dark:text-gray-500" /></div>
           <input 
             aria-label="Matric Number"
             type="text" 
@@ -778,7 +780,7 @@ export default function StudentPortal() {
             value={matricNumber} 
             onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
             onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndFetch()} 
-            className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium" 
+            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold text-lg py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500" 
           />
         </div>
         
@@ -787,16 +789,14 @@ export default function StudentPortal() {
         </button>
 
         {unlockError && (
-          <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-100 text-center animate-in fade-in">
-            <p className="text-red-700 font-bold text-sm">{unlockError}</p>
+          <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800 text-center animate-in fade-in">
+            <p className="text-red-700 dark:text-red-400 font-bold text-sm">{unlockError}</p>
           </div>
         )}
       </>
     );
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden">
+  };  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="w-full max-w-md relative z-10 pt-4">
@@ -807,11 +807,11 @@ export default function StudentPortal() {
             <button
               onClick={() => setActiveTab('feed')}
               aria-label={unreadCount > 0 ? `${unreadCount} unread updates` : 'Open updates feed'}
-              className="absolute top-0 right-0 w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all"
+              className="absolute top-0 right-0 w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
             >
-              <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB]' : 'text-gray-400'} />
+              <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB] dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white animate-in zoom-in duration-200">
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-gray-900 animate-in zoom-in duration-200">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
@@ -822,23 +822,23 @@ export default function StudentPortal() {
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
             {savedNickname ? `Hey, ${savedNickname}!` : 'Survival Companion'}
           </h1>
-          <p className="text-gray-500 mt-1 font-medium text-base">Track your NUC clearance status</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Track your NUC clearance status</p>
         </div>
 
         {activeLiveSession && (
           liveSessionCheckedIn ? (
-            <div className="mb-6 bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-500">
-              <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+            <div className="mb-6 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-500">
+              <div className="bg-emerald-100 dark:bg-emerald-900/50 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
                 <CheckCircle size={20} />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Class is live: {activeLiveSession.course}</p>
-                <p className="font-bold text-emerald-900">You&apos;re checked in.</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Class is live: {activeLiveSession.course}</p>
+                <p className="font-bold text-emerald-900 dark:text-emerald-300">You&apos;re checked in.</p>
                 {liveSessionCheckedInAt && (
-                  <p className="text-[10px] text-emerald-600 font-semibold">
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-500 font-semibold">
                     Marked present at {new Date(liveSessionCheckedInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
                   </p>
                 )}
@@ -863,13 +863,13 @@ export default function StudentPortal() {
           )
         )}
 
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 border border-white p-6 animate-in fade-in slide-in-from-bottom-6">
+        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 animate-in fade-in slide-in-from-bottom-6 transition-colors duration-300">
           
           {!records && renderUnlockForm()}
 
           {records && (
             <>
-              <div className="flex bg-gray-100 p-1 rounded-xl mb-6 overflow-x-auto gap-1">
+              <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mb-6 overflow-x-auto gap-1 transition-colors">
                 {visibleTabs.map(({ id, label, Icon }) => {
                   const isActive = activeTab === id;
                   const hasBadge = id === 'feed' && unreadCount > 0;
@@ -879,14 +879,14 @@ export default function StudentPortal() {
                       onClick={() => setActiveTab(id)}
                       className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 px-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap relative ${
                         isActive
-                          ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
-                          : 'text-gray-500 hover:text-gray-700'
+                          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                       }`}
                     >
                       <div className="relative">
                         <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
                         {hasBadge && (
-                          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white animate-in zoom-in duration-200" />
+                          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800 animate-in zoom-in duration-200" />
                         )}
                       </div>
                       <span className="truncate">{label}</span>
@@ -899,7 +899,7 @@ export default function StudentPortal() {
                 <div className="space-y-5 animate-in fade-in">
                   
                   {isSupported && permission !== 'granted' && !isSubscribed && (
-                    <div className="bg-gray-900 text-white p-4 rounded-2xl flex items-center justify-between mb-4 animate-in slide-in-from-top-4 shadow-lg">
+                    <div className="bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl flex items-center justify-between mb-4 animate-in slide-in-from-top-4 shadow-lg border border-transparent dark:border-gray-700">
                       <div className="flex items-center gap-3">
                         <div className="bg-white/20 p-2 rounded-full"><BellRing size={20} /></div>
                         <div>
@@ -913,66 +913,66 @@ export default function StudentPortal() {
                     </div>
                   )}
 
-                  <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl space-y-2">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded-xl space-y-2 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Profile:</span>
+                        <span className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Profile:</span>
                         {isEditingNickname ? (
-                          <input aria-label="Nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-1 text-base font-bold text-gray-900 outline-none w-24" placeholder="Nickname" maxLength={15} />
+                          <input aria-label="Nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 text-base font-bold text-gray-900 dark:text-white outline-none w-24" placeholder="Nickname" maxLength={15} />
                         ) : (
-                          <span className="text-base font-black text-blue-900">{savedNickname || 'Not set'}</span>
+                          <span className="text-base font-black text-blue-900 dark:text-blue-100">{savedNickname || 'Not set'}</span>
                         )}
                       </div>
                       {isEditingNickname ? (
-                        <button aria-label="Save Profile" onClick={saveProfile} className="text-blue-600 hover:text-blue-800"><Save size={18} /></button>
+                        <button aria-label="Save Profile" onClick={saveProfile} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"><Save size={18} /></button>
                       ) : (
-                        <button aria-label="Edit Profile" onClick={() => setIsEditingNickname(true)} className="text-blue-500 hover:text-blue-700"><Edit3 size={18} /></button>
+                        <button aria-label="Edit Profile" onClick={() => setIsEditingNickname(true)} className="text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"><Edit3 size={18} /></button>
                       )}
                     </div>
                     
                     {isEditingNickname && (
-                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200">
+                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
                         <div className="relative">
-                          <select aria-label="Department" value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select aria-label="Department" value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-2 text-sm font-bold text-gray-900 dark:text-white outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Dept</option>
                             {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                           </select>
-                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 dark:text-gray-500 pointer-events-none" />
                         </div>
                         <div className="relative">
-                          <select aria-label="Level" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white border border-blue-200 rounded px-2 py-2 text-sm font-bold text-gray-900 outline-none w-full appearance-none cursor-pointer">
+                          <select aria-label="Level" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-2 text-sm font-bold text-gray-900 dark:text-white outline-none w-full appearance-none cursor-pointer">
                             <option value="">Select Level</option>
                             {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                           </select>
-                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 dark:text-gray-500 pointer-events-none" />
                         </div>
                       </div>
                     )}
                   </div>
 
                   {records.length === 0 ? (
-                    <div className="text-center py-8 bg-gray-50 rounded-2xl border border-gray-200 space-y-3">
-                      <div className="bg-gray-100 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
-                        <BookOpen size={32} className="text-gray-400" />
+                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3 transition-colors">
+                      <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
+                        <BookOpen size={32} className="text-gray-400 dark:text-gray-500" />
                       </div>
-                      <p className="text-base font-bold text-gray-600">You have no courses yet.</p>
+                      <p className="text-base font-bold text-gray-600 dark:text-gray-300">You have no courses yet.</p>
                       <button onClick={() => setActiveTab('register')} className="bg-[#2563EB] text-white font-bold text-sm px-6 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all">Enroll in a Course</button>
                     </div>
                   ) : (
                     records.map((record) => {
                       const colors = getShieldColor(record.percentage);
                       return (
-                        <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border}`}>
+                        <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border} transition-colors`}>
                           {record.is_finalized && (
-                            <div className="absolute top-0 right-0 bg-gray-900 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
+                            <div className="absolute top-0 right-0 bg-gray-900 dark:bg-gray-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
                               <CheckCircle size={10} /> FINALIZED
                             </div>
                           )}
 
                           <div className="flex justify-between items-start mb-3 mt-1">
                             <div>
-                              <p className="font-black text-gray-900 text-lg">{record.course_code}</p>
-                              <p className="text-xs text-gray-600 font-semibold mt-0.5">
+                              <p className="font-black text-gray-900 dark:text-white text-lg">{record.course_code}</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 font-semibold mt-0.5">
                                 {record.attended_classes} / {record.total_planned} Classes
                                 {record.total_held < record.total_planned && !record.is_finalized && ` (${record.total_planned - record.total_held} remaining)`}
                               </p>
@@ -980,20 +980,20 @@ export default function StudentPortal() {
                             <div className="text-right">
                               <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
                               {record.is_finalized && (
-                                <p className="text-sm font-bold text-gray-700 mt-1 bg-white/50 px-2 py-0.5 rounded border border-gray-200">
+                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mt-1 bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700">
                                   CA: {record.ca_score} / {record.max_score}
                                 </p>
                               )}
                             </div>
                           </div>
                           
-                          <div className="relative w-full h-3 bg-gray-200/50 rounded-full overflow-hidden border border-gray-300/50">
+                          <div className="relative w-full h-3 bg-gray-200/50 dark:bg-gray-700/50 rounded-full overflow-hidden border border-gray-300/50 dark:border-gray-600">
                             <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
-                            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30" style={{ left: '70%' }} />
+                            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30 dark:bg-white/30" style={{ left: '70%' }} />
                           </div>
                           
                           {!record.is_finalized && (
-                             <div className="mt-2 flex justify-between text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                             <div className="mt-2 flex justify-between text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                <span>{record.streak} Streak ({record.streak_tier})</span>
                                <span>{record.skips_left} Safe Skips Left</span>
                              </div>
@@ -1008,24 +1008,24 @@ export default function StudentPortal() {
               {activeTab === 'records' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
-                    <FileText size={18} className="text-gray-400" />
-                    <h3 className="font-bold text-gray-800 text-base">Attendance History</h3>
+                    <FileText size={18} className="text-gray-400 dark:text-gray-500" />
+                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Attendance History</h3>
                   </div>
                   <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
                     {history?.map((h, i) => (
-                      <div key={i} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
+                      <div key={i} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
                         <div>
-                          <p className="font-bold text-gray-900 text-sm">{h.course_code}</p>
-                          <p className="text-[10px] text-gray-500 font-medium">{new Date(h.created_at).toLocaleString()}</p>
+                          <p className="font-bold text-gray-900 dark:text-white text-sm">{h.course_code}</p>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{new Date(h.created_at).toLocaleString()}</p>
                         </div>
                         {h.status === 'verified' ? (
-                          <span className="bg-green-100 text-green-700 border border-green-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
+                          <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
                         ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                          <span className="bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                          <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
                         ) : h.status === 'blocked' ? (
-                          <span className="bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
+                          <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
                         ) : (
-                          <span className="bg-gray-100 text-gray-700 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                          <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
                         )}
                       </div>
                     ))}
@@ -1036,31 +1036,31 @@ export default function StudentPortal() {
               {activeTab === 'register' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
-                    <Plus size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800 text-base">Enroll in Class</h3>
+                    <Plus size={18} className="text-[#2563EB] dark:text-blue-400" />
+                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Enroll in Class</h3>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2">
-                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-sm text-amber-800 font-medium leading-relaxed">
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4 flex items-start gap-2 transition-colors">
+                    <AlertTriangle size={16} className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
                       <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
                     </p>
                   </div>
                   
                   {(!studentDept || !studentLevel) ? (
-                    <div className="text-center p-6 bg-yellow-50 border border-yellow-200 rounded-xl">
-                      <p className="text-sm font-bold text-yellow-800">Please set your Department and Level in the Shield tab first.</p>
+                    <div className="text-center p-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                      <p className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Please set your Department and Level in the Shield tab first.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {availableCourses.length === 0 ? (
-                        <p className="text-center text-sm text-gray-500 py-4">No new courses available for {studentDept} {studentLevel}.</p>
+                        <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No new courses available for {studentDept} {studentLevel}.</p>
                       ) : (
                         availableCourses.map(course => (
-                          <div key={course.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex justify-between items-center">
+                          <div key={course.id} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
                             <div>
-                              <p className="font-bold text-gray-900 text-sm">{course.course_code}</p>
-                              <p className="text-[10px] text-gray-500 font-medium">{course.department} • Level {course.level}</p>
+                              <p className="font-bold text-gray-900 dark:text-white text-sm">{course.course_code}</p>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{course.department} • Level {course.level}</p>
                             </div>
                             <button 
                               onClick={() => handleEnroll(course.id, course.course_code)}
@@ -1080,84 +1080,84 @@ export default function StudentPortal() {
               {activeTab === 'feed' && (
                 <div className="animate-in fade-in">
                   <div className="flex items-center gap-2 mb-4">
-                    <Megaphone size={18} className="text-[#2563EB]" />
-                    <h3 className="font-bold text-gray-800 text-base">Campus Updates</h3>
+                    <Megaphone size={18} className="text-[#2563EB] dark:text-blue-400" />
+                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Campus Updates</h3>
                   </div>
                   <div className="space-y-4">
                     {feed.map((post) => {
                       const isUnread = new Date(post.created_at).getTime() > lastSeenTimestamp;
                       return (
-                        <div key={post.id} className={`bg-gray-50 border p-4 rounded-xl ${isUnread ? 'border-blue-200 ring-1 ring-blue-100' : 'border-gray-200'}`}>
+                        <div key={post.id} className={`bg-gray-50 dark:bg-gray-800/50 border p-4 rounded-xl transition-colors ${isUnread ? 'border-blue-200 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900/30' : 'border-gray-200 dark:border-gray-800'}`}>
                           <div className="flex justify-between items-start mb-1">
                             <div className="flex items-center gap-2">
-                              <h4 className="font-extrabold text-gray-900 text-sm">{post.title}</h4>
-                              {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />}
+                              <h4 className="font-extrabold text-gray-900 dark:text-white text-sm">{post.title}</h4>
+                              {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] dark:bg-blue-400" />}
                             </div>
                             {post.course_code && (
-                              <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{post.course_code}</span>
+                              <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800">{post.course_code}</span>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 leading-relaxed mb-2">{post.content}</p>
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-2">{post.content}</p>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                             <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
                           </div>
                         </div>
                       );
                     })}
-                    {feed.length === 0 && <p className="text-sm text-gray-500 text-center">No updates yet.</p>}
+                    {feed.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No updates yet.</p>}
                   </div>
                 </div>
               )}
 
               {activeTab === 'rep' && isClassRep && (
                 <div className="animate-in fade-in space-y-6">
-                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-blue-900 text-base mb-2 flex items-center gap-2"><Upload size={18}/> Upload Class List</h3>
-                    <p className="text-sm text-blue-700 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl transition-colors">
+                    <h3 className="font-bold text-blue-900 dark:text-white text-base mb-2 flex items-center gap-2"><Upload size={18}/> Upload Class List</h3>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
                     
-                    <select aria-label="Course to Upload List" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white border border-blue-200 p-3 rounded-lg text-sm font-bold mb-3">
+                    <select aria-label="Course to Upload List" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold mb-3 outline-none">
                       {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                     </select>
 
-                    <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white border border-blue-300 rounded-xl font-bold text-sm text-blue-700 hover:bg-blue-100 transition-all shadow-sm">
+                    <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-xl font-bold text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-gray-700 transition-all shadow-sm">
                       {isUploadingList ? <Clock size={18} className="animate-spin" /> : <FileText size={18} />}
                       {isUploadingList ? "Uploading..." : "Select CSV / Excel File"}
                       <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleRepUpload} disabled={isUploadingList} />
                     </label>
                   </div>
 
-                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-amber-900 text-base mb-2 flex items-center gap-2"><Zap size={18}/> Log Dead Battery</h3>
-                    <p className="text-sm text-amber-700 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl transition-colors">
+                    <h3 className="font-bold text-amber-900 dark:text-white text-base mb-2 flex items-center gap-2"><Zap size={18}/> Log Dead Battery</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
                     
                     <div className="flex gap-2">
-                      <input aria-label="Student Matric Number for Dead Battery" type="text" placeholder="Student's Matric No." value={repBatteryMatric} onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())} className="w-full bg-white border border-amber-200 p-3 rounded-lg text-sm font-bold uppercase" />
+                      <input aria-label="Student Matric Number for Dead Battery" type="text" placeholder="Student's Matric No." value={repBatteryMatric} onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())} className="w-full bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold uppercase outline-none" />
                       <button onClick={handleLogBattery} disabled={isLoggingBattery || !repBatteryMatric} className="bg-amber-500 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap">
                         {isLoggingBattery ? "Logging..." : "Log"}
                       </button>
                     </div>
                   </div>
 
-                  <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
-                    <h3 className="font-bold text-red-900 text-base mb-2 flex items-center gap-2"><PlayCircle size={18}/> Backup Anchor</h3>
-                    <p className="text-sm text-red-700 font-medium mb-3">
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl transition-colors">
+                    <h3 className="font-bold text-red-900 dark:text-white text-base mb-2 flex items-center gap-2"><PlayCircle size={18}/> Backup Anchor</h3>
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-3">
                       If the lecturer&apos;s phone is dead or missing, start a session from your phone. Your GPS becomes the anchor for the class.
                     </p>
 
                     {activeLiveSession ? (
-                       <div className="bg-white border border-red-200 p-3 rounded-lg text-center text-sm font-bold text-red-600">
+                       <div className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 p-3 rounded-lg text-center text-sm font-bold text-red-600 dark:text-red-400">
                          Session already active: {activeLiveSession.course}
                        </div>
                     ) : (
                       <div className="space-y-2">
-                        <select aria-label="Course for Backup Session" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white border border-red-200 p-3 rounded-lg text-sm font-bold">
+                        <select aria-label="Course for Backup Session" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold outline-none">
                           {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
                         </select>
                         <button onClick={handleStartBackupSession} disabled={isStartingRepSession} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
                           {isStartingRepSession ? <Clock size={18} className="animate-spin" /> : <MapPin size={18} />}
                           {isStartingRepSession ? "Anchoring GPS..." : "Start Backup Session"}
                         </button>
-                        {repSessionError && <p className="text-xs text-red-600 font-bold mt-2">{repSessionError}</p>}
+                        {repSessionError && <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-2">{repSessionError}</p>}
                       </div>
                     )}
                   </div>
@@ -1180,7 +1180,7 @@ export default function StudentPortal() {
                     { isDangerous: false, confirmLabel: 'Lock' }
                   )
                 }
-                className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 transition-all mt-6"
+                className="w-full flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all mt-6"
               >
                 <Lock size={16} /> Lock Portal
               </button>
@@ -1189,13 +1189,13 @@ export default function StudentPortal() {
         </div>
 
         <div className="mt-8 text-center animate-in fade-in pb-8 space-y-3">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <ArrowLeft size={16} /> Back to Hub
           </Link>
-          <div className="flex justify-center items-center gap-3 text-xs font-bold text-gray-400">
-            <Link href="/privacy" className="hover:text-gray-700 transition-colors">Privacy</Link>
-            <span className="text-gray-300">•</span>
-            <Link href="/terms" className="hover:text-gray-700 transition-colors">Terms</Link>
+          <div className="flex justify-center items-center gap-3 text-xs font-bold text-gray-400 dark:text-gray-500">
+            <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy</Link>
+            <span className="text-gray-300 dark:text-gray-600">•</span>
+            <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms</Link>
           </div>
         </div>
       </div>
