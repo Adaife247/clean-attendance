@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['admin-login'];
-    const rateCheck = checkRateLimit(`admin-login:${ip}`, limit);
+    const rateCheck = await checkRateLimit(`admin-login:${ip}`, limit);
 
     if (!rateCheck.allowed) {
       return NextResponse.json(
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     }
 
     const { password } = await request.json();
-    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD; 
+    const CORRECT_PASSWORD = process.env.ADMIN_PASSWORD;
 
     if (!CORRECT_PASSWORD) {
       return NextResponse.json({ message: "Server configuration missing." }, { status: 500 });
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     if (safeCompare(password, CORRECT_PASSWORD)) {
       const cookieStore = await cookies();
-      
+
       cookieStore.set({
         name: 'attendance_admin_token',
         value: 'verified',
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { message: "Invalid password" }, 
+      { message: "Invalid password" },
       { status: 401, headers: rateLimitHeaders(rateCheck) }
     );
 

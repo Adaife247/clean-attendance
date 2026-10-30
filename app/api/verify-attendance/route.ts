@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['verify-attendance'];
-    const rateCheck = checkRateLimit(`verify-att:${ip}`, limit);
+    const rateCheck = await checkRateLimit(`verify-att:${ip}`, limit);
 
     if (!rateCheck.allowed) {
       return NextResponse.json(

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['webauthn-register-generate'];
-    const rateCheck = checkRateLimit(`reg-gen:${ip}`, limit);
+    const rateCheck = await checkRateLimit(`reg-gen:${ip}`, limit);
 
     if (!rateCheck.allowed) {
       return NextResponse.json(
@@ -34,7 +34,6 @@ export async function POST(request: Request) {
 
     const cleanMatric = matricNumber.toUpperCase().trim();
 
-    // 1. Must be enrolled in at least one course to register
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('id')
@@ -51,7 +50,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. If already registered, tell the client to log in instead
     const { data: existingDevice } = await supabase
       .from('user_devices')
       .select('credential_id, transports')
@@ -68,11 +66,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Generate registration options
-    //    - attestationType (was previously attestation)
-    //    - residentKey: 'preferred' (was 'required')
-    //    - userVerification: 'preferred' (was 'required')
-    //    - authenticatorAttachment: 'platform'
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
@@ -92,6 +85,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       maxAge: 300,
       path: '/',
+      sameSite: 'lax',
     });
 
     return NextResponse.json(options, { headers: rateLimitHeaders(rateCheck) });
