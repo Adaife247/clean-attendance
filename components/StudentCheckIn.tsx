@@ -216,7 +216,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
         });
         if (res.ok || res.status === 409) successCount++;
         else remainingQueue.push(item);
-      } catch { remainingQueue.push(item); }
+            } catch (err) { 
+        logger.warn('Offline sync failed for item', err);
+        remainingQueue.push(item); 
+      }
     }
     safeStorage.setJSON(STORAGE_KEYS.offlineQueue, remainingQueue);
     if (successCount > 0 && remainingQueue.length === 0) {
@@ -528,7 +531,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
           body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
-    } catch {}
+        } catch (err) { 
+      logger.warn('Rating submission failed', err);
+    }
     finally {
       setIsSubmittingRating(false);
       router.push('/portal');

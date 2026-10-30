@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
+import { getLecturerHeaders } from '@/utils/api-client';
 import { ShieldCheck, Users, BookOpen, Star, TrendingUp, AlertTriangle, ArrowLeft, Loader2, BarChart3, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -52,11 +53,8 @@ export default function HODPortal() {
         return;
       }
 
-      const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      });
+      const headers = await getLecturerHeaders();
+      const res = await fetch(`/api/hod-data?department=${encodeURIComponent(profile.department)}`, { headers });
       
       if (!res.ok) throw new Error(`API returned ${res.status}`);
 

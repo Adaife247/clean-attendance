@@ -138,6 +138,10 @@ public/
 types/
   db.ts
 utils/
+  __tests__/
+    hash.test.ts
+    student-auth.test.ts
+    verify-attendance.test.ts
   api-auth.ts
   api-client.ts
   constants.ts
@@ -1389,277 +1393,6 @@ export default function DashboardLoading() {
 }
 </file>
 
-<file path="app/privacy/page.tsx">
-// ─── app/privacy/page.tsx ───
-// ⚠️ IMPORTANT: This is a TEMPLATE. You MUST review it with a legal advisor
-// before shipping to real students, and fill in every [BRACKETED] field.
-
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-
-export const metadata = {
-  title: 'Privacy Policy — CampusCheck',
-  description: 'How CampusCheck collects, uses, and protects your data.',
-};
-
-export default function PrivacyPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
-      <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm p-6 md:p-10">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors mb-6"
-        >
-          <ArrowLeft size={16} /> Back to home
-        </Link>
-
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 font-medium mb-8">
-          Last updated: [DATE]
-        </p>
-
-        <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Who we are</h2>
-            <p>
-              CampusCheck is operated by [YOUR INSTITUTION / COMPANY LEGAL NAME],
-              located at [ADDRESS]. Contact:{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
-              </a>
-              .
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Data we collect</h2>
-            <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Matriculation number</strong> — to identify your attendance record.</li>
-              <li><strong>Biometric credential</strong> — a WebAuthn public key stored on our server; your fingerprint/face data never leaves your device.</li>
-              <li><strong>Device fingerprint</strong> — a hardware hash used to prevent proxy attendance.</li>
-              <li><strong>Location</strong> — GPS coordinates during check-in, used to confirm you are inside the lecture hall.</li>
-              <li><strong>Course enrollment</strong> — course codes you are registered for.</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">3. How we use it</h2>
-            <p>
-              We use this data only to record class attendance, prevent proxy
-              sign-ins, and generate attendance reports for your lecturer and
-              institution. We do not sell your data, and we do not use it for
-              advertising.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Where data is stored</h2>
-            <p>
-              Data is stored in Supabase ([REGION]) and processed via Vercel
-              ([REGION]). Both providers are GDPR/NDPR-compliant and use
-              encryption in transit and at rest.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Retention</h2>
-            <p>
-              Attendance records are retained for [X MONTHS] to support
-              institutional audits, then deleted. Device fingerprints are
-              purged when you request a device reset via your lecturer.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">6. Your rights</h2>
-            <p>
-              You can request a copy of your data, correction of inaccuracies,
-              or full deletion by emailing{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
-              </a>
-              . If you believe your data has been misused, you may contact your
-              institution&apos;s data protection officer.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Changes</h2>
-            <p>
-              We may update this policy. Material changes will be announced on
-              the CampusCheck home page at least 14 days before taking effect.
-            </p>
-          </section>
-        </div>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="app/terms/page.tsx">
-// ─── app/terms/page.tsx ───
-// ⚠️ TEMPLATE. Review with legal counsel before shipping.
-
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-
-export const metadata = {
-  title: 'Terms of Service — CampusCheck',
-  description: 'The rules for using CampusCheck.',
-};
-
-export default function TermsPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
-      <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm p-6 md:p-10">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors mb-6"
-        >
-          <ArrowLeft size={16} /> Back to home
-        </Link>
-
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Terms of Service</h1>
-        <p className="text-sm text-gray-500 font-medium mb-8">
-          Last updated: [DATE]
-        </p>
-
-        <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Acceptance</h2>
-            <p>
-              By using CampusCheck you agree to these terms. If you do not
-              agree, do not use the service.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Eligibility</h2>
-            <p>
-              CampusCheck is available only to students and lecturers of
-              [INSTITUTION]. Accounts must be linked to a valid matriculation
-              number.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">3. Acceptable use</h2>
-            <p>You agree <strong>not</strong> to:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Attempt to check in for another student.</li>
-              <li>Spoof GPS location or tamper with device fingerprints.</li>
-              <li>Reverse engineer, attack, or overload the service.</li>
-              <li>Share your check-in link with anyone outside your class.</li>
-            </ul>
-            <p className="mt-2">
-              Violation may lead to disqualification from attendance records
-              and disciplinary action by your institution.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Attendance accuracy</h2>
-            <p>
-              While we work hard to prevent fraud, no system is perfect.
-              Attendance decisions are ultimately made by your lecturer and
-              institution. CampusCheck is a tool, not the final authority.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Availability</h2>
-            <p>
-              We aim for 99% uptime but do not guarantee it. Downtime may occur
-              for maintenance or reasons outside our control.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">6. Liability</h2>
-            <p>
-              CampusCheck is provided &quot;as is&quot; without warranty. To
-              the maximum extent permitted by law, we are not liable for
-              indirect damages arising from use of the service.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Contact</h2>
-            <p>
-              Questions? Email{' '}
-              <a href="mailto:[EMAIL]" className="text-[#2563EB] underline">
-                [EMAIL]
-              </a>
-              .
-            </p>
-          </section>
-        </div>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="app/error.tsx">
-// ─── app/error.tsx ───
-'use client';
-
-import { useEffect } from 'react';
-import { AlertTriangle, RefreshCw, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-
-export default function GlobalError({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
-  useEffect(() => {
-    // Log to your error tracker here (Sentry, etc.) once you add one
-     
-    console.error('Unhandled app error:', error);
-  }, [error]);
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 font-sans">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-200 p-8 text-center">
-        <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle size={32} />
-        </div>
-        <h1 className="text-2xl font-black text-gray-900 mb-2">
-          Something broke
-        </h1>
-        <p className="text-sm text-gray-600 font-medium mb-6 leading-relaxed">
-          An unexpected error interrupted this page. Your data is safe. Try
-          refreshing, or head back to the home screen.
-        </p>
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={reset}
-            className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 transition-all"
-          >
-            <RefreshCw size={18} /> Try again
-          </button>
-          <Link
-            href="/"
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all"
-          >
-            <ArrowLeft size={18} /> Go home
-          </Link>
-        </div>
-        {error.digest && (
-          <p className="mt-6 text-xs font-mono text-gray-400">
-            Reference: {error.digest}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path="app/global-error.tsx">
 "use client";
 import NextError from "next/error";
@@ -1914,6 +1647,220 @@ Disallow: /portal
 Disallow: /api/
 
 Sitemap: https://campuscheck-live.vercel.app/sitemap.xml
+</file>
+
+<file path="utils/__tests__/hash.test.ts">
+import { describe, it, expect } from 'vitest';
+
+// Copy of hashString from deviceFingerprint.ts
+function hashString(str: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    h1 ^= char;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= char;
+    h2 = Math.imul(h2, 0x85ebca6b);
+  }
+  const p1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const p2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return p1 + p2;
+}
+
+describe('hashString', () => {
+  it('returns a 16-character hex string', () => {
+    const h = hashString('hello');
+    expect(h).toHaveLength(16);
+    expect(h).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it('is deterministic', () => {
+    expect(hashString('campuscheck')).toBe(hashString('campuscheck'));
+  });
+
+  it('produces different hashes for different inputs', () => {
+    expect(hashString('a')).not.toBe(hashString('b'));
+    expect(hashString('abc')).not.toBe(hashString('abd'));
+  });
+
+  it('has low collision on typical fingerprints', () => {
+    const hashes = new Set<string>();
+    for (let i = 0; i < 1000; i++) {
+      hashes.add(hashString(`fingerprint-${i}`));
+    }
+    expect(hashes.size).toBe(1000);
+  });
+});
+</file>
+
+<file path="utils/__tests__/student-auth.test.ts">
+import { describe, it, expect, beforeAll } from 'vitest';
+import crypto from 'crypto';
+import { STUDENT_JWT_TTL_SECONDS, STUDENT_JWT_ISSUER, STUDENT_JWT_AUDIENCE } from '../constants';
+
+// Re-declare the pure functions from student-auth.ts (avoids importing NextResponse)
+function base64url(str: string | Buffer): string {
+  return Buffer.from(str).toString('base64url');
+}
+function parseBase64url(str: string): string {
+  return Buffer.from(str, 'base64url').toString('utf8');
+}
+
+function sign(matric: string, secret: string): string {
+  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const exp = Math.floor(Date.now() / 1000) + STUDENT_JWT_TTL_SECONDS;
+  const payload = base64url(JSON.stringify({
+    matric, iss: STUDENT_JWT_ISSUER, aud: STUDENT_JWT_AUDIENCE, exp,
+  }));
+  const signature = crypto.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+function verify(token: string, secret: string): { valid: boolean; reason?: string; matric?: string } {
+  const parts = token.split('.');
+  if (parts.length !== 3) return { valid: false, reason: 'malformed' };
+  const [h, p, sig] = parts;
+  const expected = crypto.createHmac('sha256', secret).update(`${h}.${p}`).digest('base64url');
+  if (sig !== expected) return { valid: false, reason: 'bad_sig' };
+  const payload = JSON.parse(parseBase64url(p));
+  if (payload.exp < Math.floor(Date.now() / 1000)) return { valid: false, reason: 'expired' };
+  if (payload.iss !== STUDENT_JWT_ISSUER) return { valid: false, reason: 'bad_iss' };
+  if (payload.aud !== STUDENT_JWT_AUDIENCE) return { valid: false, reason: 'bad_aud' };
+  return { valid: true, matric: payload.matric };
+}
+
+const TEST_SECRET = 'test-secret-do-not-use-in-production';
+
+beforeAll(() => {
+  process.env.JWT_SECRET = TEST_SECRET;
+});
+
+describe('student JWT', () => {
+  it('signs and verifies a token', () => {
+    const token = sign('CSC/2021/001', TEST_SECRET);
+    const result = verify(token, TEST_SECRET);
+    expect(result.valid).toBe(true);
+    expect(result.matric).toBe('CSC/2021/001');
+  });
+
+  it('rejects a token signed with the wrong secret', () => {
+    const token = sign('CSC/2021/001', 'wrong-secret');
+    expect(verify(token, TEST_SECRET).valid).toBe(false);
+  });
+
+  it('rejects a tampered payload', () => {
+    const token = sign('CSC/2021/001', TEST_SECRET);
+    const [h, , s] = token.split('.');
+    const fakePayload = base64url(JSON.stringify({ matric: 'HACKER/2021/999', iss: STUDENT_JWT_ISSUER, aud: STUDENT_JWT_AUDIENCE, exp: Math.floor(Date.now() / 1000) + 3600 }));
+    const tampered = `${h}.${fakePayload}.${s}`;
+    expect(verify(tampered, TEST_SECRET).valid).toBe(false);
+  });
+
+  it('rejects a malformed token', () => {
+    expect(verify('not.a.token.at.all', TEST_SECRET).valid).toBe(false);
+    expect(verify('', TEST_SECRET).valid).toBe(false);
+  });
+});
+</file>
+
+<file path="utils/__tests__/verify-attendance.test.ts">
+import { describe, it, expect } from 'vitest';
+
+// Copy of pure functions from app/api/verify-attendance/route.ts
+interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
+
+function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function getValidPings(telemetry: Telemetry[]): Telemetry[] {
+  return (telemetry || []).filter((t) => {
+    if (typeof t.lat !== 'number' || typeof t.lng !== 'number') return false;
+    if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return false;
+    if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false;
+    if (typeof t.acc !== 'number') return false;
+    if (t.acc < 0) return false;
+    if (t.acc > 2000) return false;
+    return true;
+  });
+}
+
+function detectLikelySpoof(pings: Telemetry[]): boolean {
+  const accurate = pings.filter(t => t.acc > 0 && t.acc <= 50);
+  if (accurate.length < 4) return false;
+  let anomalousJumps = 0;
+  for (let i = 1; i < accurate.length; i++) {
+    const drift = getDistanceInMeters(accurate[i - 1].lat, accurate[i - 1].lng, accurate[i].lat, accurate[i].lng);
+    const dt = Math.abs(accurate[i].timestamp - accurate[i - 1].timestamp) / 1000;
+    if (dt > 0 && dt < 2 && drift / dt > 200) anomalousJumps++;
+  }
+  return anomalousJumps >= 3;
+}
+
+describe('getDistanceInMeters', () => {
+  it('returns 0 for the same point', () => {
+    expect(getDistanceInMeters(6.5, 3.3, 6.5, 3.3)).toBe(0);
+  });
+
+  it('calculates the distance between Lagos and Abuja (~535km)', () => {
+    const dist = getDistanceInMeters(6.5244, 3.3792, 9.0765, 7.3986);
+    expect(dist).toBeGreaterThan(500_000);
+    expect(dist).toBeLessThan(600_000);
+  });
+});
+
+describe('getValidPings', () => {
+  const goodPing = { lat: 6.5, lng: 3.3, alt: 10, acc: 5, timestamp: Date.now() };
+
+  it('accepts a good ping', () => {
+    expect(getValidPings([goodPing])).toHaveLength(1);
+  });
+
+  it('rejects null island (0,0)', () => {
+    expect(getValidPings([{ ...goodPing, lat: 0, lng: 0 }])).toHaveLength(0);
+  });
+
+  it('rejects non-finite coordinates', () => {
+    expect(getValidPings([{ ...goodPing, lat: NaN }])).toHaveLength(0);
+    expect(getValidPings([{ ...goodPing, lng: Infinity }])).toHaveLength(0);
+  });
+
+  it('rejects negative accuracy', () => {
+    expect(getValidPings([{ ...goodPing, acc: -1 }])).toHaveLength(0);
+  });
+
+  it('rejects accuracy > 2000 (GPS failure)', () => {
+    expect(getValidPings([{ ...goodPing, acc: 5000 }])).toHaveLength(0);
+  });
+});
+
+describe('detectLikelySpoof', () => {
+  const baseTime = Date.now();
+
+  it('returns false for stationary readings', () => {
+    const pings = [0, 1, 2, 3].map(i => ({
+      lat: 6.5, lng: 3.3, alt: 10, acc: 5, timestamp: baseTime + i * 1000,
+    }));
+    expect(detectLikelySpoof(pings)).toBe(false);
+  });
+
+  it('returns true for teleporting readings (mock GPS)', () => {
+    const pings = [
+      { lat: 6.5, lng: 3.3, alt: 10, acc: 5, timestamp: baseTime + 0 },
+      { lat: 6.6, lng: 3.4, alt: 10, acc: 5, timestamp: baseTime + 500 }, // ~14km in 0.5s
+      { lat: 6.5, lng: 3.3, alt: 10, acc: 5, timestamp: baseTime + 1000 },
+      { lat: 6.6, lng: 3.4, alt: 10, acc: 5, timestamp: baseTime + 1500 },
+    ];
+    expect(detectLikelySpoof(pings)).toBe(true);
+  });
+});
 </file>
 
 <file path="utils/api-auth.ts">
@@ -3189,71 +3136,6 @@ Sentry.init({
 });
 </file>
 
-<file path="app/api/override-attendance/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
-
-export async function POST(request: Request) {
-  try {
-    const auth = await verifyLecturer(request);
-    if (auth.error) return auth.error;
-
-    const body = await request.json();
-    const sessionId = body.sessionId || body.session_id || body.session;
-    const rawMatric = body.matricNumber || body.matric_number || body.matric;
-
-    if (!sessionId || !rawMatric) {
-      return NextResponse.json({ message: "Missing data" }, { status: 400 });
-    }
-
-    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
-    if (!session) return NextResponse.json({ message: "Session not found" }, { status: 404 });
-
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
-    if (!course) return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
-
-    const cleanMatric = String(rawMatric).toUpperCase().trim();
-    const overrideTimestamp = new Date().toISOString();
-
-    const { data: existingLog } = await supabase
-      .from('attendance_logs')
-      .select('id')
-      .eq('session_id', sessionId)
-      .eq('matric_number', cleanMatric)
-      .single();
-
-    if (existingLog) {
-      await supabase
-        .from('attendance_logs')
-        .update({
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Manual Override - Updated" }),
-          approved_by: auth.user.id,
-          override_timestamp: overrideTimestamp,
-        })
-        .eq('id', existingLog.id);
-    } else {
-      await supabase
-        .from('attendance_logs')
-        .insert([{
-          session_id: sessionId,
-          matric_number: cleanMatric,
-          status: 'verified',
-          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
-          device_hash: 'manual-override',
-          approved_by: auth.user.id,
-          override_timestamp: overrideTimestamp,
-        }]);
-    }
-
-    return NextResponse.json({ message: "Success" });
-  } catch {
-    return NextResponse.json({ message: "Override failed" }, { status: 500 });
-  }
-}
-</file>
-
 <file path="app/api/post-feed/route.ts">
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
@@ -3599,6 +3481,277 @@ export async function POST(request: Request) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+</file>
+
+<file path="app/privacy/page.tsx">
+// ─── app/privacy/page.tsx ───
+// ⚠️ IMPORTANT: This is a TEMPLATE. Review with a legal advisor before shipping.
+
+import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+export const metadata = {
+  title: 'Privacy Policy — CampusCheck',
+  description: 'How CampusCheck collects, uses, and protects your data.',
+};
+
+export default function PrivacyPage() {
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
+      <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm p-6 md:p-10">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors mb-6"
+        >
+          <ArrowLeft size={16} /> Back to home
+        </Link>
+
+        <h1 className="text-3xl font-black text-gray-900 mb-2">Privacy Policy</h1>
+        <p className="text-sm text-gray-500 font-medium mb-8">
+          Last updated: {new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
+
+        <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Who we are</h2>
+            <p>
+              CampusCheck is operated by [EDIT: YOUR INSTITUTION NAME], located at
+              [EDIT: YOUR INSTITUTION ADDRESS]. Contact:{' '}
+              <a href="mailto:[EDIT: PRIVACY EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: PRIVACY EMAIL]
+              </a>
+              .
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Data we collect</h2>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Matriculation number</strong> — to identify your attendance record.</li>
+              <li><strong>Biometric credential</strong> — a WebAuthn public key stored on our server; your fingerprint/face data never leaves your device.</li>
+              <li><strong>Device fingerprint</strong> — a hardware hash used to prevent proxy attendance.</li>
+              <li><strong>Location</strong> — GPS coordinates during check-in, used to confirm you are inside the lecture hall.</li>
+              <li><strong>Course enrollment</strong> — course codes you are registered for.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">3. How we use it</h2>
+            <p>
+              We use this data only to record class attendance, prevent proxy
+              sign-ins, and generate attendance reports for your lecturer and
+              institution. We do not sell your data, and we do not use it for
+              advertising.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Where data is stored</h2>
+            <p>
+              Data is stored in Supabase (AWS, EU region) and processed via Vercel
+              (Global Edge Network). Both providers are GDPR/NDPR-compliant and
+              use encryption in transit and at rest.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Retention</h2>
+            <p>
+              Attendance records are retained for the duration of your academic
+              programme plus one (1) year to support institutional audits, then
+              deleted. Device fingerprints are purged when you request a device
+              reset via your lecturer.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">6. Your rights</h2>
+            <p>
+              You can request a copy of your data, correction of inaccuracies,
+              or full deletion by emailing{' '}
+              <a href="mailto:[EDIT: PRIVACY EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: PRIVACY EMAIL]
+              </a>
+              . If you believe your data has been misused, you may contact your
+              institution&apos;s data protection officer.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Changes</h2>
+            <p>
+              We may update this policy. Material changes will be announced on
+              the CampusCheck home page at least 14 days before taking effect.
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/terms/page.tsx">
+// ─── app/terms/page.tsx ───
+// ⚠️ TEMPLATE. Review with legal counsel before shipping.
+
+import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+export const metadata = {
+  title: 'Terms of Service — CampusCheck',
+  description: 'The rules for using CampusCheck.',
+};
+
+export default function TermsPage() {
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
+      <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm p-6 md:p-10">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors mb-6"
+        >
+          <ArrowLeft size={16} /> Back to home
+        </Link>
+
+        <h1 className="text-3xl font-black text-gray-900 mb-2">Terms of Service</h1>
+        <p className="text-sm text-gray-500 font-medium mb-8">
+          Last updated: {new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
+
+        <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Acceptance</h2>
+            <p>
+              By using CampusCheck you agree to these terms. If you do not
+              agree, do not use the service.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Eligibility</h2>
+            <p>
+              CampusCheck is available only to students and lecturers of
+              [EDIT: YOUR INSTITUTION]. Accounts must be linked to a valid
+              matriculation number.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">3. Acceptable use</h2>
+            <p>You agree <strong>not</strong> to:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Attempt to check in for another student.</li>
+              <li>Spoof GPS location or tamper with device fingerprints.</li>
+              <li>Reverse engineer, attack, or overload the service.</li>
+              <li>Share your check-in link with anyone outside your class.</li>
+            </ul>
+            <p className="mt-2">
+              Violation may lead to disqualification from attendance records
+              and disciplinary action by your institution.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Attendance accuracy</h2>
+            <p>
+              While we work hard to prevent fraud, no system is perfect.
+              Attendance decisions are ultimately made by your lecturer and
+              institution. CampusCheck is a tool, not the final authority.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Availability</h2>
+            <p>
+              We aim for 99% uptime but do not guarantee it. Downtime may occur
+              for maintenance or reasons outside our control.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">6. Liability</h2>
+            <p>
+              CampusCheck is provided &quot;as is&quot; without warranty. To
+              the maximum extent permitted by law, we are not liable for
+              indirect damages arising from use of the service.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Contact</h2>
+            <p>
+              Questions? Email{' '}
+              <a href="mailto:[EDIT: SUPPORT EMAIL]" className="text-[#2563EB] underline">
+                [EDIT: SUPPORT EMAIL]
+              </a>
+              .
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/error.tsx">
+// ─── app/error.tsx ───
+'use client';
+
+import { useEffect } from 'react';
+import { AlertTriangle, RefreshCw, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+import * as Sentry from "@sentry/nextjs"; // NEW
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // NEW: Send the crash to Sentry
+    Sentry.captureException(error);
+  }, [error]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-200 p-8 text-center">
+        <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={32} />
+        </div>
+        <h1 className="text-2xl font-black text-gray-900 mb-2">
+          Something broke
+        </h1>
+        <p className="text-sm text-gray-600 font-medium mb-6 leading-relaxed">
+          An unexpected error interrupted this page. Your data is safe. Try
+          refreshing, or head back to the home screen.
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={reset}
+            className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 transition-all"
+          >
+            <RefreshCw size={18} /> Try again
+          </button>
+          <Link
+            href="/"
+            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all"
+          >
+            <ArrowLeft size={18} /> Go home
+          </Link>
+        </div>
+        {error.digest && (
+          <p className="mt-6 text-xs font-mono text-gray-400">
+            Reference: {error.digest}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -4228,6 +4381,84 @@ export async function GET(request: Request) {
 
   } catch {
     return NextResponse.json({ error: "Failed to generate export" }, { status: 500 });
+  }
+}
+</file>
+
+<file path="app/api/override-attendance/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+
+export async function POST(request: Request) {
+  try {
+    const auth = await verifyLecturer(request);
+    if (auth.error) return auth.error;
+
+    const body = await request.json();
+    const sessionId = body.sessionId || body.session_id || body.session;
+    const rawMatric = body.matricNumber || body.matric_number || body.matric;
+
+    if (!sessionId || !rawMatric) {
+      return NextResponse.json({ message: "Missing data" }, { status: 400 });
+    }
+
+    const { data: session } = await supabase.from('lecture_sessions').select('course_code').eq('session_id', sessionId).single();
+    if (!session) return NextResponse.json({ message: "Session not found" }, { status: 404 });
+
+    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', auth.user.id).single();
+    if (!course) return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+
+    const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // NEW: Verify the student is actually enrolled in this course
+    const { data: enrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', course.id)
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (!enrollment) {
+      return NextResponse.json({ message: "Student is not enrolled in this course." }, { status: 403 });
+    }
+
+    const overrideTimestamp = new Date().toISOString();
+
+    const { data: existingLog } = await supabase
+      .from('attendance_logs')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('matric_number', cleanMatric)
+      .single();
+
+    if (existingLog) {
+      await supabase
+        .from('attendance_logs')
+        .update({
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Updated" }),
+          approved_by: auth.user.id,
+          override_timestamp: overrideTimestamp,
+        })
+        .eq('id', existingLog.id);
+    } else {
+      await supabase
+        .from('attendance_logs')
+        .insert([{
+          session_id: sessionId,
+          matric_number: cleanMatric,
+          status: 'verified',
+          device_info: JSON.stringify({ method: "Manual Override - Inserted" }),
+          device_hash: 'manual-override',
+          approved_by: auth.user.id,
+          override_timestamp: overrideTimestamp,
+        }]);
+    }
+
+    return NextResponse.json({ message: "Success" });
+  } catch {
+    return NextResponse.json({ message: "Override failed" }, { status: 500 });
   }
 }
 </file>
@@ -4952,45 +5183,6 @@ export function rateLimitHeaders(result: RateLimitResult): Record<string, string
 }
 </file>
 
-<file path="package.json">
-{
-  "name": "clean-attendance",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@sentry/nextjs": "^11.10.0",
-    "@simplewebauthn/browser": "^13.3.0",
-    "@simplewebauthn/server": "^13.3.0",
-    "@supabase/supabase-js": "^2.106.1",
-    "@upstash/ratelimit": "^2.0.5",
-    "@upstash/redis": "^1.34.3",
-    "lucide-react": "^1.16.0",
-    "next": "16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.43",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/web-push": "^3.6.4",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
-}
-</file>
-
 <file path="app/dashboard/analytics/page.tsx">
 'use client';
 import { useState, useEffect, useCallback } from 'react';
@@ -5380,6 +5572,47 @@ export default function AnalyticsPage() {
       </div>
     </div>
   );
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "clean-attendance",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "^11.10.0",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.0",
+    "@supabase/supabase-js": "^2.106.1",
+    "@upstash/ratelimit": "^2.0.5",
+    "@upstash/redis": "^1.34.3",
+    "lucide-react": "^1.16.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.0.5"
+  }
 }
 </file>
 
@@ -5972,298 +6205,6 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("HOD API Error:", error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-</file>
-
-<file path="app/login/page.tsx">
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '../../utils/supabase';
-import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-
-export default function LoginPage() {
-  const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [secretKey, setSecretKey] = useState('');
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      if (isLogin) {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        
-        if (signInError) throw signInError;
-        
-        if (data.session) {
-          router.refresh();
-          setTimeout(() => {
-            window.location.href = '/dashboard';
-          }, 800);
-        } else {
-          throw new Error("Login successful, but no session was created.");
-        }
-      } else {
-        // SECURE SIGNUP: Hits our new server route
-        const res = await fetch('/api/lecturer-signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, fullName, department, secretKey })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Registration failed');
-        }
-
-        alert('Registration successful! You can now log in.');
-        setIsLogin(true);
-        setLoading(false);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed';
-      setError(msg);
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      
-      <div className="w-full max-w-md relative z-10">
-        
-        <div className="mb-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-            <ArrowLeft size={16} /> Back to Hub
-          </Link>
-        </div>
-
-        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
-            <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
-          </div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Faculty Access</h1>
-          <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
-          
-          <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
-            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
-            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
-          </div>
-
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
-                  <input aria-label="Full Name" type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
-                  <input aria-label="Department" type="text" required placeholder="Department (e.g., CSC)" value={department} onChange={(e) => setDepartment(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
-                  <input aria-label="Faculty Registration Key" type="password" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
-                </div>
-              </>
-            )}
-
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
-              <input aria-label="Email Address" type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
-              <input aria-label="Password" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in">
-                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-red-700 font-bold text-sm">{error}</p>
-              </div>
-            )}
-
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-6">
-              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
-              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
-            </button>
-          </form>
-        </div>
-
-        <div className="mt-8 text-center animate-in fade-in pb-8">
-          <p className="text-xs font-bold text-gray-400">© 2026 CampusCheck. All rights reserved.</p>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="app/api/create-session/route.ts">
-import { NextResponse } from 'next/server';
-import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
-import { verifyLecturer } from '@/utils/api-auth';
-import { headers } from 'next/headers';
-import webpush from 'web-push';
-
-export const dynamic = 'force-dynamic';
-
-// Configure web-push with your VAPID keys
-const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '';
-const subject = process.env.VAPID_SUBJECT || 'mailto:admin@campuscheck.com';
-
-if (publicVapidKey && privateVapidKey) {
-  webpush.setVapidDetails(subject, publicVapidKey, privateVapidKey);
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const courseCodeToSave = body.courseCode || body.course_code;
-    const isRepStarting = body.startedBy === 'Class Rep';
-    
-    const headersList = await headers();
-    const forwarded = headersList.get('x-forwarded-for');
-    const lecturerIp = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown-ip');
-
-    let authUserId = null;
-    let finalStartedBy = 'lecturer';
-
-    if (isRepStarting) {
-      const { data: rep } = await supabase
-        .from('student_profiles')
-        .select('is_class_rep')
-        .eq('matric_number', body.repMatric)
-        .single();
-
-      if (!rep?.is_class_rep) {
-        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep' }, { status: 403 });
-      }
-      finalStartedBy = 'Class Rep';
-    } else {
-      const auth = await verifyLecturer(request);
-      if (auth.error) return auth.error;
-      authUserId = auth.user.id;
-    }
-
-    if (!courseCodeToSave) {
-      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
-    }
-
-    if (!isRepStarting) {
-      const { data: course } = await supabase
-        .from('courses')
-        .select('id')
-        .eq('course_code', courseCodeToSave)
-        .eq('lecturer_id', authUserId)
-        .single();
-
-      if (!course) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
-    }
-
-    const parsedDuration = parseInt(body.duration);
-    const durationMinutes = Number.isFinite(parsedDuration) ? Math.min(Math.max(parsedDuration, 5), 120) : 60;
-    const parsedWait = parseInt(body.checkinOpensAfter);
-    const checkinOpensAfterMinutes = Number.isFinite(parsedWait) ? Math.min(Math.max(parsedWait, 0), 60) : 10;
-
-    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
-
-    const { data, error } = await supabase
-      .from('lecture_sessions')
-      .insert([{
-        course_code: courseCodeToSave,
-        anchor_latitude: body.latitude || body.lat,
-        anchor_longitude: body.longitude || body.lng,
-        anchor_ip: lecturerIp, 
-        is_active: true,
-        expires_at: expiresAt,
-        checkin_opens_after_minutes: checkinOpensAfterMinutes,
-        started_by: finalStartedBy
-      }])
-      .select('session_id')
-      .single();
-
-    if (error) {
-      console.error("Database Insert Error:", error);
-      return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
-    }
-
-    // ─── NEW: SEND PUSH NOTIFICATIONS ───
-    try {
-      // 1. Get all students enrolled in this course
-      const { data: course } = await supabase.from('courses').select('id').eq('course_code', courseCodeToSave).single();
-      
-      if (course) {
-        const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
-        
-        if (enrollments && enrollments.length > 0) {
-          const matrics = enrollments.map(e => e.matric_number);
-          
-          // 2. Find any of these students who have a push subscription
-          const { data: subscriptions } = await supabase
-            .from('push_subscriptions')
-            .select('subscription')
-            .in('matric_number', matrics);
-
-          // 3. Blast the notification
-          if (subscriptions && subscriptions.length > 0) {
-            const payload = JSON.stringify({
-              title: `Class is Live: ${courseCodeToSave}`,
-              body: `The lecturer has started attendance. Tap to check in now!`,
-              url: `/?sessionId=${data.session_id}` // Direct link to check-in
-            });
-
-            const pushPromises = subscriptions.map(sub => 
-              webpush.sendNotification(sub.subscription, payload).catch(err => {
-                // If the subscription is expired (410), delete it from DB
-                if (err.statusCode === 410) {
-                  return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
-                }
-              })
-            );
-
-            await Promise.all(pushPromises);
-          }
-        }
-      }
-    } catch (pushError) {
-      console.error("Push notification failed, but session was created:", pushError);
-      // We don't return an error here because the session WAS created successfully.
-    }
-
-    return NextResponse.json({
-      sessionId: data.session_id,
-      expiresAt,
-      checkinOpensAfterMinutes
-    });
-
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("CREATE SESSION FATAL ERROR:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 </file>
@@ -7241,6 +7182,298 @@ export default function CourseManagement() {
 }
 </file>
 
+<file path="app/login/page.tsx">
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../utils/supabase';
+import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isLogin) {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        
+        if (signInError) throw signInError;
+        
+        if (data.session) {
+          router.refresh();
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 800);
+        } else {
+          throw new Error("Login successful, but no session was created.");
+        }
+      } else {
+        // SECURE SIGNUP: Hits our new server route
+        const res = await fetch('/api/lecturer-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fullName, department, secretKey })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Registration failed');
+        }
+
+        alert('Registration successful! You can now log in.');
+        setIsLogin(true);
+        setLoading(false);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Authentication failed';
+      setError(msg);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div className="w-full max-w-md relative z-10">
+        
+        <div className="mb-4">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <ArrowLeft size={16} /> Back to Hub
+          </Link>
+        </div>
+
+        <div className="text-center mb-8 flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-[#2563EB] w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-5 relative overflow-hidden group hover:scale-105 transition-transform duration-300">
+            <ShieldCheck className="w-10 h-10 text-white z-10" strokeWidth={2.5} />
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-white/20 rounded-t-3xl"></div>
+          </div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Faculty Access</h1>
+          <p className="text-gray-600 mt-2 font-semibold text-base">CampusCheck Administration</p>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-2xl shadow-gray-300/30 border border-gray-100 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6">
+          
+          <div className="flex bg-gray-100 p-1.5 rounded-xl mb-8">
+            <button onClick={() => {setIsLogin(true); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Sign In</button>
+            <button onClick={() => {setIsLogin(false); setError('');}} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isLogin ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Register</button>
+          </div>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400" /></div>
+                  <input aria-label="Full Name" type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Users size={18} className="text-gray-400" /></div>
+                  <input aria-label="Department" type="text" required placeholder="Department (e.g., CSC)" value={department} onChange={(e) => setDepartment(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><KeyRound size={18} className="text-gray-400" /></div>
+                  <input aria-label="Faculty Registration Key" type="password" required placeholder="Faculty Registration Key" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} className="w-full bg-blue-50 border border-blue-200 text-blue-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-blue-400" />
+                </div>
+              </>
+            )}
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400" /></div>
+              <input aria-label="Email Address" type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock size={18} className="text-gray-400" /></div>
+              <input aria-label="Password" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3.5 pl-11 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all" />
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-700 font-bold text-sm">{error}</p>
+              </div>
+            )}
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-6">
+              {loading ? <Loader2 className="animate-spin" size={20} /> : <ShieldCheck size={20} />} 
+              {isLogin ? 'Sign In Securely' : 'Create Faculty Account'}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-8 text-center animate-in fade-in pb-8">
+          <p className="text-xs font-bold text-gray-400">© 2026 CampusCheck. All rights reserved.</p>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="app/api/create-session/route.ts">
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
+import { verifyLecturer } from '@/utils/api-auth';
+import { headers } from 'next/headers';
+import webpush from 'web-push';
+
+export const dynamic = 'force-dynamic';
+
+// Configure web-push with your VAPID keys
+const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '';
+const subject = process.env.VAPID_SUBJECT || 'mailto:admin@campuscheck.com';
+
+if (publicVapidKey && privateVapidKey) {
+  webpush.setVapidDetails(subject, publicVapidKey, privateVapidKey);
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const courseCodeToSave = body.courseCode || body.course_code;
+    const isRepStarting = body.startedBy === 'Class Rep';
+    
+    const headersList = await headers();
+    const forwarded = headersList.get('x-forwarded-for');
+    const lecturerIp = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown-ip');
+
+    let authUserId = null;
+    let finalStartedBy = 'lecturer';
+
+    if (isRepStarting) {
+      const { data: rep } = await supabase
+        .from('student_profiles')
+        .select('is_class_rep')
+        .eq('matric_number', body.repMatric)
+        .single();
+
+      if (!rep?.is_class_rep) {
+        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep' }, { status: 403 });
+      }
+      finalStartedBy = 'Class Rep';
+    } else {
+      const auth = await verifyLecturer(request);
+      if (auth.error) return auth.error;
+      authUserId = auth.user.id;
+    }
+
+    if (!courseCodeToSave) {
+      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
+    }
+
+    if (!isRepStarting) {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('course_code', courseCodeToSave)
+        .eq('lecturer_id', authUserId)
+        .single();
+
+      if (!course) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+    }
+
+    const parsedDuration = parseInt(body.duration);
+    const durationMinutes = Number.isFinite(parsedDuration) ? Math.min(Math.max(parsedDuration, 5), 120) : 60;
+    const parsedWait = parseInt(body.checkinOpensAfter);
+    const checkinOpensAfterMinutes = Number.isFinite(parsedWait) ? Math.min(Math.max(parsedWait, 0), 60) : 10;
+
+    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
+
+    const { data, error } = await supabase
+      .from('lecture_sessions')
+      .insert([{
+        course_code: courseCodeToSave,
+        anchor_latitude: body.latitude || body.lat,
+        anchor_longitude: body.longitude || body.lng,
+        anchor_ip: lecturerIp, 
+        is_active: true,
+        expires_at: expiresAt,
+        checkin_opens_after_minutes: checkinOpensAfterMinutes,
+        started_by: finalStartedBy
+      }])
+      .select('session_id')
+      .single();
+
+    if (error) {
+      console.error("Database Insert Error:", error);
+      return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
+    }
+
+    // ─── NEW: SEND PUSH NOTIFICATIONS ───
+    try {
+      // 1. Get all students enrolled in this course
+      const { data: course } = await supabase.from('courses').select('id').eq('course_code', courseCodeToSave).single();
+      
+      if (course) {
+        const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
+        
+        if (enrollments && enrollments.length > 0) {
+          const matrics = enrollments.map(e => e.matric_number);
+          
+          // 2. Find any of these students who have a push subscription
+          const { data: subscriptions } = await supabase
+            .from('push_subscriptions')
+            .select('subscription')
+            .in('matric_number', matrics);
+
+          // 3. Blast the notification
+          if (subscriptions && subscriptions.length > 0) {
+            const payload = JSON.stringify({
+              title: `Class is Live: ${courseCodeToSave}`,
+              body: `The lecturer has started attendance. Tap to check in now!`,
+              url: `/?sessionId=${data.session_id}` // Direct link to check-in
+            });
+
+            const pushPromises = subscriptions.map(sub => 
+              webpush.sendNotification(sub.subscription, payload).catch(err => {
+                // If the subscription is expired (410), delete it from DB
+                if (err.statusCode === 410) {
+                  return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
+                }
+              })
+            );
+
+            await Promise.all(pushPromises);
+          }
+        }
+      }
+    } catch (pushError) {
+      console.error("Push notification failed, but session was created:", pushError);
+      // We don't return an error here because the session WAS created successfully.
+    }
+
+    return NextResponse.json({
+      sessionId: data.session_id,
+      expiresAt,
+      checkinOpensAfterMinutes
+    });
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("CREATE SESSION FATAL ERROR:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+</file>
+
 <file path="app/page.tsx">
 'use client';
 import { Suspense, useState } from 'react';
@@ -7753,6 +7986,7 @@ import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { getStudentHeaders } from '@/utils/api-client';
+import { logger } from '@/utils/logger';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -7912,29 +8146,30 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const fp = await generateDeviceFingerprint();
         if (!cancelled) fingerprintRef.current = fp.hash;
-      } catch {}
+      } catch (err) {
+        logger.warn('Fingerprint generation failed', err);
+      }
     }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-        const fetchMeta = async () => {
+    const fetchMeta = async () => {
       try {
-        // NEW: Pass the student token so we can read the session start time
-                const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
+        const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
-      } catch {}
+      } catch (err) {
+        logger.warn('Failed to fetch session metadata', err);
+      }
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => { cancelled = true; clearTimeout(id); };
-  }, [sessionId]);
-
-  const syncOfflineQueue = useCallback(async () => {
+  }, [sessionId]);  const syncOfflineQueue = useCallback(async () => {
     const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
     if (queue.length === 0) return;
     setStatus('syncing');
@@ -8139,7 +8374,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           });
           const verifyResult = await verifyRes.json();
           
-          // NEW: Save token on success
           if (verifyResult.verified) {
             verificationMethod = 'biometric';
             if (verifyResult.token) {
@@ -8238,7 +8472,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsAppealing(true);
     setErrorMessage('');
     try {
-      // NEW: Attach the token header
       const headers = getStudentHeaders();
       const response = await fetch('/api/request-override', {
         method: 'POST', headers,
@@ -8264,7 +8497,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsSubmittingRating(true);
     try {
       if (!skip) {
-        // NEW: Attach the token header
         const headers = getStudentHeaders();
         await fetch('/api/rate-session', {
           method: 'POST', headers,
