@@ -1,105 +1,74 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
-import * as XLSX from 'xlsx';
+import Link from 'next/link';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
-import { ToastContainer, useToast } from '@/components/Toast';
 import {
-  BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
-  Fingerprint, RefreshCw, UserPlus, Search, FileText,
-  CheckCircle, AlertTriangle, ShieldCheck, Edit3, ChevronDown, X, Star
+  Clock, CheckCircle, AlertTriangle, ShieldCheck,
+  RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen, Search
 } from 'lucide-react';
 
-interface Course {
-  id: string;
-  course_code: string;
-  department: string;
-  level: string;
-  total_planned_classes: number;
-  max_attendance_score: number;
-  is_finalized: boolean;
-  roster: string[] | null;
+interface Log { 
+  id: string; 
+  matricNumber: string; 
+  nickname?: string; 
+  status: string; 
+  time: string; 
+  reason?: string; 
+  isBiometric?: boolean;
 }
-
-interface AuditRecord {
-  sessionId: string;
-  date: string;
-  status: string;
-  logId: string | null;
+interface DashboardData { 
+  course: string; 
+  isActive: boolean; 
+  logs: Log[]; 
+  startedBy?: string; 
+  hiddenDisqualifiedCount?: number;
 }
+interface LecturerProfile { full_name: string; department: string; }
+interface Course { id: string; course_code: string; }
+interface PastSession { session_id: string; created_at: string; course_code: string; verified_count: number; flagged_count: number; }
 
-interface EnrollmentRow {
-  course_id: string;
-  matric_number: string;
-}
+const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
+const ANCHOR_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+const ACTIVE_SESSION_KEY = 'active_attendance_session';
+const SESSION_EXPIRY_POLL_MS = 30000;
 
-interface SessionRow {
-  session_id: string;
-  created_at: string;
-}
-
-interface LogRow {
-  id: string;
-  session_id: string;
-  status: string;
-}
-
-const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
-const LEVELS = ['100', '200', '300', '400', '500'];
-const MATRIC_REGEX = /[\/\-]/;
-
-export default function CourseManagement() {
+export default function LecturerDashboard() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<LecturerProfile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
 
-  // Create Course State
-  const [newCourseCode, setNewCourseCode] = useState('');
-  const [newDept, setNewDept] = useState('');
-  const [newLevel, setNewLevel] = useState('');
-  const [plannedClasses, setPlannedClasses] = useState<number | ''>(15);
-  const [maxScore, setMaxScore] = useState<number | ''>(10);
-  const [isCreating, setIsCreating] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isUpdatingGeofence, setIsUpdatingGeofence] = useState(false);
+  const [setupError, setSetupError] = useState('');
+  const [expiredMessage, setExpiredMessage] = useState<string>('');
+  const [data, setData] = useState<DashboardData | null>(null);
 
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [actioningId, setActioningId] = useState<string | null>(null);
+  const [sessionDuration, setSessionDuration] = useState<number>(60);
+  const [checkinOpensAfter, setCheckinOpensAfter] = useState<number>(10);
 
-  // Modal State
-  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [editCode, setEditCode] = useState('');
-  const [editPlanned, setEditPlanned] = useState<number | ''>(15);
-  const [editMaxScore, setEditMaxScore] = useState<number | ''>(10);
-  const [modalStudents, setModalStudents] = useState<string[]>([]);
-  const [repMatric, setRepMatric] = useState<string | null>(null);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [manualMatric, setManualMatric] = useState('');
+  const [isOverriding, setIsOverriding] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // QUICK DESIGNATE REP STATE
-  const [repCourseCode, setRepCourseCode] = useState('');
-  const [repMatricInput, setRepMatricInput] = useState('');
-  const [isSettingRep, setIsSettingRep] = useState(false);
+  const [viewMode, setViewMode] = useState<'live' | 'history'>('live');
+  const [ledgerTab, setLedgerTab] = useState<'verified' | 'flagged'>('verified');
+  
+  const [pastSessions, setPastSessions] = useState<PastSession[]>([]);
+  const [historySearch, setHistorySearch] = useState('');
+  const [viewingPastSession, setViewingPastSession] = useState<PastSession | null>(null);
+  const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Single Student Add
-  const [singleMatric, setSingleMatric] = useState('');
-  const [targetCourseId, setTargetCourseId] = useState('');
-  const [isAddingSingle, setIsAddingSingle] = useState(false);
+  const prewarmWatchRef = useRef<number | null>(null);
+  const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+  const isFetchingRef = useRef(false);
 
-  // The Microscope (Audit & Waivers)
-  const [auditMatric, setAuditMatric] = useState('');
-  const [auditCourseCode, setAuditCourseCode] = useState('');
-  const [isAuditing, setIsAuditing] = useState(false);
-  const [auditRecords, setAuditRecords] = useState<AuditRecord[] | null>(null);
-
-  // Device Wipe
-  const [wipeMatric, setWipeMatric] = useState('');
-  const [isWiping, setIsWiping] = useState(false);
-
-  // SHARED CONFIRM MODAL & TOAST
   const confirm = useConfirmModal();
-  const { toasts, addToast, removeToast } = useToast();
-
-  const askConfirmation = (title: string, message: string, onConfirm: () => void, isDangerous = true) => {
-    confirm.ask(title, message, onConfirm, { isDangerous });
-  };
 
   const getHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -109,870 +78,793 @@ export default function CourseManagement() {
     };
   };
 
-  const fetchEnrollmentCounts = useCallback(async (courseIds: string[]) => {
-    if (courseIds.length === 0) {
-      setCourseCounts({});
-      return;
-    }
-    const { data, error } = await supabase
-      .from('enrollments')
-      .select('course_id')
-      .in('course_id', courseIds);
-
-    if (error || !data) return;
-
-    const counts: Record<string, number> = {};
-    (data as EnrollmentRow[]).forEach(row => {
-      counts[row.course_id] = (counts[row.course_id] || 0) + 1;
-    });
-    setCourseCounts(counts);
+  const clearStaleSession = useCallback((reason?: string) => {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    setActiveSessionId(null);
+    setData(null);
+    setSetupError('');
+    if (reason) setExpiredMessage(reason);
   }, []);
 
-  const fetchCourses = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setIsLoading(false);
+  useEffect(() => {
+    const securePageAndFetchProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push('/login'); return; }
+      
+      const { data: profileData } = await supabase.from('lecturers').select('full_name, department').eq('id', session.user.id).single();
+      if (profileData) setProfile({ full_name: profileData.full_name, department: profileData.department });
+
+      const { data: courseData } = await supabase.from('courses').select('id, course_code').eq('lecturer_id', session.user.id).order('created_at', { ascending: false });
+      if (courseData) {
+        setCourses(courseData);
+        if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
+      }
+    };
+    const id = setTimeout(() => { securePageAndFetchProfile(); }, 0);
+    return () => clearTimeout(id);
+  }, [router]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(async () => {
+      const savedSession = localStorage.getItem(ACTIVE_SESSION_KEY);
+      if (!savedSession) return;
+
+      const { data } = await supabase.from('lecture_sessions').select('is_active, expires_at').eq('session_id', savedSession).single();
+
+      if (!data) {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+
+      if (data.is_active && !isExpired) {
+        setActiveSessionId(savedSession);
+      } else {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+        if (isExpired) setExpiredMessage('The previous session expired while you were away.');
+      }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    const checkExpiry = async () => {
+      const { data } = await supabase.from('lecture_sessions').select('is_active, expires_at').eq('session_id', activeSessionId).single();
+
+      if (!data) {
+        clearStaleSession('This session no longer exists.');
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+      const isManuallyEnded = !data.is_active;
+
+      if (isExpired || isManuallyEnded) {
+        clearStaleSession(isManuallyEnded ? 'This session was ended.' : 'Time is up. The session expired.');
+      }
+    };
+
+    const intervalId = setInterval(checkExpiry, SESSION_EXPIRY_POLL_MS);
+    return () => clearInterval(intervalId);
+  }, [activeSessionId, clearStaleSession]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (position) => { prewarmPosRef.current = { lat: position.coords.latitude, lng: position.coords.longitude, acc: position.coords.accuracy, ts: Date.now() }; },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+    );
+    prewarmWatchRef.current = id;
+    return () => { if (prewarmWatchRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchRef.current); };
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    const course = courses.find(c => c.id === selectedCourseId);
+    if (!course) return;
+    try {
+      const headers = await getHeaders();
+      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`, { headers });
+      if (response.ok) setPastSessions(await response.json());
+      else if (response.status === 401) router.push('/login');
+    } catch { 
+      console.error("Failed to load history"); 
+    }
+  }, [courses, selectedCourseId, router]);
+
+  useEffect(() => {
+    if (viewMode !== 'history') return;
+    const id = setTimeout(() => { loadHistory(); }, 0);
+    return () => clearTimeout(id);
+  }, [viewMode, loadHistory]);  const startNewSession = () => {
+    if (!selectedCourseId) { setSetupError("Please register a course first."); return; }
+    setIsStarting(true);
+    setSetupError("");
+    setExpiredMessage('');
+    if (!navigator.geolocation) { setSetupError("Location services not supported by your browser."); setIsStarting(false); return; }
+
+    const executeSessionCreation = async (lat: number, lng: number) => {
+      setSetupError("Creating session...");
+      try {
+        const headers = await getHeaders();
+        const response = await fetch('/api/create-session', {
+          method: 'POST', 
+          headers,
+          body: JSON.stringify({ courseId: selectedCourseId, courseCode: courses.find(c => c.id === selectedCourseId)?.course_code, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })
+        });
+        if (response.ok) {
+          const result = await response.json();
+          localStorage.setItem(ACTIVE_SESSION_KEY, result.sessionId);
+          try { localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat, lng, ts: Date.now() })); } catch {}
+          setActiveSessionId(result.sessionId);
+          setViewMode('live');
+        } else if (response.status === 401) {
+          router.push('/login');
+        } else { 
+          setSetupError("Failed to create session on server."); 
+        }
+      } catch { 
+        setSetupError("Network error. Please try again."); 
+      } finally { 
+        setIsStarting(false); 
+      }
+    };
+
+    try {
+      const cached = localStorage.getItem(ANCHOR_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { lat: number; lng: number; ts: number };
+        if (Date.now() - parsed.ts < ANCHOR_CACHE_MAX_AGE_MS) {
+          setSetupError("Using cached location..."); 
+          executeSessionCreation(parsed.lat, parsed.lng); 
+          return;
+        }
+      }
+    } catch {}
+
+    if (prewarmPosRef.current && Date.now() - prewarmPosRef.current.ts < 15000) {
+      const snapshot = prewarmPosRef.current;
+      setSetupError(`Using recent fix (±${Math.round(snapshot.acc)}m)...`);
+      executeSessionCreation(snapshot.lat, snapshot.lng); 
       return;
     }
 
-    const { data } = await supabase
-      .from('courses')
-      .select('*')
-      .eq('lecturer_id', session.user.id)
-      .order('created_at', { ascending: false });
+    setSetupError("Getting a stable GPS fix...");
+    const readings: { lat: number; lng: number; acc: number }[] = [];
+    let watchId = 0;
+    let finished = false;
 
-    if (data) {
-      setCourses(data);
-      if (data.length > 0) {
-        setTargetCourseId(data[0].id);
-        setRepCourseCode(data[0].course_code);
-        setAuditCourseCode(data[0].course_code);
-        await fetchEnrollmentCounts(data.map(c => c.id));
-      }
-    }
-    setIsLoading(false);
-  }, [fetchEnrollmentCounts]);
+    const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
 
-  useEffect(() => {
-    const id = setTimeout(() => { fetchCourses(); }, 0);
-    return () => clearTimeout(id);
-  }, [fetchCourses]);
-
-  const createCourse = async () => {
-    if (!newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel) return;
-    setIsCreating(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { error } = await supabase.from('courses').insert([{
-        lecturer_id: session.user.id,
-        course_code: newCourseCode.toUpperCase(),
-        department: newDept,
-        level: newLevel,
-        total_planned_classes: Number(plannedClasses),
-        max_attendance_score: Number(maxScore),
-        roster: [],
-      }]);
-      if (!error) {
-        setNewCourseCode('');
-        setPlannedClasses(15);
-        setMaxScore(10);
-        setNewDept('');
-        setNewLevel('');
-        await fetchCourses();
-      } else {
-        addToast('Error', 'Failed to create course.', 'error');
-      }
-    }
-    setIsCreating(false);
-  };  const handleQuickSetRep = async () => {
-    const cleanMatric = repMatricInput.trim().toUpperCase();
-    if (!cleanMatric || !repCourseCode) return;
-
-    setIsSettingRep(true);
-
-    try {
-      const headers = await getHeaders();
-      const res = await fetch('/api/set-rep', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ courseCode: repCourseCode, matricNumber: cleanMatric })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to set rep.");
-
-      addToast('Success', `✅ ${cleanMatric} is now the Class Rep for ${repCourseCode}.`, 'success');
-      setRepMatricInput('');
-      
-    } catch (err) {
-      addToast('Error', err instanceof Error ? err.message : "Failed to set rep.", 'error');
-    } finally {
-      setIsSettingRep(false);
-    }
-  };
-
-  const handleOpenModal = async (course: Course) => {
-    setEditingCourse(course);
-    setEditCode(course.course_code);
-    setEditPlanned(course.total_planned_classes || 15);
-    setEditMaxScore(course.max_attendance_score || 10);
-    setIsLoadingStudents(true);
-    setModalStudents([]);
-    setRepMatric(null);
-
-    const { data, error } = await supabase
-      .from('enrollments')
-      .select('matric_number')
-      .eq('course_id', course.id)
-      .order('matric_number');
-      
-    if (!error && data) {
-      const matrics = data.map(d => d.matric_number);
-      setModalStudents(matrics);
-
-      if (matrics.length > 0) {
-        const { data: profiles } = await supabase
-          .from('student_profiles')
-          .select('matric_number, is_class_rep')
-          .in('matric_number', matrics)
-          .eq('is_class_rep', true)
-          .limit(1);
-          
-        if (profiles && profiles.length > 0) {
-          setRepMatric(profiles[0].matric_number);
-        }
-      }
-    }
-    setIsLoadingStudents(false);
-  };
-
-  const handleSaveModal = async () => {
-    if (!editingCourse || !editCode.trim() || !editPlanned || !editMaxScore) return;
-    
-    setActioningId(editingCourse.id);
-    const { error } = await supabase
-      .from('courses')
-      .update({ 
-        course_code: editCode.toUpperCase().trim(),
-        total_planned_classes: Number(editPlanned),
-        max_attendance_score: Number(editMaxScore)
-      })
-      .eq('id', editingCourse.id);
-      
-    if (error) {
-      addToast('Error', `Failed to update course: ${error.message}`, 'error');
-    } else {
-      addToast('Success', 'Course details updated.', 'success');
-      await fetchCourses();
-      setEditingCourse(null);
-    }
-    setActioningId(null);
-  };
-
-  const handleDeleteCourse = (courseId: string, courseCode: string) => {
-    askConfirmation(
-      `Delete ${courseCode}?`,
-      "WARNING: This will permanently delete all enrollments, sessions, and attendance logs tied to this course. This cannot be undone.",
-      async () => {
-        setActioningId(courseId);
-        const { error } = await supabase
-          .from('courses')
-          .delete()
-          .eq('id', courseId);
-          
-        if (error) {
-          addToast('Error', `Failed to delete course: ${error.message}`, 'error');
-        } else {
-          addToast('Success', `${courseCode} deleted.`, 'success');
-          await fetchCourses();
-        }
-        
-        setActioningId(null);
-      }
-    );
-  };
-
-  const handleRemoveStudent = (matric: string) => {
-    if (!editingCourse) return;
-    askConfirmation(
-      `Remove ${matric}?`,
-      "Their past attendance logs will not be deleted, but they will no longer be able to check in to this course.",
-      async () => {
-        const { error } = await supabase
-          .from('enrollments')
-          .delete()
-          .eq('course_id', editingCourse.id)
-          .eq('matric_number', matric);
-
-        if (error) {
-          addToast('Error', 'Failed to remove student.', 'error');
-        } else {
-          setModalStudents(prev => prev.filter(m => m !== matric));
-          if (repMatric === matric) setRepMatric(null);
-          fetchEnrollmentCounts(courses.map(c => c.id));
-        }
-      }
-    );
-  };
-
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    courseId: string
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingId(courseId);
-
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    const reader = new FileReader();
-
-    reader.onload = async (event) => {
-      try {
-        let rawMatrics: string[] = [];
-
-        if (isExcel) {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
-          
-          jsonData.forEach(row => {
-            row.forEach(cell => {
-               if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
-                 rawMatrics.push(cell.trim().toUpperCase());
-               }
-            });
-          });
-        } else {
-          const csvText = event.target?.result as string;
-          const cleanMatrics = csvText
-            .split(/[\n,]+/)
-            .map(m => m.trim().toUpperCase())
-            .filter(m => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
-          rawMatrics = cleanMatrics;
-        }
-
-        const uniqueMatrics = Array.from(new Set(rawMatrics));
-        
-        if (uniqueMatrics.length === 0) {
-          addToast('Invalid File', 'No valid matric numbers found.', 'error');
-          setUploadingId(null);
-          e.target.value = '';
-          return;
-        }
-
-        if (uniqueMatrics.length > 5000) {
-          addToast('File Too Large', 'Maximum 5,000 students per upload.', 'error');
-          setUploadingId(null);
-          e.target.value = '';
-          return;
-        }
-
-        const rows = uniqueMatrics.map(matric => ({
-          course_id: courseId,
-          matric_number: matric,
-        }));
-
-        const { error } = await supabase
-          .from('enrollments')
-          .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
-
-        if (!error) {
-          addToast('Success', `${uniqueMatrics.length} students synced.`, 'success');
-          await fetchCourses();
-          if (editingCourse?.id === courseId) {
-            handleOpenModal(editingCourse);
-          }
-        } else {
-          addToast('Error', `Upload failed: ${error.message}`, 'error');
-        }
-      } catch {
-        addToast('Error', 'Failed to read file. Ensure it is a valid CSV or Excel file.', 'error');
-      }
-      
-      setUploadingId(null);
-      e.target.value = '';
+    const finish = (lat: number, lng: number) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      executeSessionCreation(lat, lng);
     };
-    
-    if (isExcel) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
-  };
 
-  const handleSingleStudentAdd = async () => {
-    const cleanMatric = singleMatric.trim().toUpperCase();
-    if (!cleanMatric || !targetCourseId) return;
-    setIsAddingSingle(true);
+    const fail = (msg: string) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      setSetupError(msg);
+      setIsStarting(false);
+    };
 
-    const { error } = await supabase
-      .from('enrollments')
-      .upsert(
-        { course_id: targetCourseId, matric_number: cleanMatric },
-        { onConflict: 'course_id,matric_number', ignoreDuplicates: true }
-      );
+    const timeoutId = setTimeout(() => {
+      if (finished) return;
+      if (readings.length >= 3) {
+        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+        finish(lat, lng);
+      } else {
+        fail("Couldn't get a stable GPS fix. Move near a window or outdoors, then try again.");
+      }
+    }, 25000);
 
-    if (!error) {
-      addToast('Success', `${cleanMatric} added successfully!`, 'success');
-      setSingleMatric('');
-      await fetchCourses();
-    } else {
-      addToast('Error', `Failed to add student: ${error.message}`, 'error');
-    }
-    setIsAddingSingle(false);
-  };  const handleStudentAudit = useCallback(async () => {
-    const cleanMatric = auditMatric.trim().toUpperCase();
-    if (!cleanMatric || !auditCourseCode) return;
-    setIsAuditing(true);
-    setAuditRecords(null);
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (finished) return;
+        const acc = position.coords.accuracy;
+        if (acc > 50) {
+          setSetupError(`GPS accuracy is ±${Math.round(acc)}m — too weak. Move near a window.`);
+          return;
+        }
+        readings.push({ lat: position.coords.latitude, lng: position.coords.longitude, acc });
 
-    try {
-      const { data: sessions } = await supabase
-        .from('lecture_sessions')
-        .select('session_id, created_at')
-        .ilike('course_code', auditCourseCode)
-        .order('created_at', { ascending: false });
-
-      if (!sessions || sessions.length === 0) throw new Error("No classes held yet.");
-
-      const sessionIds = (sessions as SessionRow[]).map(s => s.session_id);
-
-      const { data: logs } = await supabase
-        .from('attendance_logs')
-        .select('id, session_id, status')
-        .eq('matric_number', cleanMatric)
-        .in('session_id', sessionIds);
-
-      const logMap = new Map<string, LogRow>(
-        ((logs as LogRow[] | null) || []).map(l => [l.session_id, l])
-      );
-
-      const trail: AuditRecord[] = (sessions as SessionRow[]).map(session => {
-        const log = logMap.get(session.session_id);
-        return {
-          sessionId: session.session_id,
-          date: new Date(session.created_at).toLocaleDateString() + ' ' +
-                new Date(session.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: log ? log.status : 'absent',
-          logId: log ? log.id : null,
-        };
-      });
-
-      setAuditRecords(trail);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Audit failed.";
-      addToast('Audit Failed', msg, 'error');
-    }
-    setIsAuditing(false);
-  }, [auditMatric, auditCourseCode, addToast]);
-
-  const grantMedicalWaiver = async (record: AuditRecord) => {
-    const cleanMatric = auditMatric.trim().toUpperCase();
-    
-    askConfirmation(
-      `Grant Waiver?`,
-      `Grant Medical/Excused Waiver for ${cleanMatric} on ${record.date}? This will count them as present.`,
-      async () => {
-        try {
-          const headers = await getHeaders();
-          const res = await fetch('/api/override-attendance', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ sessionId: record.sessionId, matricNumber: cleanMatric })
-          });
-
-          if (!res.ok) throw new Error("Failed to grant waiver");
-
-          addToast('Success', 'Waiver Granted successfully!', 'success');
-          handleStudentAudit();
-        } catch {
-          addToast('Error', 'Failed to grant waiver.', 'error');
+        if (readings.length >= 3) {
+          const latSpread = Math.max(...readings.map(r => r.lat)) - Math.min(...readings.map(r => r.lat));
+          const lngSpread = Math.max(...readings.map(r => r.lng)) - Math.min(...readings.map(r => r.lng));
+          if (latSpread < 0.0003 && lngSpread < 0.0003) {
+            clearTimeout(timeoutId);
+            const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+            const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+            finish(lat, lng);
+            return;
+          }
+          readings.shift();
+          setSetupError(`GPS is still settling (±${Math.round(acc)}m)...`);
+        } else {
+          setSetupError(`Stabilizing GPS fix (${readings.length}/3, ±${Math.round(acc)}m)...`);
         }
       },
-      false
+      (error) => {
+        clearTimeout(timeoutId);
+        if (error.code === 1) fail("Permission Denied: tap 'Allow' for location and try again.");
+        else if (error.code === 2) fail("Signal lost. Turn your phone's GPS/Location off and back on, then retry.");
+        else if (error.code === 3) fail("GPS timed out. Move near a window and try again.");
+        else fail("Could not access GPS.");
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   };
 
-  const handleDeviceReset = async () => {
-    const safeMatric = String(wipeMatric || "").trim();
-    if (!safeMatric) return;
+  const updateGeofence = async () => {
+    if (!activeSessionId) return;
     
-    askConfirmation(
-      `Wipe device lock for ${safeMatric}?`,
-      "They will need to re-register their biometrics on a new phone. Their attendance history will remain intact.",
+    confirm.ask(
+      'Update Geofence?',
+      'Update the class anchor to your current location? Stand in the middle of the lecture hall first.',
       async () => {
-        setIsWiping(true);
+        setIsUpdatingGeofence(true);
+        try {
+          if (!navigator.geolocation) throw new Error("No geolocation support");
+          
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const acc = position.coords.accuracy;
+              if (acc > 50) {
+                confirm.ask('GPS Too Weak', `Your current accuracy is ±${Math.round(acc)}m. Move near a window or outdoors, then try again.`, () => {}, { isDangerous: false });
+                setIsUpdatingGeofence(false);
+                return;
+              }
+
+              const { error } = await supabase
+                .from('lecture_sessions')
+                .update({ anchor_latitude: position.coords.latitude, anchor_longitude: position.coords.longitude })
+                .eq('session_id', activeSessionId);
+                
+              if (error) {
+                confirm.ask('Error', 'Failed to update geofence.', () => {}, { isDangerous: false });
+              } else {
+                try { localStorage.setItem(ANCHOR_CACHE_KEY, JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude, ts: Date.now() })); } catch {}
+                confirm.ask('Success', `Geofence updated (±${Math.round(acc)}m accuracy).`, () => {}, { isDangerous: false });
+              }
+              setIsUpdatingGeofence(false);
+            },
+            () => {
+              confirm.ask('Error', 'Could not get your GPS location. Ensure location is on.', () => {}, { isDangerous: false });
+              setIsUpdatingGeofence(false);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          );
+        } catch {
+          confirm.ask('Error', 'Error updating location.', () => {}, { isDangerous: false });
+          setIsUpdatingGeofence(false);
+        }
+      },
+      { isDangerous: false, confirmLabel: 'Update GPS' }
+    );
+  };
+
+  const endSession = () => {
+    if (!activeSessionId) return;
+    confirm.ask(
+      'End this lecture?',
+      'Students will no longer be able to check in. This cannot be undone.',
+      async () => {
         try {
           const headers = await getHeaders();
-          const response = await fetch('/api/reset-device', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ matricNumber: safeMatric }),
-          });
-          if (response.ok) {
-            addToast('Success', `✅ Hardware binding completely wiped for ${safeMatric}.`, 'success');
-            setWipeMatric('');
-          } else {
-            addToast('Error', '⚠️ Failed to wipe device.', 'error');
-          }
-        } catch {
-          addToast('Error', '💥 Network Error.', 'error');
+          await fetch('/api/end-session', { method: 'POST', headers, body: JSON.stringify({ sessionId: activeSessionId }) });
+        } catch (err) {
+          console.error('Failed to notify server', err);
+        }
+        clearStaleSession('Session ended. Ready for the next one.');
+      },
+      { isDangerous: true, confirmLabel: 'End Lecture' }
+    );
+  };
+
+  const fetchDashboardData = useCallback(async () => {
+    if (!activeSessionId || isFetchingRef.current) return;
+    
+    isFetchingRef.current = true;
+    try {
+      const headers = await getHeaders();
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${activeSessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
+      if (response.ok) { 
+        setData(await response.json()); 
+      } else if (response.status === 401) {
+        router.push('/login');
+      }
+    } catch { 
+      console.error("Failed to fetch data"); 
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, [activeSessionId, router]);
+
+  useEffect(() => {
+    if (!activeSessionId || viewMode !== 'live') return;
+    const immediateId = setTimeout(() => { fetchDashboardData(); }, 0);
+    
+    const channel = supabase
+      .channel(`attendance_${activeSessionId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs', filter: `session_id=eq.${activeSessionId}` }, () => { fetchDashboardData(); })
+      .subscribe();
+
+    const interval = setInterval(fetchDashboardData, 10000);
+
+    return () => {
+      clearTimeout(immediateId);
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [activeSessionId, viewMode, fetchDashboardData]);  const handleManualOverride = async (targetMatric: string) => {
+    const safeMatric = String(targetMatric || '').trim();
+    if (!activeSessionId) return;
+    if (!safeMatric) return;
+
+    setIsOverriding(true);
+    try {
+      const headers = await getHeaders();
+      const response = await fetch('/api/override-attendance', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric }),
+      });
+      if (response.ok) {
+        setManualMatric('');
+        fetchDashboardData();
+      } else if (response.status === 401) {
+        router.push('/login');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsOverriding(false);
+    }
+  };
+
+  const handleDeviceReset = (targetMatric: string) => {
+    const safeMatric = String(targetMatric || '').trim();
+    if (!safeMatric) return;
+
+    confirm.ask(
+      `Wipe device lock for ${safeMatric}?`,
+      'They will need to re-register their biometrics on a new phone. Their attendance history will remain intact.',
+      async () => {
+        setIsResetting(true);
+        try {
+          const headers = await getHeaders();
+          const response = await fetch('/api/reset-device', { method: 'POST', headers, body: JSON.stringify({ matricNumber: safeMatric }) });
+          if (response.ok) setManualMatric('');
+        } catch (err) {
+          console.error(err);
         } finally {
-          setIsWiping(false);
+          setIsResetting(false);
         }
       }
     );
   };
 
-  if (isLoading) {
+  const generateAndDownloadCSV = (logsToExport: Log[], courseName: string, dateStr: string, isArchive: boolean) => {
+    if (!logsToExport || logsToExport.length === 0) return;
+    const verifiedCount = logsToExport.filter(l => l.status === 'verified').length;
+
+    const sanitize = (val: string | number) => {
+      const str = String(val);
+      if (/^[=+\-@]/.test(str)) return `'${str}`;
+      return str;
+    };
+
+    const header = [
+      [`OFFICIAL ATTENDANCE REPORT ${isArchive ? '(ARCHIVED)' : ''}`],
+      ["Course Code", sanitize(courseName)], ["Date Generated", dateStr],
+      ["Total Present", verifiedCount], ["Total Records Logged", logsToExport.length], [],
+      ["Matric Number", "Status", "Timestamp", "Security Flag"]
+    ];
+    const rows = logsToExport.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber))
+      .map(log => {
+        const flag = log.status === 'verified' ? 'Verified' 
+          : log.status === 'pending_override' ? 'Raised Hand / Waiver Pending'
+          : log.status === 'flagged' ? `Flagged: ${log.reason || 'Unknown'}`
+          : log.status;
+        return [ sanitize(log.matricNumber), sanitize(log.status.toUpperCase()), sanitize(log.time), sanitize(flag) ];
+      });
+      
+    const csvContent = [...header, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `${courseName.replace(/\s+/g, '_')}_Attendance_${dateStr.replace(/\//g, '-')}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
+
+  const exportLiveCSV = () => { if (data) generateAndDownloadCSV(data.logs, data.course, new Date().toLocaleDateString(), false); };
+  
+  const downloadPastSession = async (sessionId: string, dateString: string, courseCode: string) => {
+    setDownloadingId(sessionId);
+    try {
+      const headers = await getHeaders();
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch(`/api/dashboard-data?sessionId=${sessionId}&timeZone=${encodeURIComponent(tz)}`, { headers });
+      if (!response.ok) throw new Error("Failed to fetch");
+      const pastData = await response.json();
+      generateAndDownloadCSV(pastData.logs, courseCode, dateString, true);
+    } catch { 
+      console.error("Download failed");
+    }
+    finally { setDownloadingId(null); }
+  };
+
+  const viewPastLedger = async (session: PastSession) => {
+    setViewingPastSession(session);
+    const headers = await getHeaders();
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const response = await fetch(`/api/dashboard-data?sessionId=${session.session_id}&timeZone=${encodeURIComponent(tz)}`, { headers });
+    if (response.ok) {
+      const result = await response.json();
+      setPastSessionLogs(result.logs);
+    }
+  };
+
+  const copySessionInfo = () => {
+    const baseUrl = window.location.origin;
+    const link = `${baseUrl}/?sessionId=${activeSessionId}`;
+    const courseName = data?.course || 'Active Class';
+    const clipboardText = `📌 *CampusCheck Attendance Link*\n\n📚 Class: ${courseName}\n⏱ Opens: ${checkinOpensAfter === 0 ? 'Immediately' : `In ${checkinOpensAfter} minutes`}\n\n🔗 ${link}\n\n_Open this link on your phone to check in. You must be inside the lecture hall._`;
+    navigator.clipboard.writeText(clipboardText);
+    confirm.ask('Link Copied', 'Attendance link copied! Share it with your students.', () => {}, { isDangerous: false });
+  };
+
+  const filteredHistory = pastSessions.filter(s => 
+    s.course_code.toLowerCase().includes(historySearch.toLowerCase()) || 
+    new Date(s.created_at).toLocaleString().toLowerCase().includes(historySearch.toLowerCase())
+  );
+
+  if (!activeSessionId || viewMode === 'history') {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="w-10 h-10 text-[#2563EB] animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 bg-gray-50 min-h-screen">
-
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-          <Users className="text-[#2563EB]" size={28} /> Course & Student Management
-        </h1>
-        <p className="text-gray-500 mt-1 font-medium">
-          Manage course rosters, grant medical waivers, and wipe device locks.
-        </p>
-      </div>
-
-      {/* SECTION 1: COURSE REGISTRY */}
-      <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-8 border-b border-gray-100 pb-4">
-          <BookOpen className="text-[#2563EB]" size={24}/>
-          <h2 className="text-xl font-extrabold text-gray-900">Course Registry & Rosters</h2>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* LEFT COLUMN: Create Course */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="bg-blue-100 text-[#2563EB] w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</div>
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Establish New Course</h3>
-            </div>
-            
-            <div className="space-y-4 bg-gray-50 p-6 rounded-2xl border border-gray-100">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Course Code</label>
-                <input
-                  aria-label="Course Code"
-                  type="text"
-                  placeholder="e.g., CSC 301"
-                  value={newCourseCode}
-                  onChange={(e) => setNewCourseCode(e.target.value)}
-                  className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
-                />
+      <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans">
+        <div className="max-w-4xl mx-auto">
+          {expiredMessage && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={20} />
+              <div className="flex-1">
+                <p className="font-bold text-amber-900 text-sm">{expiredMessage}</p>
+                <p className="text-xs text-amber-700 font-medium mt-1">Start a new session below, or review past records.</p>
               </div>
+              <button onClick={() => setExpiredMessage('')} className="text-amber-600 hover:text-amber-800 text-xs font-bold">Dismiss</button>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
+                {viewMode === 'history' ? <Archive className="text-[#2563EB]" /> : <ShieldCheck className="text-[#2563EB]" />}
+                {viewMode === 'history' ? 'Vault Archive' : 'Start Lecture'}
+              </h2>
+              <p className="text-gray-500 font-medium mt-1">
+                {viewMode === 'history' ? 'Review past session ledgers and download reports.' : `Welcome, ${profile?.full_name || 'Lecturer'}`}
+              </p>
+            </div>
+            <div className="flex bg-gray-50 p-1 rounded-xl w-full md:w-auto items-center">
+              <button onClick={() => { setViewMode('live'); setActiveSessionId(null); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'live' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Start Class</button>
+              <button onClick={() => { setViewMode('history'); setActiveSessionId('vault'); }} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'history' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Past Records</button>
+            </div>
+          </div>
+
+          {viewMode === 'live' ? (
+            <div className="max-w-md mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 text-center animate-in fade-in slide-in-from-bottom-4">
+              <div className="bg-[#2563EB] text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
+                <User size={40} strokeWidth={2.5} />
+              </div>
+              <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Ready to start?</h2>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Department</label>
-                  <div className="relative">
-                    <select
-                      aria-label="Department"
-                      value={newDept}
-                      onChange={(e) => setNewDept(e.target.value)}
-                      className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
-                    >
-                      <option value="" disabled>Select Dept</option>
-                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+              {courses.length === 0 ? (
+                <div className="text-center py-8 space-y-4 mt-6">
+                  <div className="bg-blue-50 p-4 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
+                    <BookOpen size={36} className="text-[#2563EB]" />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Level</label>
-                  <div className="relative">
-                    <select
-                      aria-label="Level"
-                      value={newLevel}
-                      onChange={(e) => setNewLevel(e.target.value)}
-                      className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
-                    >
-                      <option value="" disabled>Select Level</option>
-                      {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">No courses yet</h3>
+                    <p className="text-sm text-gray-500 font-medium mt-1">You need to create a course before starting a lecture.</p>
                   </div>
+                  <Link href="/dashboard/courses" className="inline-block bg-[#2563EB] text-white font-bold px-6 py-3 rounded-xl shadow-md hover:bg-blue-700 transition-all">
+                    Go to Course Management
+                  </Link>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Planned Lectures</label>
-                  <input
-                    aria-label="Planned Lectures"
-                    type="number"
-                    placeholder="15"
-                    value={plannedClasses}
-                    onChange={(e) => setPlannedClasses(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 ml-1">Max CA Marks</label>
-                  <input
-                    aria-label="Max CA Marks"
-                    type="number"
-                    placeholder="10"
-                    value={maxScore}
-                    onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={createCourse}
-                disabled={isCreating || !newCourseCode.trim() || !plannedClasses || !maxScore || !newDept || !newLevel}
-                className="w-full bg-[#2563EB] text-white px-6 py-4 rounded-xl font-extrabold text-base hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 mt-4"
-              >
-                {isCreating ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />} Create Course
-              </button>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: Quick Actions */}
-          <div className="lg:col-span-5 space-y-6">
-            
-            {/* Add Single Student */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</div>
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Add Single Student</h3>
-              </div>
-              <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 space-y-3">
-                <div className="relative">
-                  <select
-                    aria-label="Course for Adding Student"
-                    value={targetCourseId}
-                    onChange={(e) => setTargetCourseId(e.target.value)}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 appearance-none cursor-pointer focus:ring-2 focus:ring-[#2563EB] transition-all"
-                  >
-                    {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
+              ) : (
+                <div className="relative mb-4 mt-6">
+                  <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer">
+                    {courses.map(course => <option key={course.id} value={course.id}>{course.course_code}</option>)}
                   </select>
-                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-500"><ChevronDown size={24} strokeWidth={2.5} /></div>
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    aria-label="Single Student Matric Number"
-                    type="text"
-                    placeholder="Matric Number"
-                    value={singleMatric}
-                    onChange={(e) => setSingleMatric(e.target.value.toUpperCase())}
-                    className="w-full bg-white border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
-                  />
-                  <button
-                    aria-label="Add Single Student"
-                    onClick={handleSingleStudentAdd}
-                    disabled={isAddingSingle || !singleMatric.trim()}
-                    className="bg-gray-900 text-white px-5 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0"
-                  >
-                    {isAddingSingle ? <Loader2 size={18} className="animate-spin" /> : <UserPlus size={18} />}
-                  </button>
-                </div>
-              </div>
-            </div>
+              )}
 
-            {/* Designate Rep */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="bg-amber-100 text-amber-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</div>
-                <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">Designate Class Rep <Star size={14} className="fill-amber-500 text-amber-500" /></h3>
-              </div>
-              <div className="bg-amber-50 p-5 rounded-2xl border border-amber-200 space-y-3">
-                <div className="relative">
-                  <select
-                    aria-label="Course for Designating Rep"
-                    value={repCourseCode}
-                    onChange={(e) => setRepCourseCode(e.target.value)}
-                    className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
-                  >
-                    {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+              <div className="space-y-3 mt-4">
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] transition-all overflow-hidden">
+                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><Timer size={20} /></div>
+                  <select value={sessionDuration} onChange={(e) => setSessionDuration(Number(e.target.value))} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none appearance-none cursor-pointer">
+                    <option value={15}>Duration: 15 Minutes (Quiz)</option>
+                    <option value={30}>Duration: 30 Minutes</option>
+                    <option value={60}>Duration: 1 Hour (Standard)</option>
+                    <option value={90}>Duration: 1.5 Hours</option>
+                    <option value={120}>Duration: 2 Hours</option>
                   </select>
-                  <ChevronDown size={16} className="absolute right-3 top-3.5 text-amber-600 pointer-events-none" />
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    aria-label="Rep Student Matric Number"
-                    type="text"
-                    placeholder="Student Matric No."
-                    value={repMatricInput}
-                    onChange={(e) => setRepMatricInput(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && handleQuickSetRep()}
-                    className="w-full bg-white border border-amber-200 p-3 rounded-xl outline-none font-bold text-amber-900 placeholder:text-amber-400 focus:ring-2 focus:ring-amber-500 uppercase transition-all"
-                  />
-                  <button
-                    aria-label="Make Class Rep"
-                    onClick={handleQuickSetRep}
-                    disabled={isSettingRep || !repMatricInput.trim()}
-                    className="bg-amber-500 text-white px-5 py-3 rounded-xl font-bold hover:bg-amber-600 disabled:opacity-50 transition-all flex items-center shadow-md shrink-0 gap-2"
-                  >
-                    {isSettingRep ? <Loader2 size={18} className="animate-spin" /> : <Star size={18} />}
-                  </button>
+                <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] transition-all overflow-hidden">
+                  <div className="pl-4 pr-3 flex items-center justify-center text-gray-400"><Lock size={20} /></div>
+                  <select value={checkinOpensAfter} onChange={(e) => setCheckinOpensAfter(Number(e.target.value))} className="w-full bg-transparent text-gray-900 font-bold py-4 pr-4 outline-none appearance-none cursor-pointer">
+                    <option value={0}>Opens: Immediately</option>
+                    <option value={5}>Opens: After 5 minutes</option>
+                    <option value={10}>Opens: After 10 minutes</option>
+                    <option value={15}>Opens: After 15 minutes</option>
+                    <option value={30}>Opens: After 30 minutes</option>
+                  </select>
                 </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Course Cards */}
-        {courses.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-12 pt-8 border-t border-gray-100">
-            {courses.map(course => (
-              <div key={course.id} className="bg-white p-5 rounded-xl border border-gray-200 relative group flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
-                
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h4 className="font-extrabold text-gray-900 text-lg">{course.course_code}</h4>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mt-1">
-                      {course.department || 'N/A'} • {course.level ? `${course.level}L` : 'N/A'}
-                    </p>
-                  </div>
-                  
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button aria-label={`Delete ${course.course_code}`} onClick={() => handleDeleteCourse(course.id, course.course_code)} disabled={actioningId === course.id} className="p-2 bg-gray-50 text-gray-500 hover:text-red-600 rounded-md shadow-sm border border-gray-200">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <p className="text-sm font-bold text-gray-600">{course.total_planned_classes} Planned Classes • {course.max_attendance_score} CA Marks</p>
-                  <p className="text-sm font-bold text-[#2563EB] mt-1">{courseCounts[course.id] || 0} Students Enrolled</p>
-                </div>
-                
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => handleOpenModal(course)} 
-                    className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 py-2.5 rounded-lg font-bold text-sm hover:bg-gray-100 transition-all shadow-sm flex items-center justify-center gap-1"
-                  >
-                    <Edit3 size={14} /> Manage
-                  </button>
-                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-100 transition-all shadow-sm">
-                    {uploadingId === course.id
-                      ? <Loader2 size={14} className="animate-spin text-[#2563EB]" />
-                      : <FileSpreadsheet size={14} />}
-                    {uploadingId === course.id ? "Syncing..." : "Upload"}
-                    <input
-                      type="file"
-                      accept=".csv, .xlsx, .xls"
-                      className="hidden"
-                      onChange={(e) => handleFileUpload(e, course.id)}
-                      disabled={uploadingId === course.id}
-                    />
-                  </label>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
-      {editingCourse && (
-        <div className="fixed inset-0 bg-gray-900/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-xl border border-gray-100 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
-            
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-t-3xl">
-              <div>
-                <h2 className="text-xl font-black text-gray-900">{editingCourse.course_code}</h2>
-                <p className="text-xs font-bold text-gray-500 uppercase">
-                  {editingCourse.department || 'N/A'} • {editingCourse.level ? `${editingCourse.level}L` : 'N/A'}
-                </p>
-              </div>
-              <button aria-label="Close Modal" onClick={() => setEditingCourse(null)} className="p-2 bg-white rounded-full text-gray-400 hover:text-gray-900 shadow-sm border border-gray-200 transition-all">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Edit Course Details */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Course Details</h3>
-                
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">Course Code</label>
-                  <input aria-label="Edit Course Code" type="text" value={editCode} onChange={(e) => setEditCode(e.target.value.toUpperCase())} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all uppercase" />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Planned Lectures</label>
-                    <input aria-label="Edit Planned Lectures" type="number" value={editPlanned} onChange={(e) => setEditPlanned(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Max CA Marks</label>
-                    <input aria-label="Edit Max CA Marks" type="number" value={editMaxScore} onChange={(e) => setEditMaxScore(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 focus:ring-2 focus:ring-[#2563EB] transition-all" />
-                  </div>
-                </div>
-
-                <button onClick={handleSaveModal} disabled={actioningId === editingCourse.id} className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-all shadow-md active:scale-[0.98]">
-                  {actioningId === editingCourse.id ? <Loader2 size={18} className="animate-spin mx-auto" /> : "Save Changes"}
+                <button onClick={startNewSession} disabled={isStarting || courses.length === 0} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
+                  {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} {isStarting ? "Anchoring Geofence..." : "Establish Geofence"}
                 </button>
+                {setupError && <p className="text-sm text-red-500 font-bold mt-4">{setupError}</p>}
               </div>
+            </div>
+          ) : (
+            <div className="animate-in fade-in slide-in-from-bottom-4">
+              {!viewingPastSession ? (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search size={18} className="text-gray-400" /></div>
+                    <input type="text" placeholder="Search by date or course..." value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} className="w-full bg-white border border-gray-200 p-3 pl-10 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] transition-all" />
+                  </div>
 
-              {/* Manage Students */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2 flex justify-between items-center">
-                  Enrolled Students
-                  <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">{modalStudents.length}</span>
-                </h3>
-                
-                {isLoadingStudents ? (
-                  <div className="flex justify-center py-6"><Loader2 className="animate-spin text-[#2563EB]" size={24} /></div>
-                ) : modalStudents.length === 0 ? (
-                  <p className="text-center text-gray-500 text-sm font-medium py-4">No students enrolled yet.</p>
-                ) : (
-                  <div className="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
-                    {modalStudents.map(matric => (
-                      <div key={matric} className="p-3 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-800 text-sm">{matric}</span>
-                          {repMatric === matric && (
-                            <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 uppercase flex items-center gap-1">
-                              <Star size={10} className="fill-amber-500 text-amber-500" /> Rep
-                            </span>
-                          )}
+                  {filteredHistory.map(session => (
+                    <div key={session.session_id} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-blue-300 transition-colors">
+                      <div>
+                        <h3 className="font-black text-gray-900 text-lg">{session.course_code}</h3>
+                        <p className="text-sm text-gray-500 font-medium">{new Date(session.created_at).toLocaleString()}</p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto">
+                        <div className="flex gap-6 w-full sm:w-auto justify-around">
+                          <div className="text-center">
+                            <p className="text-xl font-black text-green-600">{session.verified_count}</p>
+                            <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Verified</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xl font-black text-red-500">{session.flagged_count}</p>
+                            <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Flagged</p>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <button 
-                            aria-label={`Remove ${matric}`}
-                            onClick={() => handleRemoveStudent(matric)} 
-                            className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={14} />
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <button onClick={() => viewPastLedger(session)} className="flex-1 sm:flex-none justify-center bg-blue-50 text-[#2563EB] px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center gap-2">
+                            <FileText size={16} /> View
+                          </button>
+                          <button onClick={() => downloadPastSession(session.session_id, new Date(session.created_at).toLocaleDateString(), session.course_code)} disabled={downloadingId === session.session_id} className="flex-1 sm:flex-none justify-center bg-gray-900 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2">
+                            {downloadingId === session.session_id ? <RefreshCw size={16} className="animate-spin" /> : <Download size={16} />} CSV
                           </button>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
+                  {filteredHistory.length === 0 && (
+                    <p className="text-center text-gray-500 font-bold py-10 bg-white rounded-2xl border border-gray-200">
+                      {pastSessions.length === 0 ? "No past records found for this course." : "No records match your search."}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <div>
+                      <h3 className="font-black text-gray-900 text-lg">Ledger: {viewingPastSession.course_code}</h3>
+                      <p className="text-xs text-gray-500 font-bold">{new Date(viewingPastSession.created_at).toLocaleString()}</p>
+                    </div>
+                    <button onClick={() => setViewingPastSession(null)} className="text-sm font-bold text-gray-500 hover:text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm">Close</button>
                   </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                          <th className="px-6 py-4 font-bold">Matric Number</th>
+                          <th className="px-6 py-4 font-bold">Time</th>
+                          <th className="px-6 py-4 font-bold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {pastSessionLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-50/50">
+                            <td className="px-6 py-4 font-bold text-gray-900">
+                              {log.matricNumber}
+                              {log.nickname && <span className="block text-[10px] text-gray-400">({log.nickname})</span>}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500 flex items-center gap-2 text-sm font-medium"><Clock size={14} /> {log.time}</td>
+                            <td className="px-6 py-4">
+                              {log.status === 'verified' ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} /> Verified</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200"><AlertTriangle size={12} /> Flagged</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <ConfirmModal config={confirm.config} onClose={confirm.close} />
+      </div>
+    );
+  }  const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
+  const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
+
+  return (
+    <div className="min-h-screen bg-[#F9FAFB] p-4 md:p-8 font-sans text-gray-900">
+      <div className="max-w-5xl mx-auto space-y-6">
+        
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={20} className="text-[#2563EB]" />
+                <span className="text-sm font-bold text-[#2563EB] uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span className="text-gray-500 font-bold text-lg">{data?.course || 'Loading...'}</span>
+                
+                {data?.startedBy === 'Class Rep' && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-200 ml-2">
+                    <ShieldAlert size={12} /> Started by Rep
+                  </span>
+                )}
+                
+                <span className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 ml-2">
+                  <Wifi size={12} /> Live Sync
+                </span>
+
+                {data && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-50 px-2 py-1 rounded-md border border-gray-200 ml-2" title="Students are measured against this anchor">
+                    <MapPin size={12} /> Anchor: {data.course ? 'set' : 'pending'}
+                  </span>
+                )}
+
+                {data?.hiddenDisqualifiedCount !== undefined && data.hiddenDisqualifiedCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2 py-1 rounded-md border border-red-200 ml-2">
+                    <ShieldAlert size={12} /> {data.hiddenDisqualifiedCount} attempts disqualified
+                  </span>
                 )}
               </div>
             </div>
+            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-100 gap-6 w-full md:w-auto mt-2 md:mt-0">
+              <div><p className="text-2xl font-extrabold text-gray-900">{data?.logs.length || 0}</p><p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Check-ins</p></div>
+              <button onClick={exportLiveCSV} disabled={!data || data.logs.length === 0} className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 shadow-sm"><Download size={16} /> Export</button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+            <button onClick={copySessionInfo} className="flex justify-center items-center gap-2 text-sm font-bold bg-white text-gray-700 px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all"><Copy size={16} /> Share Link</button>
+            <button onClick={updateGeofence} disabled={isUpdatingGeofence} className="flex justify-center items-center gap-2 text-sm font-bold bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl border border-blue-200 shadow-sm hover:bg-blue-100 active:scale-[0.98] transition-all disabled:opacity-50">
+              {isUpdatingGeofence ? <RefreshCw size={16} className="animate-spin" /> : <Navigation size={16} />} Update GPS
+            </button>
+            <button onClick={endSession} className="flex justify-center items-center gap-2 text-sm font-bold bg-red-50 text-red-600 px-4 py-2.5 rounded-xl border border-red-200 shadow-sm hover:bg-red-100 active:scale-[0.98] transition-all md:col-span-1 col-span-2"><XCircle size={16} /> End Lecture</button>
           </div>
         </div>
-      )}
 
-      {/* SECTION 2: THE MICROSCOPE */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-          <Search className="text-[#2563EB]" size={20}/>
-          <h2 className="text-lg font-bold text-gray-900">Student Diagnostics & Waivers</h2>
+        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-[#2563EB]"/> Students & Courses Management</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input type="text" placeholder="Matric Number" value={manualMatric} onChange={(e) => setManualMatric(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && handleManualOverride(manualMatric)} className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:text-gray-400 placeholder:font-medium uppercase" />
+            <div className="flex gap-2">
+              <button onClick={() => handleManualOverride(manualMatric)} disabled={!manualMatric.trim() || isOverriding} className="whitespace-nowrap bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 disabled:opacity-50 transition-all flex justify-center items-center gap-2 shadow-md">
+                {isOverriding ? <RefreshCw size={16} className="animate-spin" /> : <ShieldCheck size={16} />} {isOverriding ? "Forcing..." : "Force Check-In"}
+              </button>
+              <button onClick={() => handleDeviceReset(manualMatric)} disabled={!manualMatric.trim() || isResetting} className="whitespace-nowrap bg-red-50 text-red-600 px-4 py-3 rounded-xl font-bold text-sm border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
+                {isResetting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />} Wipe
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-3 mb-6">
-          <select
-            aria-label="Select Course for Diagnostics"
-            value={auditCourseCode}
-            onChange={(e) => setAuditCourseCode(e.target.value)}
-            className="md:w-48 bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 cursor-pointer"
-          >
-            {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
-          </select>
-          <div className="flex-1 flex gap-2">
-            <input
-              aria-label="Search Student Matric Number"
-              type="text"
-              placeholder="Search Matric Number (e.g., CSC/2021/001)"
-              value={auditMatric}
-              onChange={(e) => setAuditMatric(e.target.value.toUpperCase())}
-              className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none font-bold text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563EB] uppercase transition-all"
-            />
-            <button
-              onClick={handleStudentAudit}
-              disabled={isAuditing || !auditMatric.trim()}
-              className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md"
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="flex border-b border-gray-100">
+            <button 
+              onClick={() => setLedgerTab('verified')} 
+              className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${ledgerTab === 'verified' ? 'bg-green-50/50 text-green-700 border-b-2 border-green-500' : 'text-gray-500 hover:bg-gray-50'}`}
             >
-              {isAuditing ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-              View Record
+              <CheckCircle size={16} /> Verified ({verifiedLogs.length})
+            </button>
+            <button 
+              onClick={() => setLedgerTab('flagged')} 
+              className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${ledgerTab === 'flagged' ? 'bg-red-50/50 text-red-700 border-b-2 border-red-500' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              <AlertTriangle size={16} /> Review Required ({flaggedLogs.length})
             </button>
           </div>
-        </div>
 
-        {auditRecords && (
-          <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-            <div className="p-4 border-b border-gray-200 bg-white">
-              <h3 className="font-extrabold text-gray-900 text-lg">Audit Trail: {auditMatric}</h3>
-              <p className="text-xs text-gray-500 font-bold">{auditCourseCode} Semester History</p>
-            </div>
-            <div className="max-h-80 overflow-y-auto p-4 space-y-2">
-              {auditRecords.map((record, i) => (
-                <div key={i} className="bg-white border border-gray-100 p-3 rounded-lg flex justify-between items-center shadow-sm">
-                  <div>
-                    <p className="font-bold text-gray-900 text-sm">{record.date}</p>
-                    <div className="mt-1">
-                      {record.status === 'verified' ? (
-                        <span className="text-[10px] uppercase font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
-                          <CheckCircle size={10}/> Attended / Excused
-                        </span>
-                      ) : record.status === 'absent' ? (
-                        <span className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
-                          Absent
-                        </span>
-                      ) : (
-                        <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
-                          <AlertTriangle size={10}/> Flagged
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {record.status !== 'verified' && (
-                    <button
-                      onClick={() => grantMedicalWaiver(record)}
-                      className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-100 transition-colors flex items-center gap-1.5 shadow-sm"
-                    >
-                      <ShieldCheck size={14}/> Grant Medical Waiver
-                    </button>
+          <div className="overflow-x-auto">
+            {ledgerTab === 'verified' ? (
+              <table className="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                  <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                    <th className="px-4 md:px-6 py-4 font-bold">Matric Number</th>
+                    <th className="px-4 md:px-6 py-4 font-bold">Time</th>
+                    <th className="px-4 md:px-6 py-4 font-bold">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {verifiedLogs.length === 0 ? (
+                    <tr><td colSpan={3} className="px-6 py-12 text-center text-gray-400 font-bold">No verified check-ins yet.</td></tr>
+                  ) : (
+                    verifiedLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 md:px-6 py-3 md:py-4 font-bold text-gray-900">
+                          {log.matricNumber}
+                          {log.nickname && <span className="block text-[10px] text-gray-400 font-semibold">({log.nickname})</span>}
+                        </td>
+                        <td className="px-4 md:px-6 py-3 md:py-4 text-gray-500 flex items-center gap-2 text-sm font-medium"><Clock size={14} /> {log.time}</td>
+                        <td className="px-4 md:px-6 py-3 md:py-4">
+                          {log.isBiometric ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200"><CheckCircle size={12} strokeWidth={2.5} /> Biometric</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"><MapPin size={12} strokeWidth={2.5} /> GPS Only</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
                   )}
-                </div>
-              ))}
-            </div>
+                </tbody>
+              </table>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {flaggedLogs.length === 0 ? (
+                  <div className="px-6 py-12 text-center text-gray-400 font-bold">No students require review.</div>
+                ) : (
+                  flaggedLogs.map((log) => (
+                    <div key={log.id} className="p-4 md:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-red-50/30 transition-colors">
+                      <div>
+                        <p className="font-bold text-gray-900 text-lg">
+                          {log.matricNumber}
+                          {log.nickname && <span className="text-sm text-gray-500 font-medium ml-2">({log.nickname})</span>}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] uppercase font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            {log.status === 'pending_override' ? <Hand size={10} /> : <AlertTriangle size={10} />}
+                            {log.status === 'pending_override' ? 'Raised Hand' : 'Flagged'}
+                          </span>
+                          <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                            <Clock size={12} /> {log.time}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 font-medium mt-2">
+                          <strong>Reason:</strong> {log.reason || 'Biometric skipped or location anomaly'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleManualOverride(log.matricNumber)}
+                        className="whitespace-nowrap bg-white border border-red-200 text-red-700 px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                      >
+                        <ShieldCheck size={16} /> Approve
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      {/* SECTION 3: HARDWARE SECURITY */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-200">
-        <div className="flex items-center gap-2 mb-4 border-b border-red-100 pb-3">
-          <Fingerprint className="text-red-500" size={20}/>
-          <h2 className="text-lg font-bold text-red-700">Wipe Device Lock</h2>
-        </div>
-        <p className="text-sm text-gray-500 mb-4">
-          Use this only if a student lost their phone and needs to register biometrics on a new device. Their attendance history will remain intact.
-        </p>
-
-        <div className="flex max-w-lg gap-2">
-          <input
-            aria-label="Student Matric Number to Wipe Device"
-            type="text"
-            placeholder="Matric Number"
-            value={wipeMatric}
-            onChange={(e) => setWipeMatric(e.target.value.toUpperCase())}
-            className="w-full bg-red-50/50 border border-red-100 p-3 rounded-xl outline-none font-bold text-red-900 placeholder:text-red-300 focus:ring-2 focus:ring-red-500 uppercase transition-all"
-          />
-          <button
-            onClick={handleDeviceReset}
-            disabled={isWiping || !wipeMatric.trim()}
-            className="bg-red-50 text-red-600 border border-red-200 px-8 py-3 rounded-xl font-bold hover:bg-red-100 disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
-          >
-            {isWiping ? <RefreshCw size={18} className="animate-spin" /> : <Trash2 size={18} />}
-            Wipe Device
-          </button>
         </div>
       </div>
 
       <ConfirmModal config={confirm.config} onClose={confirm.close} />
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
