@@ -282,16 +282,24 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const options = await genRes.json();
       if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
 
+      const hardenedOptions = {
+        ...options,
+        authenticatorSelection: {
+          ...options.authenticatorSelection,
+          authenticatorAttachment: 'platform' as const,
+          userVerification: 'required' as const,
+          residentKey: 'required' as const,
+        },
+        excludeCredentials: [],
+      };
+
       let attResp;
       try {
-        attResp = await startRegistration(options);
+        attResp = await startRegistration(hardenedOptions);
       } catch (err) {
         const name = err instanceof Error ? err.name : '';
         if (name === 'NotAllowedError') {
           throw new Error("Passkey setup was cancelled or timed out. Tap the button again and choose 'Allow' when prompted.");
-        }
-        if (name === 'InvalidStateError') {
-          throw new Error("This phone already has a passkey for CampusCheck. Ask your lecturer to reset your device.");
         }
         if (name === 'NotSupportedError') {
           throw new Error("This browser doesn't support passkeys. Open the link in Chrome (Android) or Safari (iPhone).");
@@ -316,9 +324,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       setErrorMessage(msg);
       setStatus('failed');
     }
-  };
-
-  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
+  };  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
       let fingerprint = fingerprintRef.current;
       if (!fingerprint) {
@@ -642,6 +648,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-800"><ShieldCheck size={32} className="text-[#2563EB] dark:text-blue-400" /></div>
             <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Hardware Setup</h3>
             <p className="text-gray-600 dark:text-gray-400 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900 dark:text-white">{matricNumber}</span> to prevent proxy attendance.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Don&apos;t have a screen lock? Your phone will ask you to set a PIN or pattern first. This is a one-time security step.</p>
+            
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
             <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Cancel</button>
           </div>
@@ -668,7 +676,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <div className="flex items-center gap-2 mt-3 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800"><Signal size={14} className="text-[#2563EB] dark:text-blue-400" /><span className="text-xs font-bold text-[#2563EB] dark:text-blue-400">±{liveAccuracy}m accuracy</span></div>
             )}
           </div>
-        )}        {status === 'success' && (
+        )}
+
+        {status === 'success' && (
           <div className="py-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <CheckCircle className="w-20 h-20 text-green-500 dark:text-green-400 mx-auto mb-4" />
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Verified!</h3>
