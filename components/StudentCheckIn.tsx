@@ -11,6 +11,7 @@ import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { getStudentHeaders } from '@/utils/api-client';
+import { logger } from '@/utils/logger';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -170,29 +171,30 @@ export default function StudentCheckIn({ sessionId }: Props) {
       try {
         const fp = await generateDeviceFingerprint();
         if (!cancelled) fingerprintRef.current = fp.hash;
-      } catch {}
+      } catch (err) {
+        logger.warn('Fingerprint generation failed', err);
+      }
     }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-        const fetchMeta = async () => {
+    const fetchMeta = async () => {
       try {
-        // NEW: Pass the student token so we can read the session start time
-                const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
+        const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`/api/dashboard-data?sessionId=${sessionId}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
-      } catch {}
+      } catch (err) {
+        logger.warn('Failed to fetch session metadata', err);
+      }
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => { cancelled = true; clearTimeout(id); };
-  }, [sessionId]);
-
-  const syncOfflineQueue = useCallback(async () => {
+  }, [sessionId]);  const syncOfflineQueue = useCallback(async () => {
     const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
     if (queue.length === 0) return;
     setStatus('syncing');
@@ -397,7 +399,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           });
           const verifyResult = await verifyRes.json();
           
-          // NEW: Save token on success
           if (verifyResult.verified) {
             verificationMethod = 'biometric';
             if (verifyResult.token) {
@@ -496,7 +497,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsAppealing(true);
     setErrorMessage('');
     try {
-      // NEW: Attach the token header
       const headers = getStudentHeaders();
       const response = await fetch('/api/request-override', {
         method: 'POST', headers,
@@ -522,7 +522,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     setIsSubmittingRating(true);
     try {
       if (!skip) {
-        // NEW: Attach the token header
         const headers = getStudentHeaders();
         await fetch('/api/rate-session', {
           method: 'POST', headers,

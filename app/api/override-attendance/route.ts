@@ -22,6 +22,19 @@ export async function POST(request: Request) {
     if (!course) return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
 
     const cleanMatric = String(rawMatric).toUpperCase().trim();
+
+    // NEW: Verify the student is actually enrolled in this course
+    const { data: enrollment } = await supabase
+      .from('enrollments')
+      .select('id')
+      .eq('course_id', course.id)
+      .eq('matric_number', cleanMatric)
+      .maybeSingle();
+
+    if (!enrollment) {
+      return NextResponse.json({ message: "Student is not enrolled in this course." }, { status: 403 });
+    }
+
     const overrideTimestamp = new Date().toISOString();
 
     const { data: existingLog } = await supabase

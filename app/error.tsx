@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { AlertTriangle, RefreshCw, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import * as Sentry from "@sentry/nextjs"; // NEW
 
 export default function GlobalError({
   error,
@@ -13,9 +14,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log to your error tracker here (Sentry, etc.) once you add one
-     
-    console.error('Unhandled app error:', error);
+    // NEW: Send the crash to Sentry
+    Sentry.captureException(error);
   }, [error]);
 
   return (
