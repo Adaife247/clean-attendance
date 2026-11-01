@@ -141,6 +141,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
+    // ─── CRITICAL SECURITY FIX: REJECT SKIPPED BIOMETRICS ───
+    // We only allow 'biometric' (successful scan) or 'ios_web' (intentional fallback for iPhone Chrome).
+    // Anything else (e.g. 'skipped') means a hacker tampered with the request or the user cancelled.
+    if (verificationMethod !== 'biometric' && verificationMethod !== 'ios_web') {
+      return NextResponse.json({
+        status: 'failed',
+        message: "Biometric verification is required. Tap 'Submit Attendance' again and scan your fingerprint/FaceID."
+      }, { status: 403 });
+    }
+
     let bestDistance = Infinity;
     let bestAccuracy: number | null = null;
     for (const ping of validPings) {
@@ -170,8 +180,8 @@ export async function POST(request: Request) {
         finalStatus = 'verified';
         responseMessage = isOnSameNetwork
           ? "Verified via campus Wi-Fi."
-          : (verificationMethod === 'skipped'
-              ? "Verified via GPS (biometrics skipped)."
+          : (verificationMethod === 'ios_web'
+              ? "Verified via GPS (iOS fallback)."
               : "Verified.");
       }
     } else if (bestDistance > hardBlockRadius) {
@@ -194,7 +204,6 @@ export async function POST(request: Request) {
       isIOS,
     });
 
-    // NEW: Use upsert to prevent race conditions
     const { error: upsertError } = await supabase
       .from('attendance_logs')
       .upsert({

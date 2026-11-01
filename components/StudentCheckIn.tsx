@@ -420,11 +420,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
           }
         }
       } catch (error) {
-        console.warn("Biometric step failed, continuing with GPS only:", error);
-        verificationMethod = 'skipped';
+        // THE FIX: Only allow the iOS fallback. Otherwise, hard-fail.
+        if (skipWebAuthn) {
+          console.log("iOS non-Safari detected. Falling back to GPS-only.");
+          verificationMethod = 'ios_web';
+        } else {
+          console.error("Biometric verification failed:", error);
+          setErrorMessage("Biometric verification failed or was cancelled. You must scan your fingerprint/FaceID to check in.");
+          setStatus('failed');
+          return; // Stop here. Do not proceed to GPS.
+        }
       }
     } else {
       verificationMethod = 'ios_web';
+    }
+
+    // Sanity check: If somehow we got here with 'skipped', block it.
+    if (verificationMethod === 'skipped') {
+      setErrorMessage("Biometric verification is required. If your phone doesn't support passkeys, ask your lecturer to manually check you in.");
+      setStatus('failed');
+      return;
     }
 
     if (!navigator.geolocation) {
