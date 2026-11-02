@@ -68,7 +68,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
-  const [isIosFallback, setIsIosFallback] = useState(false);
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
   const [inAppBrowser, setInAppBrowser] = useState(false);
 
@@ -106,14 +105,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  };
-
-  const isIosNonSafari = () => {
-    if (typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isNotSafari = /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
-    return isIOS && isNotSafari;
   };
 
   const checkPermissionFromGesture = useCallback(() => {
@@ -205,11 +196,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     for (const item of queue) {
       try {
+        const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
         const res = await fetch('/api/verify-attendance', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers,
           body: JSON.stringify({
             sessionId: item.session,
-            matricNumber: item.matric,
             telemetry: item.telemetry,
             deviceFingerprint: item.fingerprint,
             verificationMethod: item.verificationMethod,
@@ -335,11 +329,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
         }
       }
 
+      // Get the JWT token from session storage
+      const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/verify-attendance', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers,
         body: JSON.stringify({
           sessionId,
-          matricNumber,
           telemetry: gpsTelemetry,
           deviceFingerprint: fingerprint || 'unknown',
           verificationMethod,
@@ -387,60 +387,40 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     checkPermissionFromGesture();
 
-    let verificationMethod = 'skipped';
-
-    const skipWebAuthn = isIosNonSafari();
-    if (skipWebAuthn) setIsIosFallback(true);
-
-    if (!skipWebAuthn) {
-      try {
-        const genRes = await fetch('/api/webauthn/auth/generate', {
+    // Enforce Biometrics. No fallbacks.
+    try {
+      const genRes = await fetch('/api/webauthn/auth/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matricNumber })
+      });
+      if (genRes.status === 404) {
+        setErrorMessage("You need to set up your device first. Refresh the page to start onboarding.");
+        setStatus('failed');
+        return;
+      } else {
+        const options = await genRes.json();
+        if (options.error) throw new Error(options.message || options.error);
+        const asseResp = await startAuthentication(options);
+        const verifyRes = await fetch('/api/webauthn/auth/verify', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ matricNumber })
+          body: JSON.stringify({ matricNumber, authResponse: asseResp })
         });
-        if (genRes.status === 404) {
-          verificationMethod = 'skipped';
+        const verifyResult = await verifyRes.json();
+        
+        if (verifyResult.verified && verifyResult.token) {
+          safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
         } else {
-          const options = await genRes.json();
-          if (options.error) throw new Error(options.message || options.error);
-          const asseResp = await startAuthentication(options);
-          const verifyRes = await fetch('/api/webauthn/auth/verify', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ matricNumber, authResponse: asseResp })
-          });
-          const verifyResult = await verifyRes.json();
-          
-          if (verifyResult.verified) {
-            verificationMethod = 'biometric';
-            if (verifyResult.token) {
-              safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
-            }
-          } else {
-            throw new Error("Biometric verification failed.");
-          }
-        }
-      } catch (error) {
-        // THE FIX: Only allow the iOS fallback. Otherwise, hard-fail.
-        if (skipWebAuthn) {
-          console.log("iOS non-Safari detected. Falling back to GPS-only.");
-          verificationMethod = 'ios_web';
-        } else {
-          console.error("Biometric verification failed:", error);
-          setErrorMessage("Biometric verification failed or was cancelled. You must scan your fingerprint/FaceID to check in.");
-          setStatus('failed');
-          return; // Stop here. Do not proceed to GPS.
+          throw new Error("Biometric verification failed.");
         }
       }
-    } else {
-      verificationMethod = 'ios_web';
+    } catch (error) {
+      console.error("Biometric verification failed:", error);
+      setErrorMessage("Biometric verification failed or was cancelled. You must scan your fingerprint/FaceID to check in.");
+      setStatus('failed');
+      return; // Stop here. Do not proceed to GPS.
     }
 
-    // Sanity check: If somehow we got here with 'skipped', block it.
-    if (verificationMethod === 'skipped') {
-      setErrorMessage("Biometric verification is required. If your phone doesn't support passkeys, ask your lecturer to manually check you in.");
-      setStatus('failed');
-      return;
-    }
+    const verificationMethod = 'biometric';
 
     if (!navigator.geolocation) {
       setErrorMessage("This browser doesn't support location. Open the link in Chrome or Safari.");
@@ -699,9 +679,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Verified!</h3>
             <p className="text-green-700 dark:text-green-400 font-bold mt-2 bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100 dark:border-green-800">{matricNumber}</p>
             <p className="text-gray-500 dark:text-gray-400 mt-4 text-sm font-medium">Attendance recorded.</p>
-            {isIosFallback && (
-              <p className="text-xs text-blue-600 dark:text-blue-400 font-bold mt-2">Note: biometrics weren&apos;t used on this browser. Verified via GPS.</p>
-            )}
 
             <div className="mt-8 space-y-3">
               <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">

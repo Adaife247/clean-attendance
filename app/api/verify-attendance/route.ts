@@ -2,7 +2,14 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
-import { RATE_LIMIT_DEFAULTS, GEOFENCE_RADIUS_METERS, GEOFENCE_HARD_BLOCK_METERS } from '@/utils/constants';
+import { 
+  RATE_LIMIT_DEFAULTS, 
+  GEOFENCE_RADIUS_METERS, 
+  GEOFENCE_INDOOR_RADIUS_METERS, 
+  GPS_WEAK_SIGNAL_THRESHOLD,
+  GEOFENCE_HARD_BLOCK_METERS
+} from '@/utils/constants';
+import { verifyStudentToken } from '@/utils/student-auth';
 
 interface Telemetry {
   lat: number;
@@ -60,16 +67,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { sessionId, matricNumber, telemetry, deviceFingerprint, verificationMethod, userAgent } = body;
+    // NEW: Require the student JWT (which contains the matric + credentialId)
+    const auth = verifyStudentToken(request);
+    if (auth.error) return auth.error;
 
-    if (!matricNumber || !sessionId) {
+    const body = await request.json();
+    const { sessionId, telemetry, deviceFingerprint, verificationMethod, userAgent } = body;
+
+    // Trust the matric from the token, not the body
+    const cleanMatric = auth.matric!;
+    const credentialId = auth.credentialId!;
+
+    if (!sessionId) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(userAgent || '');
-    const cleanMatric = matricNumber.toUpperCase().trim();
+    // CRITICAL: Enforce biometrics. No fallbacks.
+    if (verificationMethod !== 'biometric') {
+      return NextResponse.json({
+        status: 'failed',
+        message: "Biometric verification is required to check in. If your phone doesn't support passkeys, ask your lecturer to manually check you in."
+      }, { status: 403 });
+    }
 
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent || '');
     const validPings = getValidPings(telemetry);
 
     if (validPings.length === 0) {
@@ -128,8 +149,26 @@ export async function POST(request: Request) {
         status: 'failed',
         message: `You are not registered for ${session.course_code}. Contact your lecturer.`
       }, { status: 403 });
+    }    // ─── CRITICAL SECURITY FIX: ONE CREDENTIAL, ONE ACCOUNT ───
+    // Check if this credentialId has already been used for a different student today.
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const { data: todayUsage } = await supabase
+      .from('attendance_logs')
+      .select('matric_number')
+      .eq('device_hash', credentialId) // We store credentialId in device_hash
+      .gte('check_in_time', startOfToday.toISOString())
+      .neq('matric_number', cleanMatric);
+
+    if (todayUsage && todayUsage.length > 0) {
+      return NextResponse.json({
+        status: 'failed',
+        message: "This phone is already linked to another student for today. You cannot check in for a friend."
+      }, { status: 403 });
     }
 
+    // Check if this student already has a log for this session
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id, status')
@@ -141,16 +180,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
-    // ─── CRITICAL SECURITY FIX: REJECT SKIPPED BIOMETRICS ───
-    // We only allow 'biometric' (successful scan) or 'ios_web' (intentional fallback for iPhone Chrome).
-    // Anything else (e.g. 'skipped') means a hacker tampered with the request or the user cancelled.
-    if (verificationMethod !== 'biometric' && verificationMethod !== 'ios_web') {
-      return NextResponse.json({
-        status: 'failed',
-        message: "Biometric verification is required. Tap 'Submit Attendance' again and scan your fingerprint/FaceID."
-      }, { status: 403 });
-    }
-
+    // ─── DYNAMIC GPS RADIUS ───
     let bestDistance = Infinity;
     let bestAccuracy: number | null = null;
     for (const ping of validPings) {
@@ -161,12 +191,12 @@ export async function POST(request: Request) {
       }
     }
 
-    const isWeakSignal = bestAccuracy !== null && bestAccuracy > 100;
-    const allowedRadius = isWeakSignal ? 500 : GEOFENCE_RADIUS_METERS;
-    const hardBlockRadius = isWeakSignal ? 1000 : GEOFENCE_HARD_BLOCK_METERS;
+    // If accuracy is weak (e.g. indoors), expand the radius.
+    const isWeakSignal = bestAccuracy === null || bestAccuracy > GPS_WEAK_SIGNAL_THRESHOLD;
+    const allowedRadius = isWeakSignal ? GEOFENCE_INDOOR_RADIUS_METERS : GEOFENCE_RADIUS_METERS;
+    const hardBlockRadius = isWeakSignal ? (GEOFENCE_INDOOR_RADIUS_METERS + 500) : GEOFENCE_HARD_BLOCK_METERS;
 
     const spoofSuspected = detectLikelySpoof(validPings);
-
     const isOnSameNetwork = session.anchor_ip && session.anchor_ip === ip;
 
     let finalStatus = 'absent';
@@ -180,9 +210,7 @@ export async function POST(request: Request) {
         finalStatus = 'verified';
         responseMessage = isOnSameNetwork
           ? "Verified via campus Wi-Fi."
-          : (verificationMethod === 'ios_web'
-              ? "Verified via GPS (iOS fallback)."
-              : "Verified.");
+          : "Verified via GPS.";
       }
     } else if (bestDistance > hardBlockRadius) {
       finalStatus = 'flagged';
@@ -204,6 +232,8 @@ export async function POST(request: Request) {
       isIOS,
     });
 
+    // ─── UPSERT WITH CREDENTIAL ID ───
+    // We store the credentialId in device_hash. This is what enforces the proxy rule.
     const { error: upsertError } = await supabase
       .from('attendance_logs')
       .upsert({
@@ -211,7 +241,7 @@ export async function POST(request: Request) {
         matric_number: cleanMatric,
         status: finalStatus,
         device_info: deviceInfoPayload,
-        device_hash: deviceFingerprint || 'unknown-hardware',
+        device_hash: credentialId, // Store the credentialId, not the fingerprint
       }, { 
         onConflict: 'session_id,matric_number',
         ignoreDuplicates: false 

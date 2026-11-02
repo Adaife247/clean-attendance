@@ -4,7 +4,7 @@ import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint, BellRing
+  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint, BellRing, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
@@ -14,6 +14,7 @@ import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
 import { usePushNotifications } from '@/utils/usePushNotifications';
 import PWAInstaller from '@/components/PWAInstaller';
 import { getStudentHeaders } from '@/utils/api-client';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface CourseRecord {
   course_code: string;
@@ -43,19 +44,17 @@ const POLL_INTERVAL_MS = 15000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
+// Simplified Tabs (Removed "Records" and "Enroll")
 const TABS = [
-  { id: 'dashboard' as const, label: 'Status',   Icon: Zap },
-  { id: 'records'   as const, label: 'Records',  Icon: FileText },
-  { id: 'register'  as const, label: 'Enroll',   Icon: Plus },
-  { id: 'feed'      as const, label: 'Feed',     Icon: Megaphone },
-  { id: 'rep'       as const, label: 'Rep Desk', Icon: BookOpen },
+  { id: 'dashboard' as const, label: 'Dashboard', Icon: Zap },
+  { id: 'feed'      as const, label: 'Feed',      Icon: Megaphone },
+  { id: 'rep'       as const, label: 'Rep Desk',  Icon: BookOpen },
 ];
 
 type UnlockState = 'idle' | 'checking' | 'not_enrolled' | 'needs_setup' | 'authenticating' | 'unlocked';
 
 export default function StudentPortal() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'records' | 'feed' | 'register' | 'rep'>('dashboard');
-  
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'feed' | 'rep'>('dashboard');
   const [matricNumber, setMatricNumber] = useState('');
   const [studentDept, setStudentDept] = useState('');
   const [studentLevel, setStudentLevel] = useState('');
@@ -79,6 +78,7 @@ export default function StudentPortal() {
   
   const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
   const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
 
   const [repCourseId, setRepCourseId] = useState('');
   const [repBatteryMatric, setRepBatteryMatric] = useState('');
@@ -516,11 +516,11 @@ export default function StudentPortal() {
   }, [studentDept, studentLevel, matricNumber]);
 
   useEffect(() => {
-    if (activeTab === 'register') {
+    if (showEnrollModal) {
       const id = setTimeout(() => fetchAvailableCourses(), 0);
       return () => clearTimeout(id);
     }
-  }, [activeTab, fetchAvailableCourses]);
+  }, [showEnrollModal, fetchAvailableCourses]);
 
   const handleEnroll = async (courseId: string, courseCode: string) => {
     setIsEnrolling(courseId);
@@ -532,7 +532,7 @@ export default function StudentPortal() {
       if (error) throw error;
       alert(`Successfully enrolled in ${courseCode}!`);
       handleVerifyAndFetch();
-      setActiveTab('dashboard');
+      setShowEnrollModal(false);
     } catch {
       alert("Failed to enroll. Please try again.");
     } finally {
@@ -692,9 +692,7 @@ export default function StudentPortal() {
     return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700 dark:text-red-400', bg: 'bg-red-50/50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' };
   };
 
-  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
-
-  const renderUnlockForm = () => {
+  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);  const renderUnlockForm = () => {
     if (unlockState === 'not_enrolled') {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
@@ -788,6 +786,12 @@ export default function StudentPortal() {
           <Lock size={20} /> Unlock Portal
         </button>
 
+        <div className="mt-6 text-center">
+          <Link href="/onboard" className="text-sm font-bold text-[#2563EB] dark:text-blue-400 hover:underline">
+            First time? Set up your device here.
+          </Link>
+        </div>
+
         {unlockError && (
           <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800 text-center animate-in fade-in">
             <p className="text-red-700 dark:text-red-400 font-bold text-sm">{unlockError}</p>
@@ -795,7 +799,9 @@ export default function StudentPortal() {
         )}
       </>
     );
-  };  return (
+  };
+
+  return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -804,18 +810,21 @@ export default function StudentPortal() {
         <div className="text-center mb-6 flex flex-col items-center justify-center animate-in fade-in slide-in-from-top-4 relative">
           
           {records && (
-            <button
-              onClick={() => setActiveTab('feed')}
-              aria-label={unreadCount > 0 ? `${unreadCount} unread updates` : 'Open updates feed'}
-              className="absolute top-0 right-0 w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
-            >
-              <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB] dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-gray-900 animate-in zoom-in duration-200">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
+            <div className="absolute top-0 right-0 flex items-center gap-2">
+              <ThemeToggle />
+              <button
+                onClick={() => setActiveTab('feed')}
+                aria-label={unreadCount > 0 ? `${unreadCount} unread updates` : 'Open updates feed'}
+                className="relative w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
+              >
+                <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB] dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-gray-900 animate-in zoom-in duration-200">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
           )}
 
           <div className="bg-[#2563EB] w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4 relative overflow-hidden">
@@ -950,13 +959,19 @@ export default function StudentPortal() {
                     )}
                   </div>
 
+                  {/* NEW: Enroll Button */}
+                  <div className="flex justify-end">
+                    <button onClick={() => setShowEnrollModal(true)} className="text-xs font-bold text-[#2563EB] dark:text-blue-400 flex items-center gap-1 hover:underline">
+                      <Plus size={14} /> Enroll in a new course
+                    </button>
+                  </div>
+
                   {records.length === 0 ? (
                     <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3 transition-colors">
                       <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
                         <BookOpen size={32} className="text-gray-400 dark:text-gray-500" />
                       </div>
                       <p className="text-base font-bold text-gray-600 dark:text-gray-300">You have no courses yet.</p>
-                      <button onClick={() => setActiveTab('register')} className="bg-[#2563EB] text-white font-bold text-sm px-6 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all">Enroll in a Course</button>
                     </div>
                   ) : (
                     records.map((record) => {
@@ -1002,78 +1017,33 @@ export default function StudentPortal() {
                       );
                     })
                   )}
-                </div>
-              )}
 
-              {activeTab === 'records' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <FileText size={18} className="text-gray-400 dark:text-gray-500" />
-                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Attendance History</h3>
-                  </div>
-                  <div className="space-y-3 max-h-100 overflow-y-auto pr-1">
-                    {history?.map((h, i) => (
-                      <div key={i} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white text-sm">{h.course_code}</p>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{new Date(h.created_at).toLocaleString()}</p>
-                        </div>
-                        {h.status === 'verified' ? (
-                          <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
-                        ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                          <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
-                        ) : h.status === 'blocked' ? (
-                          <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
-                        ) : (
-                          <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'register' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Plus size={18} className="text-[#2563EB] dark:text-blue-400" />
-                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Enroll in Class</h3>
-                  </div>
-
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 mb-4 flex items-start gap-2 transition-colors">
-                    <AlertTriangle size={16} className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                      <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
-                    </p>
-                  </div>
-                  
-                  {(!studentDept || !studentLevel) ? (
-                    <div className="text-center p-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-                      <p className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Please set your Department and Level in the Shield tab first.</p>
+                  {/* NEW: Merged Records Section */}
+                  <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2 mb-4">
+                      <FileText size={18} className="text-gray-400 dark:text-gray-500" />
+                      <h3 className="font-bold text-gray-800 dark:text-white text-base">Attendance History</h3>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {availableCourses.length === 0 ? (
-                        <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No new courses available for {studentDept} {studentLevel}.</p>
-                      ) : (
-                        availableCourses.map(course => (
-                          <div key={course.id} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
-                            <div>
-                              <p className="font-bold text-gray-900 dark:text-white text-sm">{course.course_code}</p>
-                              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{course.department} • Level {course.level}</p>
-                            </div>
-                            <button 
-                              onClick={() => handleEnroll(course.id, course.course_code)}
-                              disabled={isEnrolling === course.id}
-                              className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
-                            >
-                              {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
-                            </button>
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {history?.map((h, i) => (
+                        <div key={i} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
+                          <div>
+                            <p className="font-bold text-gray-900 dark:text-white text-sm">{h.course_code}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{new Date(h.created_at).toLocaleString()}</p>
                           </div>
-                        ))
-                      )}
+                          {h.status === 'verified' ? (
+                            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
+                          ) : h.status === 'flagged' || h.status === 'pending_override' ? (
+                            <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
+                          ) : h.status === 'blocked' ? (
+                            <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
+                          ) : (
+                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -1199,7 +1169,60 @@ export default function StudentPortal() {
           </div>
         </div>
       </div>
-      
+
+      {/* NEW: Enrollment Modal */}
+      {showEnrollModal && (
+        <div className="fixed inset-0 bg-gray-900/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-colors">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 w-full max-w-md max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-3xl">
+              <div>
+                <h2 className="text-xl font-black text-gray-900 dark:text-white">Enroll in Class</h2>
+                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Link to a lecturer&apos;s roster</p>
+              </div>
+              <button onClick={() => setShowEnrollModal(false)} className="p-2 bg-white dark:bg-gray-800 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-200 dark:border-gray-700 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-start gap-2 transition-colors">
+                <AlertTriangle size={16} className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                  <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
+                </p>
+              </div>
+              
+              {(!studentDept || !studentLevel) ? (
+                <div className="text-center p-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+                  <p className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Please set your Department and Level in the Dashboard first.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {availableCourses.length === 0 ? (
+                    <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No new courses available for {studentDept} {studentLevel}.</p>
+                  ) : (
+                    availableCourses.map(course => (
+                      <div key={course.id} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
+                        <div>
+                          <p className="font-bold text-gray-900 dark:text-white text-sm">{course.course_code}</p>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{course.department} • Level {course.level}</p>
+                        </div>
+                        <button 
+                          onClick={() => handleEnroll(course.id, course.course_code)}
+                          disabled={isEnrolling === course.id}
+                          className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <PWAInstaller />
       <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>

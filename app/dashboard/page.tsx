@@ -703,7 +703,9 @@ export default function LecturerDashboard() {
         <ConfirmModal config={confirm.config} onClose={confirm.close} />
       </div>
     );
-  }  const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
+  }
+
+  const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
   const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
 
   return (

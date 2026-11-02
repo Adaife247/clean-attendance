@@ -47,12 +47,10 @@ export async function POST(request: Request) {
       });
 
       if (verification.verified) {
-        // NEW: Counter Clone Check
+        // Counter Clone Check
         const newCounter = verification.authenticationInfo.newCounter;
         const oldCounter = Number(device.counter);
         
-        // 0 means the authenticator doesn't support counters (common on some iPhones). 
-        // If it does support counters, it must be strictly greater than the old one.
         if (newCounter > 0 && newCounter <= oldCounter) {
            return NextResponse.json({ error: "Security error: Hardware counter mismatch (possible cloned device)." }, { status: 401 });
         }
@@ -64,7 +62,8 @@ export async function POST(request: Request) {
 
         cookieStore.delete('webauthn_challenge');
         
-        const token = signStudentToken(cleanMatric);
+        // NEW: Sign the JWT with BOTH the matric number and the credentialId
+        const token = signStudentToken(cleanMatric, device.credential_id);
         
         return NextResponse.json({ verified: true, token });
       }

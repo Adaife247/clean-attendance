@@ -10,7 +10,6 @@ import { RATE_LIMIT_DEFAULTS } from '@/utils/constants';
 
 interface ExistingDevice {
   credential_id: string;
-  transports: string[] | null;
 }
 
 export async function POST(request: Request) {
@@ -34,6 +33,7 @@ export async function POST(request: Request) {
 
     const cleanMatric = matricNumber.toUpperCase().trim();
 
+    // 1. Must be enrolled
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('id')
@@ -50,9 +50,10 @@ export async function POST(request: Request) {
       );
     }
 
+    // 2. Check if this matric already has a registered credential
     const { data: existingDevice } = await supabase
       .from('user_devices')
-      .select('credential_id, transports')
+      .select('credential_id')
       .eq('matric_number', cleanMatric)
       .maybeSingle<ExistingDevice>();
 
@@ -66,6 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // 3. Generate registration options
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
@@ -73,10 +75,12 @@ export async function POST(request: Request) {
       userName: cleanMatric,
       attestationType: 'none',
       authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        residentKey: 'preferred',
-        userVerification: 'preferred',
+        authenticatorAttachment: 'platform', // Force local (fingerprint/PIN), no cloud
+        residentKey: 'required',             // Force device-bound (not synced)
+        userVerification: 'required',        // Force biometric/PIN
       },
+      // NEW: Tell the phone "if you have a credential for THIS RP, don't create a new one"
+      excludeCredentials: [], // We don't know which credential exists on their phone. The server-side check will handle duplicates.
     });
 
     const cookieStore = await cookies();

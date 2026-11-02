@@ -18,8 +18,9 @@ function parseBase64url(str: string): string {
 
 /**
  * Signs a new JWT for a verified student.
+ * Now includes the credentialId to bind the session to the physical device.
  */
-export function signStudentToken(matricNumber: string): string {
+export function signStudentToken(matricNumber: string, credentialId: string): string {
   const secret = getSecret();
   if (!secret) throw new Error("JWT_SECRET environment variable is missing.");
 
@@ -28,6 +29,7 @@ export function signStudentToken(matricNumber: string): string {
   
   const payload = base64url(JSON.stringify({
     matric: matricNumber.toUpperCase().trim(),
+    credentialId: credentialId,
     iss: STUDENT_JWT_ISSUER,
     aud: STUDENT_JWT_AUDIENCE,
     exp
@@ -43,6 +45,7 @@ export function signStudentToken(matricNumber: string): string {
 
 export interface StudentAuthResult {
   matric?: string;
+  credentialId?: string;
   error?: NextResponse;
 }
 
@@ -99,7 +102,15 @@ export function verifyStudentToken(request: Request): StudentAuthResult {
       return { error: NextResponse.json({ error: 'Unauthorized: Missing matric' }, { status: 401 }) };
     }
 
-    return { matric: payload.matric };
+    // NEW: Require credentialId to enforce device binding
+    if (!payload.credentialId) {
+      return { error: NextResponse.json({ error: 'Unauthorized: Missing device credential' }, { status: 401 }) };
+    }
+
+    return { 
+      matric: payload.matric,
+      credentialId: payload.credentialId
+    };
   } catch {
     return { error: NextResponse.json({ error: 'Unauthorized: Invalid payload' }, { status: 401 }) };
   }
