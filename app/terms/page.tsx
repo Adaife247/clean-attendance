@@ -3,6 +3,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export const metadata = {
   title: 'Terms of Service — CampusCheck',
@@ -11,23 +12,28 @@ export const metadata = {
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 font-sans">
-      <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-gray-200 shadow-sm p-6 md:p-10">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-8 font-sans transition-colors duration-300">
+      
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle />
+      </div>
+
+      <div className="max-w-3xl mx-auto bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm p-6 md:p-10 transition-colors duration-300">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors mb-6"
+          className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
         >
           <ArrowLeft size={16} /> Back to home
         </Link>
 
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Terms of Service</h1>
-        <p className="text-sm text-gray-500 font-medium mb-8">
+        <h1 className="text-3xl font-black text-gray-900 dark:text-white mb-2">Terms of Service</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8">
           Last updated: {new Date().toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
 
-        <div className="space-y-6 text-gray-700 leading-relaxed text-sm">
+        <div className="space-y-6 text-gray-700 dark:text-gray-300 leading-relaxed text-sm">
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">1. Acceptance</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">1. Acceptance</h2>
             <p>
               By using CampusCheck you agree to these terms. If you do not
               agree, do not use the service.
@@ -35,17 +41,17 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">2. Eligibility</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">2. Eligibility</h2>
             <p>
               CampusCheck is available only to students and lecturers of
-              [EDIT: YOUR INSTITUTION]. Accounts must be linked to a valid
+              <strong className="text-gray-900 dark:text-white"> [Your University Name]</strong>. Accounts must be linked to a valid
               matriculation number.
             </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">3. Acceptable use</h2>
-            <p>You agree <strong>not</strong> to:</p>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">3. Acceptable use</h2>
+            <p>You agree <strong className="text-gray-900 dark:text-white">not</strong> to:</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Attempt to check in for another student.</li>
               <li>Spoof GPS location or tamper with device fingerprints.</li>
@@ -59,7 +65,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">4. Attendance accuracy</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">4. Attendance accuracy</h2>
             <p>
               While we work hard to prevent fraud, no system is perfect.
               Attendance decisions are ultimately made by your lecturer and
@@ -68,7 +74,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">5. Availability</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">5. Availability</h2>
             <p>
               We aim for 99% uptime but do not guarantee it. Downtime may occur
               for maintenance or reasons outside our control.
@@ -76,7 +82,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">6. Liability</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">6. Liability</h2>
             <p>
               CampusCheck is provided &quot;as is&quot; without warranty. To
               the maximum extent permitted by law, we are not liable for
@@ -85,13 +91,12 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 mb-2">7. Contact</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">7. Contact</h2>
             <p>
               Questions? Email{' '}
-              <a href="mailto:[EDIT: SUPPORT EMAIL]" className="text-[#2563EB] underline">
-                [EDIT: SUPPORT EMAIL]
-              </a>
-              .
+              <a href="mailto:support@youruniversity.edu" className="text-[#2563EB] dark:text-blue-400 underline">
+                support@youruniversity.edu
+              </a>.
             </p>
           </section>
         </div>

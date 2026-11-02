@@ -8,16 +8,38 @@ import { rpID, origin } from '@/utils/webauthn';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse } = body;
+    const { matricNumber, authResponse, deviceFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
+
+    if (!deviceFingerprint || deviceFingerprint === 'unknown') {
+      return NextResponse.json({ error: "Device fingerprint missing. Refresh and try again." }, { status: 400 });
+    }
 
     const cookieStore = await cookies();
     const expectedChallenge = cookieStore.get('webauthn_challenge')?.value;
 
     if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
-    // NEW: Check for existing device BEFORE verifying
-    // This catches double-tap race conditions
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // 1. Check if this DEVICE FINGERPRINT was used by another matric TODAY
+    const { data: deviceReuse } = await supabase
+      .from('user_devices')
+      .select('matric_number')
+      .eq('device_hash', deviceFingerprint)
+      .gte('created_at', startOfToday.toISOString())
+      .neq('matric_number', cleanMatric)
+      .limit(1);
+
+    if (deviceReuse && deviceReuse.length > 0) {
+      return NextResponse.json(
+        { error: "This phone has already been used to set up another student's account today. You cannot register multiple students on one phone." },
+        { status: 409 }
+      );
+    }
+
+    // 2. Check if this matric already has a credential
     const { data: existingDevice } = await supabase
       .from('user_devices')
       .select('credential_id')
@@ -37,7 +59,6 @@ export async function POST(request: Request) {
 
     const { credential } = verification.registrationInfo;
 
-    // NEW: If a device already exists and it's a DIFFERENT credential, reject
     if (existingDevice && existingDevice.credential_id !== credential.id) {
       cookieStore.delete('webauthn_challenge');
       return NextResponse.json(
@@ -57,7 +78,7 @@ export async function POST(request: Request) {
         public_key: immuneKey,
         counter: credential.counter,
         transports: credential.transports || [],
-        device_hash: 'webauthn-verified',
+        device_hash: deviceFingerprint,
         created_at: new Date().toISOString()
       }, { onConflict: 'matric_number' });
 

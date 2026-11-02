@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
 import { startRegistration } from '@simplewebauthn/browser';
+import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { ShieldCheck, Mail, User, ArrowRight, Loader2, CheckCircle, AlertTriangle, Fingerprint, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -17,13 +18,25 @@ export default function OnboardPage() {
   
   const [matricNumber, setMatricNumber] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
   
   const [isChecking, setIsChecking] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // If they already have a device anchor, they don't need to onboard
+    const id = setTimeout(async () => {
+      try {
+        const fp = await generateDeviceFingerprint();
+        setFingerprint(fp.hash);
+      } catch (err) {
+        console.warn("Fingerprint generation failed", err);
+      }
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
     const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
     if (existingAnchor) {
       router.push('/portal');
@@ -41,7 +54,6 @@ export default function OnboardPage() {
     setError('');
 
     try {
-      // Check if they are enrolled
       const { data: enrollments, error: enrollError } = await supabase
         .from('enrollments')
         .select('id')
@@ -56,7 +68,6 @@ export default function OnboardPage() {
         return;
       }
 
-      // Check if they already have a device
       const { data: existingDevice } = await supabase
         .from('user_devices')
         .select('credential_id')
@@ -89,20 +100,25 @@ export default function OnboardPage() {
     setError('');
 
     try {
-      // Save the recovery email to student_profiles
-      const { error: profileError } = await supabase
-        .from('student_profiles')
-        .upsert({
-          matric_number: matricNumber,
-          recovery_email: recoveryEmail.trim().toLowerCase(),
-        }, { onConflict: 'matric_number' });
+      const res = await fetch('/api/onboard/save-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matricNumber: matricNumber,
+          recoveryEmail: recoveryEmail.trim()
+        })
+      });
 
-      if (profileError) throw profileError;
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save your email.");
+      }
       
       setStep('passkey');
     } catch (err) {
       console.error(err);
-      setError("Failed to save your email. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to save your email.");
     } finally {
       setIsChecking(false);
     }
@@ -123,7 +139,6 @@ export default function OnboardPage() {
         throw new Error(options.message || options.error || "Server rejected registration.");
       }
 
-      // Force platform authenticator and exclude existing credentials
       const hardenedOptions = {
         ...options,
         authenticatorSelection: {
@@ -151,15 +166,18 @@ export default function OnboardPage() {
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp })
+        body: JSON.stringify({ 
+          matricNumber, 
+          authResponse: attResp,
+          deviceFingerprint: fingerprint || 'unknown'
+        })
       });
       const verifyResult = await verifyRes.json();
 
       if (!verifyResult.verified) {
-        throw new Error("Hardware binding failed. Try again.");
+        throw new Error(verifyResult.error || "Hardware binding failed. Try again.");
       }
 
-      // Save to local storage so the portal knows they are set up
       safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
       safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
       
