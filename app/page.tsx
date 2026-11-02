@@ -20,7 +20,6 @@ function CheckInWrapper() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 font-sans relative overflow-hidden transition-colors duration-300">
         
-        {/* Ambient Background Glows */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -95,7 +94,6 @@ function CheckInWrapper() {
             </Link>
           </div>
 
-          {/* Trust Bar */}
           <div className="mt-16 pt-8 border-t border-gray-200/50 dark:border-gray-800/50 flex flex-wrap justify-center items-center gap-6 sm:gap-10 animate-in fade-in duration-1000">
             <div className="flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400">
               <CheckCircle size={16} className="text-emerald-500" /> NUC Compliant
@@ -112,7 +110,7 @@ function CheckInWrapper() {
           </div>
         </main>
 
-        {/* Comparison Section (Before / After) */}
+        {/* Comparison Section */}
         <section className="max-w-5xl mx-auto px-4 sm:px-6 py-20 relative z-10">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight mb-4">
@@ -183,10 +181,10 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <User size={18} /> For Students
                 </h3>
-                <div className="space-y-8 relative border-l-2 border-blue-100 dark:border-blue-900/50 ml-5 pl-8">
+                <div className="space-y-8 relative ml-4 pl-6 border-l-2 border-blue-100 dark:border-blue-900/50">
                   
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <Fingerprint size={18} />
                     </div>
                     <div>
@@ -195,8 +193,8 @@ function CheckInWrapper() {
                     </div>
                   </div>
 
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <MapPin size={18} />
                     </div>
                     <div>
@@ -205,8 +203,8 @@ function CheckInWrapper() {
                     </div>
                   </div>
 
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <CheckCircle size={18} />
                     </div>
                     <div>
@@ -223,10 +221,10 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
-                <div className="space-y-8 relative border-l-2 border-emerald-100 dark:border-emerald-900/50 ml-5 pl-8">
+                <div className="space-y-8 relative ml-4 pl-6 border-l-2 border-emerald-100 dark:border-emerald-900/50">
                   
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <Zap size={18} />
                     </div>
                     <div>
@@ -235,8 +233,8 @@ function CheckInWrapper() {
                     </div>
                   </div>
 
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <Activity size={18} />
                     </div>
                     <div>
@@ -245,8 +243,8 @@ function CheckInWrapper() {
                     </div>
                   </div>
 
-                  <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-5 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 z-10 shadow-sm">
+                  <div className="relative flex items-start gap-4">
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-950 shadow-sm z-10">
                       <Upload size={18} />
                     </div>
                     <div>
@@ -260,7 +258,9 @@ function CheckInWrapper() {
 
             </div>
           </div>
-        </section>        {/* Features Section */}
+        </section>
+
+        {/* Features Section */}
         <section className="max-w-6xl mx-auto px-4 sm:px-6 py-24 relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight mb-4">
@@ -402,7 +402,6 @@ function CheckInWrapper() {
     );
   }
 
-  // If there IS a session ID, show the Check-In flow
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>

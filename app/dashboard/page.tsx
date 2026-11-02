@@ -8,7 +8,7 @@ import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
-  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen, Search
+  User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, WifiOff, ShieldAlert, BookOpen, Search
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -66,6 +66,10 @@ export default function LecturerDashboard() {
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  // NEW: Network monitoring state
+  const [isOnline, setIsOnline] = useState(true);
+  const [isSlowNetwork, setIsSlowNetwork] = useState(false);
+
   const prewarmWatchRef = useRef<number | null>(null);
   const prewarmPosRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
   const isFetchingRef = useRef(false);
@@ -79,6 +83,45 @@ export default function LecturerDashboard() {
       'Authorization': `Bearer ${session?.access_token || ''}`
     };
   };
+
+  // NEW: Monitor network status and latency
+   // NEW: Monitor network status and latency
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Wrap the initial check in a timeout to satisfy React linter
+    const initCheck = setTimeout(() => {
+      setIsOnline(navigator.onLine);
+    }, 0);
+
+    const checkLatency = async () => {
+      const start = Date.now();
+      try {
+        await fetch('/api/health', { method: 'GET', cache: 'no-store' });
+        const latency = Date.now() - start;
+        // Wrap this in a timeout too
+        setTimeout(() => setIsSlowNetwork(latency > 2000), 0);
+      } catch {
+        setTimeout(() => setIsSlowNetwork(true), 0);
+      }
+    };
+    
+    // Only run the latency check after mount
+    const latencyTimeout = setTimeout(() => {
+      checkLatency();
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearTimeout(initCheck);
+      clearTimeout(latencyTimeout);
+    };
+  }, []);
 
   const clearStaleSession = useCallback((reason?: string) => {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -408,9 +451,7 @@ export default function LecturerDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [activeSessionId, viewMode, fetchDashboardData]);
-
-  const handleManualOverride = async (targetMatric: string) => {
+  }, [activeSessionId, viewMode, fetchDashboardData]);  const handleManualOverride = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || '').trim();
     if (!activeSessionId) return;
     if (!safeMatric) return;
@@ -753,9 +794,19 @@ export default function LecturerDashboard() {
                   </span>
                 )}
                 
-                <span className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-200 dark:border-blue-800 ml-2">
-                  <Wifi size={12} /> Live Sync
-                </span>
+                {!isOnline ? (
+                  <span className="flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-2 py-1 rounded-md border border-red-200 dark:border-red-800 ml-2 animate-pulse">
+                    <WifiOff size={12} /> Connection Lost
+                  </span>
+                ) : isSlowNetwork ? (
+                  <span className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 ml-2">
+                    <Wifi size={12} /> Slow Network
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-200 dark:border-blue-800 ml-2">
+                    <Wifi size={12} /> Live Sync
+                  </span>
+                )}
 
                 {data && (
                   <span className="flex items-center gap-1 text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 ml-2" title="Students are measured against this anchor">
@@ -770,15 +821,20 @@ export default function LecturerDashboard() {
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-6 w-full md:w-auto mt-2 md:mt-0">
-              <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-4 w-full md:w-auto mt-2 md:mt-0">
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <div>
+                  <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
+                </div>
                 <div>
                   <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
                 </div>
                 
-                {/* NEW: Sparkline Chart */}
-                {velocityData.length > 1 && (
+                {/* NEW: Sparkline Chart (Hidden if slow/offline) */}
+                {velocityData.length > 1 && isOnline && !isSlowNetwork && (
                   <div className="w-24 h-10 hidden sm:block" title="Check-in velocity">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={velocityData}>
@@ -795,7 +851,6 @@ export default function LecturerDashboard() {
                   </div>
                 )}
               </div>
-              <ThemeToggle />
               <button onClick={exportLiveCSV} disabled={!data || data.logs.length === 0} className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-colors"><Download size={16} /> Export</button>
             </div>
           </div>
