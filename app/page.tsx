@@ -3,7 +3,7 @@ import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { 
-  ShieldCheck, Loader2, LogIn, Zap, ArrowRight, Lock, Activity, 
+  ShieldCheck, Loader2, LogIn, Zap, Lock, Activity, 
   CheckCircle, XCircle, Fingerprint, MapPin, Upload, Bell, Sparkles, User
 } from 'lucide-react';
 import Link from 'next/link';
@@ -45,8 +45,8 @@ function CheckInWrapper() {
               <Link href="/login" className="text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors px-3 py-2">
                 Faculty Login
               </Link>
-              <Link href="/portal" className="hidden sm:block bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all">
-                Student Portal
+              <Link href="/student-hub" className="hidden sm:block bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all">
+                Student Hub
               </Link>
             </div>
           </div>
@@ -67,12 +67,12 @@ function CheckInWrapper() {
           </h1>
 
           <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 font-medium max-w-2xl mx-auto mb-10 animate-in fade-in slide-in-from-bottom-8">
-            No proxy. No manual roll calls. Just FaceID, GPS verification, and instant analytics for your lecture hall.
+            No proxy. No manual roll calls. Just FaceID, Fingerprint, or PIN, plus GPS verification, and instant analytics for your lecture hall.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-10">
             <Link 
-              href="/portal" 
+              href="/student-hub" 
               onClick={() => setIsNavigating(true)}
               className={`group relative w-full sm:w-auto flex items-center justify-center gap-2 py-4 px-8 rounded-2xl transition-all duration-300 overflow-hidden shadow-[0_10px_30px_rgba(37,99,235,0.3)] hover:shadow-[0_15px_40px_rgba(37,99,235,0.4)] ${isNavigating ? 'bg-blue-400 cursor-not-allowed' : 'bg-[#2563EB] hover:bg-blue-700'}`}
             >
@@ -82,9 +82,9 @@ function CheckInWrapper() {
                 <LogIn size={20} className="text-white" strokeWidth={3} />
               )}
               <span className="font-black text-white text-lg tracking-wide">
-                {isNavigating ? "Entering..." : "Enter Student Portal"}
+                {isNavigating ? "Entering..." : "Enter Student Hub"}
               </span>
-              {!isNavigating && <ArrowRight size={20} className="text-white group-hover:translate-x-1 transition-all" strokeWidth={3} />}
+              {/* FIX: Removed the double arrow */}
             </Link>
 
             <Link 
@@ -129,7 +129,14 @@ function CheckInWrapper() {
                 <XCircle size={24} /> The Old Way
               </h3>
               <ul className="space-y-4">
-                {["Lecturer calls 200 names one by one.", "Students answer 'Present!' for their friends.", "Lecturer wastes 15 minutes of lecture time.", "Paper sheets get lost or damaged.", "Zero data for NUC compliance."].map((item, i) => (
+                {/* FIX: More realistic copy */}
+                {[
+                  "Attendance sheet is passed around the room.",
+                  "Students sign for their friends who are absent.",
+                  "Someone steals the sheet or spills water on it.",
+                  "Lecturer has to manually count the signatures.",
+                  "Zero data for NUC compliance."
+                ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
                     <span className="text-red-400 mt-0.5">✕</span> {item}
                   </li>
@@ -143,7 +150,13 @@ function CheckInWrapper() {
                 <CheckCircle size={24} /> The CampusCheck Way
               </h3>
               <ul className="space-y-4">
-                {["Students scan their FaceID to verify identity.", "GPS ensures they are actually in the hall.", "Attendance takes 30 seconds, not 15 minutes.", "Data is instantly saved to the cloud.", "Automatic NUC compliance reports."].map((item, i) => (
+                {[
+                  "Students scan their FaceID, Fingerprint, or PIN.",
+                  "GPS ensures they are actually in the hall.",
+                  "Attendance takes 30 seconds, not 15 minutes.",
+                  "Data is instantly saved to the cloud.",
+                  "Automatic NUC compliance reports."
+                ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
                     <span className="text-emerald-400 mt-0.5">✓</span> {item}
                   </li>
@@ -172,31 +185,32 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <User size={18} /> For Students
                 </h3>
-                <div className="space-y-8 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-linear-to-b before:from-blue-100 before:via-blue-200 before:to-transparent dark:before:from-blue-900/50 dark:before:via-blue-800/50">
+                {/* FIX: Replaced the broken gradient line with a clean solid border */}
+                <div className="space-y-8 relative border-l-2 border-blue-100 dark:border-blue-900/50 ml-6 pl-6">
                   
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <Fingerprint size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <Fingerprint size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. Set Up Once</h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Link your phone to your matric number using FaceID or Fingerprint. No passwords required.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Link your phone to your matric number using FaceID, Fingerprint, or PIN. No passwords required.</p>
                     </div>
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <MapPin size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <MapPin size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Tap the Link</h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When your lecturer starts a class, a &quot;Live Now&quot; banner appears on your portal. Tap it.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When your lecturer starts a class, a &quot;Live Now&quot; banner appears on your hub. Tap it.</p>
                     </div>
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <CheckCircle size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <CheckCircle size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">3. Verified</h4>
@@ -212,11 +226,12 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
-                <div className="space-y-8 relative before:absolute before:inset-0 before:ml-6 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-linear-to-b before:from-emerald-100 before:via-emerald-200 before:to-transparent dark:before:from-emerald-900/50 dark:before:via-emerald-800/50">
+                {/* FIX: Replaced the broken gradient line with a clean solid border */}
+                <div className="space-y-8 relative border-l-2 border-emerald-100 dark:border-emerald-900/50 ml-6 pl-6">
                   
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <Zap size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <Zap size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. Start Session</h4>
@@ -225,8 +240,8 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <Activity size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <Activity size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Live Radar</h4>
@@ -235,8 +250,8 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm shrink-0 z-10">
-                      <Upload size={20} />
+                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                      <Upload size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">3. Export</h4>
@@ -348,7 +363,7 @@ function CheckInWrapper() {
               <div>
                 <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-sm uppercase tracking-wider">Product</h4>
                 <ul className="space-y-3">
-                  <li><Link href="/portal" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Student Portal</Link></li>
+                  <li><Link href="/student-hub" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Student Hub</Link></li>
                   <li><Link href="/login" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Faculty Login</Link></li>
                   <li><Link href="/onboard" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Set Up Device</Link></li>
                 </ul>
