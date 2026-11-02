@@ -19,6 +19,7 @@ export default function OnboardPage() {
   const [matricNumber, setMatricNumber] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+const [deviceId, setDeviceId] = useState<string | null>(null);
   
   const [isChecking, setIsChecking] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -29,6 +30,7 @@ export default function OnboardPage() {
       try {
         const fp = await generateDeviceFingerprint();
         setFingerprint(fp.hash);
+        setDeviceId(fp.deviceId); // <-- Save the local UUID
       } catch (err) {
         console.warn("Fingerprint generation failed", err);
       }
@@ -164,12 +166,13 @@ export default function OnboardPage() {
         throw err;
       }
 
-      const verifyRes = await fetch('/api/webauthn/register/verify', {
+            const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           matricNumber, 
           authResponse: attResp,
-          deviceFingerprint: fingerprint || 'unknown'
+          deviceFingerprint: fingerprint || 'unknown',
+          deviceId: deviceId || 'unknown' // <-- Send the UUID
         })
       });
       const verifyResult = await verifyRes.json();

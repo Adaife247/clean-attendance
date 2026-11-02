@@ -39,7 +39,6 @@ const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
-// NEW: Use a type for the icon name instead of an emoji string
 function getMeme(minutesLate: number): { title: string; sub: string; iconType: 'zap' | 'check' | 'clock' | 'alert' | 'flame' } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", iconType: 'zap' };
   if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', iconType: 'check' };
@@ -76,6 +75,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const fingerprintRef = useRef<string | null>(null);
+  const deviceIdRef = useRef<string | null>(null); // <-- NEW: Track the local UUID
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -163,7 +163,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = setTimeout(async () => {
       try {
         const fp = await generateDeviceFingerprint();
-        if (!cancelled) fingerprintRef.current = fp.hash;
+        if (!cancelled) {
+          fingerprintRef.current = fp.hash;
+          deviceIdRef.current = fp.deviceId; // <-- Save the UUID
+        }
       } catch (err) {
         logger.warn('Fingerprint generation failed', err);
       }
@@ -303,9 +306,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
         throw err;
       }
 
+      // Wait for the fingerprint to be generated
+      let fp = fingerprintRef.current;
+      let dId = deviceIdRef.current;
+      if (!fp || !dId) {
+        const start = Date.now();
+        while ((!fp || !dId) && Date.now() - start < 3000) {
+          await new Promise(r => setTimeout(r, 100));
+          fp = fingerprintRef.current;
+          dId = deviceIdRef.current;
+        }
+      }
+
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matricNumber, authResponse: attResp })
+        body: JSON.stringify({ 
+          matricNumber, 
+          authResponse: attResp,
+          deviceFingerprint: fp || 'unknown',
+          deviceId: dId || 'unknown' // <-- Send the UUID
+        })
       });
       const verifyResult = await verifyRes.json();
 
@@ -313,7 +333,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
         setStatus('ready');
       } else {
-        throw new Error("Hardware binding failed. Try again.");
+        throw new Error(verifyResult.error || "Hardware binding failed. Try again.");
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to register your biometric device.";
@@ -331,7 +351,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         }
       }
 
-      // Get the JWT token from session storage
       const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) {
@@ -389,7 +408,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     checkPermissionFromGesture();
 
-    // Enforce Biometrics. No fallbacks.
+    let verificationMethod = 'skipped';
+
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -411,6 +431,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         
         if (verifyResult.verified && verifyResult.token) {
           safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
+          verificationMethod = 'biometric';
         } else {
           throw new Error("Biometric verification failed.");
         }
@@ -421,8 +442,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       setStatus('failed');
       return; // Stop here. Do not proceed to GPS.
     }
-
-    const verificationMethod = 'biometric';
 
     if (!navigator.geolocation) {
       setErrorMessage("This browser doesn't support location. Open the link in Chrome or Safari.");
@@ -522,7 +541,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
     } finally {
       setIsAppealing(false);
     }
-  };  const toggleTag = (tag: string) => {
+  };
+
+  const toggleTag = (tag: string) => {
     setRatingTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
@@ -541,7 +562,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
     finally {
       setIsSubmittingRating(false);
-      router.push('/portal');
+      router.push('/student-hub');
     }
   };
 
@@ -686,8 +707,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
                 Rate this Lecture
               </button>
-              <button onClick={() => router.push('/portal')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
-                Return to Portal
+              <button onClick={() => router.push('/student-hub')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+                Return to Student Hub
               </button>
             </div>
           </div>
@@ -695,7 +716,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'rating' && (
           <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors flex flex-col items-center">
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors flex flex-col items-center">
               <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-800">
                 {memeData.meme.iconType === 'zap' && <Zap size={32} className="text-amber-500" />}
                 {memeData.meme.iconType === 'check' && <CheckCircle size={32} className="text-emerald-500" />}
@@ -703,7 +724,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 {memeData.meme.iconType === 'alert' && <AlertTriangle size={32} className="text-orange-500" />}
                 {memeData.meme.iconType === 'flame' && <Flame size={32} className="text-red-500" />}
               </div>
-              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
+              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
               {sessionCreatedAt && (
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
               )}
@@ -746,7 +768,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
           <div className="py-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 px-4 text-center transition-colors">
             <WifiOff className="w-16 h-16 text-[#2563EB] dark:text-blue-400 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-blue-900 dark:text-white">Saved Offline</h3>
-            <p className="text-blue-700 dark:text-blue-300 mt-2 text-sm font-medium leading-relaxed">Network dropped, but GPS was captured. Keep this tab open. It will auto-submit when the internet returns.</p>
+            <p className="text-blue-700 dark:text-blue-300 mt-2 text-sm font-medium leading-relaxed">
+              Your biometric signature was saved. Network dropped, so we couldn&apos;t reach the server. 
+              Keep this tab open — it will auto-submit when the internet returns.
+            </p>
           </div>
         )}
 
@@ -781,7 +806,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                 {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand
               </button>
-              <button onClick={() => router.push('/portal')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Return to Portal</button>
+              <button onClick={() => router.push('/student-hub')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Return to Student Hub</button>
             </div>
           </div>
         )}

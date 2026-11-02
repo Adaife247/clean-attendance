@@ -8,11 +8,14 @@ import { rpID, origin } from '@/utils/webauthn';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse, deviceFingerprint } = body;
+    const { matricNumber, authResponse, deviceFingerprint, deviceId } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
     if (!deviceFingerprint || deviceFingerprint === 'unknown') {
-      return NextResponse.json({ error: "Device fingerprint missing. Refresh and try again." }, { status: 400 });
+      return NextResponse.json({ error: "Device fingerprint missing." }, { status: 400 });
+    }
+    if (!deviceId) {
+      return NextResponse.json({ error: "Device ID missing." }, { status: 400 });
     }
 
     const cookieStore = await cookies();
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
-    // 1. Check if this DEVICE FINGERPRINT was used by another matric TODAY
+    // 1. Block if the hardware fingerprint was used by another student today
     const { data: deviceReuse } = await supabase
       .from('user_devices')
       .select('matric_number')
@@ -34,12 +37,27 @@ export async function POST(request: Request) {
 
     if (deviceReuse && deviceReuse.length > 0) {
       return NextResponse.json(
-        { error: "This phone has already been used to set up another student's account today. You cannot register multiple students on one phone." },
+        { error: "This phone has already been used to set up another student's account today." },
         { status: 409 }
       );
     }
 
-    // 2. Check if this matric already has a credential
+    // 2. Block if the Local Device UUID was used by another student today
+    const { data: localReuse } = await supabase
+      .from('user_devices')
+      .select('matric_number')
+      .eq('local_device_id', deviceId)
+      .gte('created_at', startOfToday.toISOString())
+      .neq('matric_number', cleanMatric)
+      .limit(1);
+
+    if (localReuse && localReuse.length > 0) {
+      return NextResponse.json(
+        { error: "This device is already linked to another student. You cannot register a second account." },
+        { status: 409 }
+      );
+    }
+
     const { data: existingDevice } = await supabase
       .from('user_devices')
       .select('credential_id')
@@ -79,6 +97,7 @@ export async function POST(request: Request) {
         counter: credential.counter,
         transports: credential.transports || [],
         device_hash: deviceFingerprint,
+        local_device_id: deviceId,
         created_at: new Date().toISOString()
       }, { onConflict: 'matric_number' });
 
