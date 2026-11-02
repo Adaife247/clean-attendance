@@ -1,4 +1,5 @@
 'use client';
+import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
@@ -708,6 +709,25 @@ export default function LecturerDashboard() {
   const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
   const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
 
+    // NEW: Calculate check-in velocity for the sparkline
+  const getVelocityData = () => {
+    if (!data || !data.logs) return [];
+    
+    // Group check-ins by minute (e.g., "10:01", "10:02")
+    const timeBuckets: Record<string, number> = {};
+    data.logs.forEach(log => {
+      // log.time is formatted as "HH:MM"
+      timeBuckets[log.time] = (timeBuckets[log.time] || 0) + 1;
+    });
+
+    // Sort by time and format for Recharts
+    return Object.entries(timeBuckets)
+      .sort(([timeA], [timeB]) => timeA.localeCompare(timeB))
+      .map(([time, count]) => ({ time, count }));
+  };
+
+  const velocityData = getVelocityData();
+
   return (
     <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-950 p-4 md:p-8 font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -720,10 +740,13 @@ export default function LecturerDashboard() {
                 <span className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>
-                
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {/* NEW: Live Ripple Animation */}
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>                
                 {data?.startedBy === 'Class Rep' && (
                   <span className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 ml-2">
                     <ShieldAlert size={12} /> Started by Rep
@@ -747,8 +770,31 @@ export default function LecturerDashboard() {
                 )}
               </div>
             </div>
-            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-6 w-full md:w-auto mt-2 md:mt-0">
-              <div><p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p><p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p></div>
+                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-6 w-full md:w-auto mt-2 md:mt-0">
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
+                </div>
+                
+                {/* NEW: Sparkline Chart */}
+                {velocityData.length > 1 && (
+                  <div className="w-24 h-10 hidden sm:block" title="Check-in velocity">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={velocityData}>
+                        <defs>
+                          <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <YAxis hide domain={[0, 'dataMax + 1']} />
+                        <Area type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
               <button onClick={exportLiveCSV} disabled={!data || data.logs.length === 0} className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-colors"><Download size={16} /> Export</button>
             </div>
           </div>

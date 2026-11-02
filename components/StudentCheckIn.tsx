@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
-  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin, ShieldAlert
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin, ShieldAlert,
+  Zap, Clock, Flame
 } from 'lucide-react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
@@ -38,12 +39,13 @@ const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
-function getMeme(minutesLate: number): { title: string; sub: string; emoji: string } {
-  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", emoji: '🐦' };
-  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', emoji: '✅' };
-  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', emoji: '🚶' };
-  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', emoji: '😬' };
-  return { title: 'The Prodigal Student', sub: "You came. That's what matters.", emoji: '🏃' };
+// NEW: Use a type for the icon name instead of an emoji string
+function getMeme(minutesLate: number): { title: string; sub: string; iconType: 'zap' | 'check' | 'clock' | 'alert' | 'flame' } {
+  if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", iconType: 'zap' };
+  if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', iconType: 'check' };
+  if (minutesLate <= 25) return { title: 'Fashionably Late', sub: 'We see you.', iconType: 'clock' };
+  if (minutesLate <= 45) return { title: 'Living on the Edge', sub: 'You made it. Barely.', iconType: 'alert' };
+  return { title: 'The Prodigal Student', sub: "You came. That's what matters.", iconType: 'flame' };
 }
 
 function isInAppBrowser(): boolean {
@@ -693,10 +695,15 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         {status === 'rating' && (
           <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors">
-              <p className="text-4xl mb-2">{memeData.meme.emoji}</p>
-              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>
-              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
+                        <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors flex flex-col items-center">
+              <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-800">
+                {memeData.meme.iconType === 'zap' && <Zap size={32} className="text-amber-500" />}
+                {memeData.meme.iconType === 'check' && <CheckCircle size={32} className="text-emerald-500" />}
+                {memeData.meme.iconType === 'clock' && <Clock size={32} className="text-blue-500" />}
+                {memeData.meme.iconType === 'alert' && <AlertTriangle size={32} className="text-orange-500" />}
+                {memeData.meme.iconType === 'flame' && <Flame size={32} className="text-red-500" />}
+              </div>
+              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
               {sessionCreatedAt && (
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
               )}
