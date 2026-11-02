@@ -183,8 +183,7 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <User size={18} /> For Students
                 </h3>
-                <div className="space-y-8 relative ml-4 pl-6 border-l-2 border-blue-100 dark:border-blue-900/50">
-                  
+                <div className="space-y-8 relative ml-4 pl-6 before:absolute before:top-5 before:bottom-5 before:left-0 before:w-0.5 before:bg-blue-100 dark:before:bg-blue-900/50">                  
                   <div className="flex items-start gap-4">
                     <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm shrink-0 -ml-8.75 z-10">
                       <Fingerprint size={18} />
@@ -223,8 +222,7 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
-                <div className="space-y-8 relative ml-4 pl-6 border-l-2 border-emerald-100 dark:border-emerald-900/50">
-                  
+                <div className="space-y-8 relative ml-4 pl-6 before:absolute before:top-5 before:bottom-5 before:left-0 before:w-0.5 before:bg-emerald-100 dark:before:bg-emerald-900/50">                  
                   <div className="flex items-start gap-4">
                     <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0 -ml-8.75-10">
                       <Zap size={18} />
