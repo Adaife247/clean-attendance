@@ -26,9 +26,9 @@ function CheckInWrapper() {
 
         {/* Announcement Bar */}
         <div className="bg-[#2563EB] text-white text-xs font-bold text-center py-2 px-4 tracking-wide flex items-center justify-center gap-2">
-          <Sparkles size={14} className="text-blue-200" />
-          <span>NEW: Secure biometric check-in is now live for all students. <Link href="/onboard" className="underline hover:text-blue-100">Set up your account</Link>.</span>
-        </div>
+  <Sparkles size={14} className="text-blue-200" />
+  <span>NEW: Secure biometric check-in is now live for all students. <a href="/onboard" className="underline hover:text-blue-100">Set up your account</a>.</span>
+</div>
 
         {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-colors">
@@ -164,7 +164,7 @@ function CheckInWrapper() {
           </div>
         </section>
 
-        {/* How It Works Section */}
+                {/* How It Works Section */}
         <section className="bg-white dark:bg-gray-900/50 border-y border-gray-200 dark:border-gray-800 py-24 relative z-10">
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-16">
@@ -183,32 +183,38 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <User size={18} /> For Students
                 </h3>
-                <div className="space-y-8 relative ml-4 pl-6 before:absolute before:top-5 before:bottom-5 before:left-0 before:w-0.5 before:bg-blue-100 dark:before:bg-blue-900/50">                  
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm shrink-0 -ml-8.75 z-10">
+                
+                {/* The Track */}
+                <div className="relative ml-5 border-l-2 border-blue-100 dark:border-blue-900/50">
+                  
+                  {/* Step 1 */}
+                  <div className="relative pl-10 pb-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <Fingerprint size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. Set Up Once</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Link your phone to your matric number using FaceID, Fingerprint, or PIN. No passwords required.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm shrink-0 -ml-8.75 z-10">
+                  {/* Step 2 */}
+                  <div className="relative pl-10 pb-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <MapPin size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Tap the Link</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When your lecturer starts a class, a &quot;Live Now&quot; banner appears on your hub. Tap it.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0 -ml-8.75 z-10">
+                  {/* Step 3 */}
+                  <div className="relative pl-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <CheckCircle size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">3. Verified</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Scan your biometrics. Our system verifies your location and identity instantly.</p>
                     </div>
@@ -222,32 +228,38 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
-                <div className="space-y-8 relative ml-4 pl-6 before:absolute before:top-5 before:bottom-5 before:left-0 before:w-0.5 before:bg-emerald-100 dark:before:bg-emerald-900/50">                  
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0 -ml-8.75-10">
+                
+                {/* The Track */}
+                <div className="relative ml-5 border-l-2 border-emerald-100 dark:border-emerald-900/50">
+                  
+                  {/* Step 1 */}
+                  <div className="relative pl-10 pb-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Zap size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. Start Session</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tap &quot;Start Lecture&quot;. The system locks your GPS location as the class anchor.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0 -ml-8.75 z-10">
+                  {/* Step 2 */}
+                  <div className="relative pl-10 pb-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Activity size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Live Radar</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Watch students check in live. Biometric check-ins auto-verify. GPS-only check-ins require your approval.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm shrink-0 -ml-8.75 z-10">
+                  {/* Step 3 */}
+                  <div className="relative pl-10">
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Upload size={18} />
                     </div>
-                    <div className="pt-1">
+                    <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">3. Export</h4>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Download a Senate-ready CSV at the end of the semester. Fully NUC compliant.</p>
                     </div>
