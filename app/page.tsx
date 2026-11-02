@@ -25,10 +25,10 @@ function CheckInWrapper() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Announcement Bar */}
-        <div className="bg-[#2563EB] text-white text-xs font-bold text-center py-2 px-4 tracking-wide flex items-center justify-center gap-2">
-  <Sparkles size={14} className="text-blue-200" />
-  <span>NEW: Secure biometric check-in is now live for all students. <a href="/onboard" className="underline hover:text-blue-100">Set up your account</a>.</span>
-</div>
+                <div className="bg-[#2563EB] text-white text-xs font-bold text-center py-2 px-4 tracking-wide flex items-center justify-center gap-2">
+          <Sparkles size={14} className="text-blue-200" />
+          <span>NEW: Secure biometric check-in is now live for all students. <a href="/onboard" className="underline hover:text-blue-100">Set up your account</a>.</span>
+        </div>
 
         {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-colors">
@@ -86,13 +86,13 @@ function CheckInWrapper() {
               </span>
             </Link>
 
-            <Link 
+            <a 
               href="/onboard" 
               className="group w-full sm:w-auto flex items-center justify-center gap-2 py-4 px-8 rounded-2xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white font-bold text-lg hover:border-[#2563EB] dark:hover:border-blue-500 transition-all"
             >
               <Fingerprint size={20} className="text-[#2563EB] dark:text-blue-400" />
               Set Up Device
-            </Link>
+            </a>
           </div>
 
           {/* Trust Bar */}
@@ -147,7 +147,7 @@ function CheckInWrapper() {
               <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400 mb-6 flex items-center gap-2">
                 <CheckCircle size={24} /> The CampusCheck Way
               </h3>
-              <ul className="space-y-4">
+                            <ul className="space-y-4">
                 {[
                   "Students scan their FaceID, Fingerprint, or PIN.",
                   "GPS ensures they are actually in the hall.",
@@ -156,7 +156,8 @@ function CheckInWrapper() {
                   "Automatic NUC compliance reports."
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
-                    <span className="text-emerald-400 mt-0.5">✓</span> {item}
+                    <span className="text-emerald-400 mt-0.5 shrink-0">✓</span> 
+                    <span className="wrap-break-word min-w-0 flex-1">{item}</span>
                   </li>
                 ))}
               </ul>
