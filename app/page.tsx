@@ -374,8 +374,7 @@ function CheckInWrapper() {
                 <ul className="space-y-3">
                   <li><Link href="/privacy" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Privacy Policy</Link></li>
                   <li><Link href="/terms" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Terms of Service</Link></li>
-                  <li><Link href="/api/health" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors flex items-center gap-2">System Status <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span></Link></li>
-                </ul>
+                  <li><Link href="/status" className="...">System Status <span className="..."></span></Link></li>                </ul>
               </div>
 
               <div>
