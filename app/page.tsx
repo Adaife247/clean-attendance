@@ -84,7 +84,6 @@ function CheckInWrapper() {
               <span className="font-black text-white text-lg tracking-wide">
                 {isNavigating ? "Entering..." : "Enter Student Hub"}
               </span>
-              {/* FIX: Removed the double arrow */}
             </Link>
 
             <Link 
@@ -129,11 +128,10 @@ function CheckInWrapper() {
                 <XCircle size={24} /> The Old Way
               </h3>
               <ul className="space-y-4">
-                {/* FIX: More realistic copy */}
                 {[
                   "Attendance sheet is passed around the room.",
                   "Students sign for their friends who are absent.",
-                  "Someone steals the sheet or spills water on it.",
+                  "Someone tears the sheet or spills water on it.",
                   "Lecturer has to manually count the signatures.",
                   "Zero data for NUC compliance."
                 ].map((item, i) => (
@@ -185,11 +183,10 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <User size={18} /> For Students
                 </h3>
-                {/* FIX: Replaced the broken gradient line with a clean solid border */}
-                <div className="space-y-8 relative border-l-2 border-blue-100 dark:border-blue-900/50 ml-6 pl-6">
+                <div className="space-y-8 relative border-l-2 border-blue-100 dark:border-blue-900/50 ml-5 pl-8">
                   
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <Fingerprint size={18} />
                     </div>
                     <div>
@@ -199,7 +196,7 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <MapPin size={18} />
                     </div>
                     <div>
@@ -209,7 +206,7 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <CheckCircle size={18} />
                     </div>
                     <div>
@@ -226,11 +223,10 @@ function CheckInWrapper() {
                 <h3 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-8 flex items-center gap-2">
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
-                {/* FIX: Replaced the broken gradient line with a clean solid border */}
-                <div className="space-y-8 relative border-l-2 border-emerald-100 dark:border-emerald-900/50 ml-6 pl-6">
+                <div className="space-y-8 relative border-l-2 border-emerald-100 dark:border-emerald-900/50 ml-5 pl-8">
                   
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <Zap size={18} />
                     </div>
                     <div>
@@ -240,7 +236,7 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <Activity size={18} />
                     </div>
                     <div>
@@ -250,7 +246,7 @@ function CheckInWrapper() {
                   </div>
 
                   <div className="relative flex items-start gap-6">
-                    <div className="absolute -left-8.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-gray-900 shadow-sm z-10">
+                    <div className="absolute -left-7.75 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 ring-8 ring-gray-50 dark:ring-gray-900/50 z-10">
                       <Upload size={18} />
                     </div>
                     <div>
@@ -374,7 +370,12 @@ function CheckInWrapper() {
                 <ul className="space-y-3">
                   <li><Link href="/privacy" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Privacy Policy</Link></li>
                   <li><Link href="/terms" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Terms of Service</Link></li>
-                  <li><Link href="/status" className="...">System Status <span className="..."></span></Link></li>                </ul>
+                  <li>
+                    <Link href="/status" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors flex items-center gap-2">
+                      System Status <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    </Link>
+                  </li>
+                </ul>
               </div>
 
               <div>
