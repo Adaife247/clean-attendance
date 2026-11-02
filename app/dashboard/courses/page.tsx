@@ -208,7 +208,9 @@ export default function CourseManagement() {
     } finally {
       setIsSettingRep(false);
     }
-  };  const handleOpenModal = async (course: Course) => {
+  };
+
+  const handleOpenModal = async (course: Course) => {
     setEditingCourse(course);
     setEditCode(course.course_code);
     setEditPlanned(course.total_planned_classes || 15);
@@ -348,7 +350,6 @@ export default function CourseManagement() {
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
-        
         if (uniqueMatrics.length === 0) {
           confirm.ask('Invalid File', 'No valid matric numbers found.', () => {}, { isDangerous: false });
           setUploadingId(null);
@@ -773,7 +774,9 @@ export default function CourseManagement() {
             ))}
           </div>
         )}
-      </div>      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
+      </div>
+
+      {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
       {editingCourse && (
         <div className="fixed inset-0 bg-gray-900/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-colors">
           <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 w-full max-w-2xl max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">

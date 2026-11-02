@@ -196,22 +196,22 @@ export default function AnalyticsPage() {
   const maxScore = reportData?.maxScore || 10;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-10 font-sans">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 md:p-10 font-sans transition-colors duration-300">
       <div className="max-w-4xl mx-auto space-y-8">
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-3">
-              <BarChart3 className="text-[#2563EB]" size={28} /> Analytics & Reports
+            <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-3">
+              <BarChart3 className="text-[#2563EB] dark:text-blue-400" size={28} /> Analytics & Reports
             </h1>
-            <p className="text-gray-500 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
+            <p className="text-gray-500 dark:text-gray-400 font-medium mt-1 text-sm">Generate final gradebooks and monitor exam eligibility.</p>
           </div>
           <select
             aria-label="Select Course for Analytics"
             value={selectedCourseCode}
             onChange={handleCourseChange}
             disabled={courses.length === 0}
-            className="bg-gray-50 border border-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer"
+            className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer transition-colors"
           >
             {courses.length === 0
               ? <option>No Courses Found</option>
@@ -220,26 +220,26 @@ export default function AnalyticsPage() {
           </select>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200">
+        <div className="bg-white dark:bg-gray-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
           <div className="flex items-center gap-4 mb-8">
-            <div className="bg-green-100 p-4 rounded-xl text-green-700">
+            <div className="bg-green-100 dark:bg-green-900/30 p-4 rounded-xl text-green-700 dark:text-green-400">
               <FileSpreadsheet size={28} />
             </div>
             <div>
-              <h3 className="text-xl font-extrabold text-gray-900">Semester Gradebook</h3>
-              <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
+              <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">Semester Gradebook</h3>
+              <p className="text-sm font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mt-1">{reportData?.totalClasses || 0} Classes Held</p>
             </div>
           </div>
 
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-colors">
             <div className="flex items-start gap-3">
-              <Lock className="text-blue-600 mt-0.5 shrink-0" size={20} />
+              <Lock className="text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" size={20} />
               <div>
-                <p className="font-bold text-blue-900 text-sm">Lock Final Grades</p>
-                <p className="text-xs text-blue-700 font-medium mt-0.5">Check this to permanently calculate CA scores and end the semester for this course.</p>
+                <p className="font-bold text-blue-900 dark:text-blue-300 text-sm">Lock Final Grades</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400 font-medium mt-0.5">Check this to permanently calculate CA scores and end the semester for this course.</p>
               </div>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm">
+            <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm transition-colors">
               <input 
                 type="checkbox" 
                 checked={lockGrades || selectedCourse?.is_finalized} 
@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
                 disabled={selectedCourse?.is_finalized}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
               />
-              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 {selectedCourse?.is_finalized ? "Finalized" : "Lock Grades"}
               </span>
             </label>
@@ -262,10 +262,10 @@ export default function AnalyticsPage() {
             Download Full Semester CSV
           </button>
 
-          <div className="border-t border-gray-100 pt-6">
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-6">
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex justify-between items-center text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 p-4 rounded-xl border border-gray-200"
+              className="w-full flex justify-between items-center text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700"
             >
               <span className="flex items-center gap-2"><Calendar size={16}/> Custom Date Range</span>
               {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -274,35 +274,35 @@ export default function AnalyticsPage() {
             {showAdvanced && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">From</label>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">From</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-3 px-4 font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#2563EB] transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">To</label>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">To</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     min={startDate}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 font-bold text-gray-900 outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-3 px-4 font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#2563EB] transition-colors"
                   />
                 </div>
                 <div className="md:col-span-2 grid grid-cols-2 gap-2 mt-2">
                   <button
                     onClick={applyCustomDates}
-                    className="bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all text-sm"
+                    className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all text-sm"
                   >
                     Apply Filters
                   </button>
                   <button
                     onClick={() => handleDownload(false)}
                     disabled={isDownloading || isFinalizing || !reportData}
-                    className="flex justify-center items-center gap-2 bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50 transition-all shadow-sm text-sm"
+                    className="flex justify-center items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all shadow-sm text-sm"
                   >
                     <Download size={16} /> Export Range
                   </button>
@@ -312,58 +312,58 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden transition-colors">
           <button
             onClick={() => setShowWatchlist(!showWatchlist)}
-            className="w-full flex items-center justify-between p-6 bg-white hover:bg-gray-50 transition-colors text-left"
+            className="w-full flex items-center justify-between p-6 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
           >
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+              <div className={`p-2 rounded-lg ${atRiskStudents.length > 0 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'}`}>
                 {atRiskStudents.length > 0 ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
               </div>
               <div>
-                <h3 className="font-extrabold text-gray-900 text-lg">Exam Eligibility Watchlist</h3>
-                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                <h3 className="font-extrabold text-gray-900 dark:text-white text-lg">Exam Eligibility Watchlist</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
                   {atRiskStudents.length > 0
                     ? `${atRiskStudents.length} students currently below 70%`
                     : "All students are eligible for the exam."}
                 </p>
               </div>
             </div>
-            <div className="text-gray-400">
+            <div className="text-gray-400 dark:text-gray-500">
               {showWatchlist ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
             </div>
           </button>
 
           {showWatchlist && (
-            <div className="border-t border-gray-100 bg-gray-50/50 p-4 animate-in fade-in slide-in-from-top-2">
+            <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 p-4 animate-in fade-in slide-in-from-top-2">
               {isLoading ? (
                 <div className="flex flex-col items-center justify-center h-32">
-                  <Loader2 className="animate-spin text-[#2563EB]" size={24}/>
+                  <Loader2 className="animate-spin text-[#2563EB] dark:text-blue-400" size={24}/>
                 </div>
               ) : atRiskStudents.length === 0 ? (
-                <div className="text-center p-8 text-green-600 font-bold">No students at risk!</div>
+                <div className="text-center p-8 text-green-600 dark:text-green-400 font-bold">No students at risk!</div>
               ) : (
-                <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto transition-colors">
                   <table className="w-full text-left whitespace-nowrap min-w-125">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                      <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500">
                         <th className="px-6 py-3 font-bold">Matric Number</th>
                         <th className="px-6 py-3 font-bold text-center">Attendance</th>
                         <th className="px-6 py-3 font-bold text-right">CA Score</th>
                         <th className="px-6 py-3 font-bold text-right">Standing</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                       {atRiskStudents.map((student, i) => (
-                        <tr key={i} className="hover:bg-red-50/20 transition-colors">
-                          <td className="px-6 py-3 font-black text-gray-900">{student.matricNumber}</td>
-                          <td className="px-6 py-3 text-center font-bold text-gray-600">{student.attended} / {student.totalClasses}</td>
-                          <td className="px-6 py-3 text-right font-bold text-gray-600">
+                        <tr key={i} className="hover:bg-red-50/20 dark:hover:bg-red-900/10 transition-colors">
+                          <td className="px-6 py-3 font-black text-gray-900 dark:text-white">{student.matricNumber}</td>
+                          <td className="px-6 py-3 text-center font-bold text-gray-600 dark:text-gray-300">{student.attended} / {student.totalClasses}</td>
+                          <td className="px-6 py-3 text-right font-bold text-gray-600 dark:text-gray-300">
                             {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
                           </td>
                           <td className="px-6 py-3 text-right">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 text-red-700">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
                               {student.percentage}%
                             </span>
                           </td>
@@ -378,8 +378,8 @@ export default function AnalyticsPage() {
         </div>
 
         {errorMessage && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-center">
-            <p className="text-red-700 font-bold text-sm">{errorMessage}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-2xl p-4 text-center transition-colors">
+            <p className="text-red-700 dark:text-red-400 font-bold text-sm">{errorMessage}</p>
           </div>
         )}
 

@@ -1,15 +1,16 @@
 'use client';
-import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
 import Link from 'next/link';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
+import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
 import {
   Clock, CheckCircle, AlertTriangle, ShieldCheck,
   RefreshCw, UserPlus, Download, MapPin, Copy, XCircle,
   User, ChevronDown, Archive, Hand, Trash2, Timer, Lock, FileText, Navigation, Wifi, ShieldAlert, BookOpen, Search
 } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
 
 interface Log { 
   id: string; 
@@ -180,7 +181,9 @@ export default function LecturerDashboard() {
     if (viewMode !== 'history') return;
     const id = setTimeout(() => { loadHistory(); }, 0);
     return () => clearTimeout(id);
-  }, [viewMode, loadHistory]);  const startNewSession = () => {
+  }, [viewMode, loadHistory]);
+
+  const startNewSession = () => {
     if (!selectedCourseId) { setSetupError("Please register a course first."); return; }
     setIsStarting(true);
     setSetupError("");
@@ -405,7 +408,9 @@ export default function LecturerDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [activeSessionId, viewMode, fetchDashboardData]);  const handleManualOverride = async (targetMatric: string) => {
+  }, [activeSessionId, viewMode, fetchDashboardData]);
+
+  const handleManualOverride = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || '').trim();
     if (!activeSessionId) return;
     if (!safeMatric) return;
@@ -527,6 +532,19 @@ export default function LecturerDashboard() {
     s.course_code.toLowerCase().includes(historySearch.toLowerCase()) || 
     new Date(s.created_at).toLocaleString().toLowerCase().includes(historySearch.toLowerCase())
   );
+
+  // NEW: Calculate check-in velocity for the sparkline
+  const getVelocityData = () => {
+    if (!data || !data.logs) return [];
+    const timeBuckets: Record<string, number> = {};
+    data.logs.forEach(log => {
+      timeBuckets[log.time] = (timeBuckets[log.time] || 0) + 1;
+    });
+    return Object.entries(timeBuckets)
+      .sort(([timeA], [timeB]) => timeA.localeCompare(timeB))
+      .map(([time, count]) => ({ time, count }));
+  };
+  const velocityData = getVelocityData();
 
   if (!activeSessionId || viewMode === 'history') {
     return (
@@ -709,25 +727,6 @@ export default function LecturerDashboard() {
   const verifiedLogs = data?.logs.filter(l => l.status === 'verified') || [];
   const flaggedLogs = data?.logs.filter(l => l.status !== 'verified') || [];
 
-    // NEW: Calculate check-in velocity for the sparkline
-  const getVelocityData = () => {
-    if (!data || !data.logs) return [];
-    
-    // Group check-ins by minute (e.g., "10:01", "10:02")
-    const timeBuckets: Record<string, number> = {};
-    data.logs.forEach(log => {
-      // log.time is formatted as "HH:MM"
-      timeBuckets[log.time] = (timeBuckets[log.time] || 0) + 1;
-    });
-
-    // Sort by time and format for Recharts
-    return Object.entries(timeBuckets)
-      .sort(([timeA], [timeB]) => timeA.localeCompare(timeB))
-      .map(([time, count]) => ({ time, count }));
-  };
-
-  const velocityData = getVelocityData();
-
   return (
     <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-950 p-4 md:p-8 font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -740,13 +739,14 @@ export default function LecturerDashboard() {
                 <span className="text-sm font-bold text-[#2563EB] dark:text-blue-400 uppercase tracking-wider">CampusCheck • {profile?.full_name || 'Faculty'}</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {/* NEW: Live Ripple Animation */}
                 <span className="relative flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
-                <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>                
+                <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>
+                
                 {data?.startedBy === 'Class Rep' && (
                   <span className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 ml-2">
                     <ShieldAlert size={12} /> Started by Rep
@@ -770,7 +770,7 @@ export default function LecturerDashboard() {
                 )}
               </div>
             </div>
-                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-6 w-full md:w-auto mt-2 md:mt-0">
+            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-6 w-full md:w-auto mt-2 md:mt-0">
               <div className="flex items-center gap-4">
                 <div>
                   <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
@@ -795,6 +795,7 @@ export default function LecturerDashboard() {
                   </div>
                 )}
               </div>
+              <ThemeToggle />
               <button onClick={exportLiveCSV} disabled={!data || data.logs.length === 0} className="bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-colors"><Download size={16} /> Export</button>
             </div>
           </div>
