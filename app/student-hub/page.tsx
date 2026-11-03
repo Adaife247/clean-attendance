@@ -300,7 +300,7 @@ export default function StudentPortal() {
         setNickname('');
         setSavedNickname('');
         setUnlockState('idle');
-        setUnlockError('Your portal session expired for security reasons. Please unlock again.');
+        setUnlockError('Your hub session expired for security reasons. Please unlock again.');
       }
     };
 
@@ -600,7 +600,7 @@ export default function StudentPortal() {
         </div>
         
         <button onClick={handleVerifyAndFetch} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70">
-          <Lock size={20} /> Unlock Portal
+          <Lock size={20} /> Unlock Hub
         </button>
 
         <div className="mt-6 text-center">
@@ -652,7 +652,7 @@ export default function StudentPortal() {
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            {savedNickname ? `Welcome back, ${savedNickname}` : 'Student Portal'}
+            {savedNickname ? `Welcome back, ${savedNickname}` : 'Student Hub'}
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Monitor your attendance & eligibility</p>
         </div>
@@ -768,7 +768,7 @@ export default function StudentPortal() {
               <button
                 onClick={() =>
                   confirm.ask(
-                    'Lock the portal?',
+                    'Lock the hub?',
                     'You will need your biometrics again to unlock.',
                     () => {
                       safeStorage.remove('campuscheck_portal_unlocked_at');
@@ -783,7 +783,7 @@ export default function StudentPortal() {
                 }
                 className="w-full flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-sm py-3 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all mt-6"
               >
-                <Lock size={16} /> Lock Portal
+                <Lock size={16} /> Lock Hub
               </button>
             </>
           )}

@@ -43,7 +43,7 @@ const updates = [
     description: 'The first stable version of CampusCheck.',
     items: [
       'Basic GPS geofencing check-in.',
-      'Student portal with attendance tracking.',
+      'Student hub with attendance tracking.',
       'Course & Roster management.',
       'Live push notifications for class starts.',
     ],

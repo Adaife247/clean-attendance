@@ -48,7 +48,7 @@ export default function GuidePage() {
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-2">1. The Live Class Banner</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mb-2">
-                    When your lecturer starts a session, a green <strong>&quot;Live Class Now&quot;</strong> banner will appear at the top of your Student Portal. You do not need to refresh the page. Just tap the banner to start checking in.
+                    When your lecturer starts a session, a green <strong>&quot;Live Class Now&quot;</strong> banner will appear at the top of your Student Hub. You do not need to refresh the page. Just tap the banner to start checking in.
                   </p>
                 </div>
 
@@ -90,7 +90,7 @@ export default function GuidePage() {
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-2">1. The Rep Desk</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mb-2">
-                    If your lecturer designates you as a Class Rep, a new <strong>&quot;Rep Desk&quot;</strong> tab will appear in your portal. From here, you can help manage the class.
+                    If your lecturer designates you as a Class Rep, a new <strong>&quot;Rep Desk&quot;</strong> tab will appear in your hub. From here, you can help manage the class.
                   </p>
                 </div>
 
