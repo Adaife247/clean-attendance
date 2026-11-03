@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { checkRateLimit, getClientIp, rateLimitHeaders } from '@/utils/rate-limit';
 import { 
-  RATE_LIMIT_DEFAULTS, 
   GEOFENCE_RADIUS_METERS, 
   GEOFENCE_INDOOR_RADIUS_METERS, 
   GPS_WEAK_SIGNAL_THRESHOLD,
@@ -65,35 +64,40 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
 }
 
 export async function POST(request: Request) {
-
   try {
-    const ip = getClientIp(request);
-    const limit = RATE_LIMIT_DEFAULTS['verify-attendance'];
-    const rateCheck = await checkRateLimit(`verify-att:${ip}`, limit);
+    // 1. Auth FIRST (we need the matric for rate limiting)
+    const auth = verifyStudentToken(request);
+    if (auth.error) return auth.error;
+    const cleanMatric = auth.matric!;
+    const credentialId = auth.credentialId!;
 
-    if (!rateCheck.allowed) {
+    const ip = getClientIp(request);
+    
+    // 2. RATE LIMITING (Fixed DoS)
+    // We allow 100 IP hits/min to stop raw spam, but 10 hits/min per student.
+    const ipRateCheck = await checkRateLimit(`verify-att-ip:${ip}`, 100);
+    if (!ipRateCheck.allowed) {
       return NextResponse.json(
-        { status: 'failed', message: "Too many attempts. Please wait a minute and try again." },
-        { status: 429, headers: rateLimitHeaders(rateCheck) }
+        { status: 'failed', message: "Network overloaded. Please try again in 1 minute." },
+        { status: 429, headers: rateLimitHeaders(ipRateCheck) }
       );
     }
 
-    // Require the student JWT
-    const auth = verifyStudentToken(request);
-    if (auth.error) return auth.error;
+    const studentRateCheck = await checkRateLimit(`verify-att-student:${cleanMatric}`, 10);
+    if (!studentRateCheck.allowed) {
+      return NextResponse.json(
+        { status: 'failed', message: "Too many check-in attempts. Please wait a minute." },
+        { status: 429, headers: rateLimitHeaders(studentRateCheck) }
+      );
+    }
 
     const body = await request.json();
     const { sessionId, telemetry, hardwareFingerprint, verificationMethod, userAgent } = body;
-
-    const cleanMatric = auth.matric!;
-    const credentialId = auth.credentialId!;
 
     if (!sessionId || !hardwareFingerprint) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
     }
 
-    // Initialize audit log payload
-        // Initialize audit log payload
     const auditLogPayload: AuditLogPayload = {
       session_id: sessionId,
       matric_number: cleanMatric,
@@ -103,7 +107,6 @@ export async function POST(request: Request) {
       ip_address: ip
     };
 
-    // CRITICAL: Enforce biometrics.
     if (verificationMethod !== 'biometric') {
       auditLogPayload.reason_code = 'NO_BIOMETRIC';
       await supabase.from('checkin_attempts').insert(auditLogPayload);
@@ -124,7 +127,7 @@ export async function POST(request: Request) {
         message: FLAG_REASONS.GPS_WEAK.messageStudent,
         distance: null,
         maxAllowedDistance: GEOFENCE_RADIUS_METERS,
-      }, { status: 200, headers: rateLimitHeaders(rateCheck) });
+      }, { status: 200, headers: rateLimitHeaders(studentRateCheck) });
     }
 
     const { data: session, error: sessionError } = await supabase
@@ -187,7 +190,6 @@ export async function POST(request: Request) {
     }
 
     // ─── PROXY PREVENTION 1: CREDENTIAL BINDING ───
-    // Check if the hardware fingerprint matches the one used at registration
     const { data: registeredDevice } = await supabase
       .from('user_devices')
       .select('hardware_fingerprint')
@@ -198,13 +200,9 @@ export async function POST(request: Request) {
       auditLogPayload.reason_code = 'SYNCED_PASSKEY';
       auditLogPayload.outcome = 'flagged';
       auditLogPayload.reason_detail = { registered_fingerprint: registeredDevice.hardware_fingerprint, current_fingerprint: hardwareFingerprint };
-      
-      // We flag this, but allow them to proceed (to avoid blocking legit phone upgrades).
-      // The lecturer will see the flag in the dashboard.
     }
 
     // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP (SAME DEVICE, DIFFERENT STUDENT) ───
-    // Check if this exact physical hardware has already checked in for someone else in this session.
     const { data: existingSessionLogs } = await supabase
       .from('attendance_logs')
       .select('matric_number, device_info')
@@ -234,7 +232,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check if this student already has a verified log for this session
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id, status')
@@ -249,7 +246,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
-    // ─── GPS & GEOFENCE LOGIC (No IP AUTO-VERIFY) ───
+    // ─── GPS & GEOFENCE LOGIC ───
     let bestDistance = Infinity;
     let bestAccuracy: number | null = null;
     for (const ping of validPings) {
@@ -266,7 +263,7 @@ export async function POST(request: Request) {
 
     const spoofSuspected = detectLikelySpoof(validPings);
 
-        let finalStatus: 'verified' | 'flagged' = 'flagged';
+    let finalStatus: 'verified' | 'flagged' = 'flagged';
     let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
     let reasonCode = null;
 
@@ -300,7 +297,6 @@ export async function POST(request: Request) {
       isIOS,
     });
 
-    // ─── UPSERT ATTENDANCE LOG ───
     const { error: upsertError } = await supabase
       .from('attendance_logs')
       .upsert({
@@ -319,7 +315,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'failed', message: "Database error. Please try again." }, { status: 500 });
     }
 
-    // ─── WRITE AUDIT LOG ───
     auditLogPayload.outcome = finalStatus;
     auditLogPayload.reason_code = reasonCode || auditLogPayload.reason_code;
     auditLogPayload.reason_detail = auditLogPayload.reason_detail || { distance: Math.round(bestDistance), accuracy: bestAccuracy };
@@ -331,7 +326,7 @@ export async function POST(request: Request) {
       accuracy: bestAccuracy,
       maxAllowedDistance: allowedRadius,
       message: responseMessage,
-    }, { status: 200, headers: rateLimitHeaders(rateCheck) });
+    }, { status: 200, headers: rateLimitHeaders(studentRateCheck) });
 
   } catch (error) {
     console.error("Verification API Error:", error);

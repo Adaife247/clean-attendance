@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyStudentToken } from '@/utils/student-auth';
+import { getClientIp } from '@/utils/rate-limit';
 
 export async function POST(request: Request) {
   try {
@@ -8,7 +9,6 @@ export async function POST(request: Request) {
     if (auth.error) return auth.error;
 
     const { sessionId } = await request.json();
-    // Trust the matric from the verified token, not the request body
     const cleanMatric = auth.matric!; 
 
     if (!sessionId) {
@@ -40,6 +40,16 @@ export async function POST(request: Request) {
         device_info: JSON.stringify({ method: "Digital Hand Raise" })
       }]);
     }
+
+    // NEW: Write to audit log
+    await supabase.from('checkin_attempts').insert({
+      session_id: sessionId,
+      matric_number: cleanMatric,
+      outcome: 'flagged',
+      reason_code: 'HAND_RAISE',
+      reason_detail: { requested_at: new Date().toISOString() },
+      ip_address: getClientIp(request)
+    });
 
     return NextResponse.json({ message: "Appeal requested successfully" }, { status: 200 });
 

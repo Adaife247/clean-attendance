@@ -45,7 +45,6 @@ export async function POST(request: Request) {
 
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-    // NEW: Check if they are the designated rep for THIS specific course
     const { data: repAssignment } = await supabase
       .from('course_reps')
       .select('id')
@@ -57,7 +56,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. You are not the designated rep for this course." }, { status: 403 });
     }
 
-    // Verify they are enrolled (safety check)
     const { data: repEnrollment } = await supabase
       .from('enrollments')
       .select('id')
@@ -126,6 +124,16 @@ export async function POST(request: Request) {
       if (upsertError) {
          return NextResponse.json({ error: "Database error" }, { status: 500 });
       }
+
+      // NEW: Write to audit log
+      await supabase.from('checkin_attempts').insert({
+        session_id: sessionId,
+        matric_number: cleanMatric,
+        outcome: 'flagged',
+        reason_code: 'BATTERY_DEAD',
+        reason_detail: { logged_by_rep: repMatric },
+        ip_address: ip
+      });
 
       return NextResponse.json({ success: true });
     }

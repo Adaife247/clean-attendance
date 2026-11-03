@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { verifyLecturer } from '@/utils/api-auth';
+import { getClientIp } from '@/utils/rate-limit';
 
 export async function POST(request: Request) {
   try {
@@ -23,7 +24,6 @@ export async function POST(request: Request) {
 
     const cleanMatric = String(rawMatric).toUpperCase().trim();
 
-    // NEW: Verify the student is actually enrolled in this course
     const { data: enrollment } = await supabase
       .from('enrollments')
       .select('id')
@@ -67,6 +67,16 @@ export async function POST(request: Request) {
           override_timestamp: overrideTimestamp,
         }]);
     }
+
+    // NEW: Write to audit log
+    await supabase.from('checkin_attempts').insert({
+      session_id: sessionId,
+      matric_number: cleanMatric,
+      outcome: 'verified',
+      reason_code: 'MANUAL_OVERRIDE',
+      reason_detail: { approved_by_lecturer: auth.user.id, timestamp: overrideTimestamp },
+      ip_address: getClientIp(request)
+    });
 
     return NextResponse.json({ message: "Success" });
   } catch {
