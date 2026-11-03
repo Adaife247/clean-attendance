@@ -10,6 +10,7 @@ import {
   GEOFENCE_HARD_BLOCK_METERS
 } from '@/utils/constants';
 import { verifyStudentToken } from '@/utils/student-auth';
+import { FLAG_REASONS } from '@/utils/flag-reasons';
 
 interface Telemetry {
   lat: number;
@@ -17,6 +18,15 @@ interface Telemetry {
   alt: number | null;
   acc: number;
   timestamp: number;
+}
+
+interface AuditLogPayload {
+  session_id: string;
+  matric_number: string;
+  outcome: 'failed' | 'verified' | 'flagged' | 'blocked';
+  reason_code: string | null;
+  reason_detail: Record<string, unknown> | null;
+  ip_address: string;
 }
 
 function getDistanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -55,6 +65,7 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
 }
 
 export async function POST(request: Request) {
+
   try {
     const ip = getClientIp(request);
     const limit = RATE_LIMIT_DEFAULTS['verify-attendance'];
@@ -67,26 +78,38 @@ export async function POST(request: Request) {
       );
     }
 
-    // NEW: Require the student JWT (which contains the matric + credentialId)
+    // Require the student JWT
     const auth = verifyStudentToken(request);
     if (auth.error) return auth.error;
 
     const body = await request.json();
-    const { sessionId, telemetry, deviceFingerprint, verificationMethod, userAgent } = body;
+    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, userAgent } = body;
 
-    // Trust the matric from the token, not the body
     const cleanMatric = auth.matric!;
     const credentialId = auth.credentialId!;
 
-    if (!sessionId) {
+    if (!sessionId || !hardwareFingerprint) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
     }
 
-    // CRITICAL: Enforce biometrics. No fallbacks.
+    // Initialize audit log payload
+        // Initialize audit log payload
+    const auditLogPayload: AuditLogPayload = {
+      session_id: sessionId,
+      matric_number: cleanMatric,
+      outcome: 'failed',
+      reason_code: null,
+      reason_detail: null,
+      ip_address: ip
+    };
+
+    // CRITICAL: Enforce biometrics.
     if (verificationMethod !== 'biometric') {
+      auditLogPayload.reason_code = 'NO_BIOMETRIC';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({
         status: 'failed',
-        message: "Biometric verification is required to check in. If your phone doesn't support passkeys, ask your lecturer to manually check you in."
+        message: "Biometric verification is required to check in."
       }, { status: 403 });
     }
 
@@ -94,9 +117,11 @@ export async function POST(request: Request) {
     const validPings = getValidPings(telemetry);
 
     if (validPings.length === 0) {
+      auditLogPayload.reason_code = 'GPS_WEAK';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({
         status: 'failed',
-        message: "No usable GPS reading was received. Keep Location on, move near a window, and try again in 5 seconds.",
+        message: FLAG_REASONS.GPS_WEAK.messageStudent,
         distance: null,
         maxAllowedDistance: GEOFENCE_RADIUS_METERS,
       }, { status: 200, headers: rateLimitHeaders(rateCheck) });
@@ -104,17 +129,23 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, anchor_ip, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
       .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) {
+      auditLogPayload.reason_code = 'INVALID_SESSION';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({ status: 'failed', message: "This check-in link is no longer valid." }, { status: 404 });
     }
     if (session.is_active !== true) {
+      auditLogPayload.reason_code = 'SESSION_CLOSED';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({ status: 'failed', message: "Attendance for this class has been closed." }, { status: 403 });
     }
     if (session.expires_at && new Date() > new Date(session.expires_at)) {
+      auditLogPayload.reason_code = 'SESSION_EXPIRED';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({ status: 'failed', message: "Time is up. The attendance window has closed." }, { status: 403 });
     }
 
@@ -125,6 +156,8 @@ export async function POST(request: Request) {
       const elapsedMinutes = (now - sessionStart) / 60000;
       if (elapsedMinutes < opensAfter) {
         const remaining = Math.ceil(opensAfter - elapsedMinutes);
+        auditLogPayload.reason_code = 'OPENS_LATER';
+        await supabase.from('checkin_attempts').insert(auditLogPayload);
         return NextResponse.json({
           status: 'failed',
           message: `Attendance opens in ${remaining} minute${remaining === 1 ? '' : 's'}.`
@@ -145,30 +178,63 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!enrollment) {
+      auditLogPayload.reason_code = 'NOT_ENROLLED';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({
         status: 'failed',
         message: `You are not registered for ${session.course_code}. Contact your lecturer.`
       }, { status: 403 });
-    }    // ─── CRITICAL SECURITY FIX: ONE CREDENTIAL, ONE ACCOUNT ───
-    // Check if this credentialId has already been used for a different student today.
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const { data: todayUsage } = await supabase
-      .from('attendance_logs')
-      .select('matric_number')
-      .eq('device_hash', credentialId) // We store credentialId in device_hash
-      .gte('check_in_time', startOfToday.toISOString())
-      .neq('matric_number', cleanMatric);
-
-    if (todayUsage && todayUsage.length > 0) {
-      return NextResponse.json({
-        status: 'failed',
-        message: "This phone is already linked to another student for today. You cannot check in for a friend."
-      }, { status: 403 });
     }
 
-    // Check if this student already has a log for this session
+    // ─── PROXY PREVENTION 1: CREDENTIAL BINDING ───
+    // Check if the hardware fingerprint matches the one used at registration
+    const { data: registeredDevice } = await supabase
+      .from('user_devices')
+      .select('hardware_fingerprint')
+      .eq('credential_id', credentialId)
+      .single();
+
+    if (registeredDevice && registeredDevice.hardware_fingerprint !== hardwareFingerprint) {
+      auditLogPayload.reason_code = 'SYNCED_PASSKEY';
+      auditLogPayload.outcome = 'flagged';
+      auditLogPayload.reason_detail = { registered_fingerprint: registeredDevice.hardware_fingerprint, current_fingerprint: hardwareFingerprint };
+      
+      // We flag this, but allow them to proceed (to avoid blocking legit phone upgrades).
+      // The lecturer will see the flag in the dashboard.
+    }
+
+    // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP (SAME DEVICE, DIFFERENT STUDENT) ───
+    // Check if this exact physical hardware has already checked in for someone else in this session.
+    const { data: existingSessionLogs } = await supabase
+      .from('attendance_logs')
+      .select('matric_number, device_info')
+      .eq('session_id', sessionId);
+
+    if (existingSessionLogs && existingSessionLogs.length > 0) {
+      const proxyAttempt = existingSessionLogs.find(log => {
+        if (log.matric_number === cleanMatric) return false;
+        try {
+          const info = JSON.parse(log.device_info || '{}');
+          return info.hardwareFingerprint === hardwareFingerprint;
+        } catch {
+          return false;
+        }
+      });
+
+      if (proxyAttempt) {
+        auditLogPayload.reason_code = 'SAME_DEVICE_TODAY';
+        auditLogPayload.outcome = 'blocked';
+        auditLogPayload.reason_detail = { attempted_matric: cleanMatric, already_checked_in_matric: proxyAttempt.matric_number };
+        await supabase.from('checkin_attempts').insert(auditLogPayload);
+
+        return NextResponse.json({
+          status: 'blocked',
+          message: FLAG_REASONS.SAME_DEVICE_TODAY.messageStudent
+        }, { status: 403 });
+      }
+    }
+
+    // Check if this student already has a verified log for this session
     const { data: existingLog } = await supabase
       .from('attendance_logs')
       .select('id, status')
@@ -177,10 +243,13 @@ export async function POST(request: Request) {
       .single();
 
     if (existingLog && existingLog.status === 'verified') {
+      auditLogPayload.outcome = 'verified';
+      auditLogPayload.reason_code = 'ALREADY_VERIFIED';
+      await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({ status: 'verified', message: "You have already checked in to this session." }, { status: 200 });
     }
 
-    // ─── DYNAMIC GPS RADIUS ───
+    // ─── GPS & GEOFENCE LOGIC (No IP AUTO-VERIFY) ───
     let bestDistance = Infinity;
     let bestAccuracy: number | null = null;
     for (const ping of validPings) {
@@ -191,32 +260,32 @@ export async function POST(request: Request) {
       }
     }
 
-    // If accuracy is weak (e.g. indoors), expand the radius.
     const isWeakSignal = bestAccuracy === null || bestAccuracy > GPS_WEAK_SIGNAL_THRESHOLD;
     const allowedRadius = isWeakSignal ? GEOFENCE_INDOOR_RADIUS_METERS : GEOFENCE_RADIUS_METERS;
     const hardBlockRadius = isWeakSignal ? (GEOFENCE_INDOOR_RADIUS_METERS + 500) : GEOFENCE_HARD_BLOCK_METERS;
 
     const spoofSuspected = detectLikelySpoof(validPings);
-    const isOnSameNetwork = session.anchor_ip && session.anchor_ip === ip;
 
-    let finalStatus = 'absent';
+        let finalStatus: 'verified' | 'flagged' = 'flagged';
     let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
+    let reasonCode = null;
 
-    if (isOnSameNetwork || bestDistance <= allowedRadius) {
+    if (bestDistance <= allowedRadius) {
       if (spoofSuspected) {
         finalStatus = 'flagged';
+        reasonCode = 'LOCATION_SPOOF_SUSPECTED';
         responseMessage = "You're close enough, but your location signal was unstable. Your lecturer will review this.";
       } else {
         finalStatus = 'verified';
-        responseMessage = isOnSameNetwork
-          ? "Verified via campus Wi-Fi."
-          : "Verified via GPS.";
+        responseMessage = "Verified via GPS.";
       }
     } else if (bestDistance > hardBlockRadius) {
       finalStatus = 'flagged';
+      reasonCode = 'OUT_OF_BOUNDS';
       responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor. You must be inside the lecture hall (allowed: ${allowedRadius}m).`;
     } else {
       finalStatus = 'flagged';
+      reasonCode = 'OUT_OF_BOUNDS';
       responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m). Move closer and try again.`;
     }
 
@@ -225,15 +294,13 @@ export async function POST(request: Request) {
       evaluatedDistance: Math.round(bestDistance),
       distanceMeters: Math.round(bestDistance),
       bestAccuracy,
-      deviceFingerprint,
+      hardwareFingerprint,
       verificationMethod,
       spoofSuspected,
-      isOnSameNetwork,
       isIOS,
     });
 
-    // ─── UPSERT WITH CREDENTIAL ID ───
-    // We store the credentialId in device_hash. This is what enforces the proxy rule.
+    // ─── UPSERT ATTENDANCE LOG ───
     const { error: upsertError } = await supabase
       .from('attendance_logs')
       .upsert({
@@ -241,7 +308,7 @@ export async function POST(request: Request) {
         matric_number: cleanMatric,
         status: finalStatus,
         device_info: deviceInfoPayload,
-        device_hash: credentialId, // Store the credentialId, not the fingerprint
+        device_hash: credentialId,
       }, { 
         onConflict: 'session_id,matric_number',
         ignoreDuplicates: false 
@@ -251,6 +318,12 @@ export async function POST(request: Request) {
       console.error("Upsert failed:", upsertError);
       return NextResponse.json({ status: 'failed', message: "Database error. Please try again." }, { status: 500 });
     }
+
+    // ─── WRITE AUDIT LOG ───
+    auditLogPayload.outcome = finalStatus;
+    auditLogPayload.reason_code = reasonCode || auditLogPayload.reason_code;
+    auditLogPayload.reason_detail = auditLogPayload.reason_detail || { distance: Math.round(bestDistance), accuracy: bestAccuracy };
+    await supabase.from('checkin_attempts').insert(auditLogPayload);
 
     return NextResponse.json({
       status: finalStatus,
