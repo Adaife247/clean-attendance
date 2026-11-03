@@ -16,7 +16,15 @@ import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
 import { GeoTrustInWeb } from '@geotrustin/web';
 
-interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
+interface Telemetry { 
+  lat: number; 
+  lng: number; 
+  alt: number | null; 
+  acc: number; 
+  timestamp: number;
+  spd?: number | null;
+  hdg?: number | null;
+}
 interface Props { sessionId: string; }
 
 interface OfflineQueueItem {
@@ -80,7 +88,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const hardwareFingerprintRef = useRef<string | null>(null);
   const deviceIdRef = useRef<string | null>(null);
   
-  // NEW: Motion Buffer for DeviceMotion cross-check
   const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
   useEffect(() => {
@@ -111,7 +118,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => clearTimeout(id);
   }, [searchParams]);
 
-  // NEW: Track DeviceMotion
   useEffect(() => {
     if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
 
@@ -161,8 +167,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = navigator.geolocation.watchPosition(
       (position) => {
         prewarmBufferRef.current.push({
-          lat: position.coords.latitude, lng: position.coords.longitude,
-          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+          lat: position.coords.latitude, 
+          lng: position.coords.longitude,
+          alt: position.coords.altitude, 
+          acc: position.coords.accuracy, 
+          timestamp: position.timestamp,
+          spd: position.coords.speed,
+          hdg: position.coords.heading
         });
         if (prewarmBufferRef.current.length > 30) {
           prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
@@ -176,8 +187,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         prewarmBufferRef.current.push({
-          lat: position.coords.latitude, lng: position.coords.longitude,
-          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+          lat: position.coords.latitude, 
+          lng: position.coords.longitude,
+          alt: position.coords.altitude, 
+          acc: position.coords.accuracy, 
+          timestamp: position.timestamp,
+          spd: position.coords.speed,
+          hdg: position.coords.heading
         });
       },
       () => {},
@@ -413,7 +429,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           hardwareFingerprint: hardwareFingerprint || 'unknown',
           verificationMethod,
           spoofRisk,
-          motionTelemetry: motionBufferRef.current, // <-- Send motion data
+          motionTelemetry: motionBufferRef.current,
           userAgent: navigator.userAgent
         })
       });
@@ -556,7 +572,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
         pings.push({
           lat: position.coords.latitude, lng: position.coords.longitude,
-          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp,
+          spd: position.coords.speed, hdg: position.coords.heading
         });
 
         const now = Date.now();

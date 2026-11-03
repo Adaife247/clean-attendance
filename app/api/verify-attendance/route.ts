@@ -17,6 +17,8 @@ interface Telemetry {
   alt: number | null;
   acc: number;
   timestamp: number;
+  spd?: number | null;
+  hdg?: number | null;
 }
 
 interface MotionSample {
@@ -50,9 +52,13 @@ function getValidPings(telemetry: Telemetry[]): Telemetry[] {
     if (typeof t.lat !== 'number' || typeof t.lng !== 'number') return false;
     if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return false;
     if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false;
-    if (typeof t.acc !== 'number') return false;
-    if (t.acc < 0) return false;
-    if (t.acc > 2000) return false;
+    
+    // Reject zero or negative accuracy (mock GPS signature)
+    if (typeof t.acc !== 'number' || t.acc <= 0 || t.acc > 2000) return false;
+
+    // Reject if speed is null/0 but heading is non-zero (contradictory)
+    if ((t.spd === null || t.spd === 0) && t.hdg !== null && t.hdg !== 0) return false;
+
     return true;
   });
 }
@@ -62,12 +68,26 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
   if (accurate.length < 4) return false;
 
   let anomalousJumps = 0;
+  let uniformIntervals = 0;
+  let lastDt = -1;
+
   for (let i = 1; i < accurate.length; i++) {
     const drift = getDistanceInMeters(accurate[i - 1].lat, accurate[i - 1].lng, accurate[i].lat, accurate[i].lng);
     const dt = Math.abs(accurate[i].timestamp - accurate[i - 1].timestamp) / 1000;
+
+    // Teleportation check (> 200 m/s)
     if (dt > 0 && dt < 2 && drift / dt > 200) anomalousJumps++;
+
+    // Uniform timestamp check (mock apps often inject exactly every 1000ms)
+    if (lastDt !== -1 && Math.abs(dt - lastDt) < 0.01) {
+      uniformIntervals++;
+    }
+    lastDt = dt;
   }
-  return anomalousJumps >= 3;
+
+  const isUniform = uniformIntervals >= 3;
+
+  return anomalousJumps >= 3 || isUniform;
 }
 
 function computeMotionVariance(samples: MotionSample[]): number {
