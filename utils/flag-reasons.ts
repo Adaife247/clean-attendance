@@ -12,6 +12,7 @@ export type FlagCode =
   | 'GPS_WEAK'                  // Accuracy too poor to verify
   
   // Technical (non-punitive)
+  | 'NO_BIOMETRIC'              // Check-in attempted without fingerprint/FaceID
   | 'AMBIGUOUS_COLLISION'       // Possible identical-phone match; needs human eye
   | 'OFFLINE_QUEUED'            // Saved locally; will sync
   
@@ -123,6 +124,17 @@ export const FLAG_REASONS: Record<FlagCode, FlagReason> = {
       'GPS signal is too weak to verify your location. Move near a window or step outside, then try again.',
     messageLecturer:
       'Check-in attempt with accuracy > 100 m. Not counted as proxy; student asked to retry.',
+    suggestedAction: 'retry',
+  },
+
+  NO_BIOMETRIC: {
+    code: 'NO_BIOMETRIC',
+    severity: 'error',
+    category: 'technical',
+    messageStudent:
+      'You must use biometric verification (fingerprint or FaceID) to check in. Please try again.',
+    messageLecturer:
+      'Student attempted check-in without biometric verification.',
     suggestedAction: 'retry',
   },
 

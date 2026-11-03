@@ -2,17 +2,18 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
-  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin, ShieldAlert,
+  ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin,
   Zap, Clock, Flame
 } from 'lucide-react';
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
 import { getStudentHeaders } from '@/utils/api-client';
 import { logger } from '@/utils/logger';
+import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -61,6 +62,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
+  const [currentFlagCode, setCurrentFlagCode] = useState<FlagCode | null>(null);
 
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
   const [ratingStars, setRatingStars] = useState(0);
@@ -161,7 +163,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
-            try {
+      try {
         const fp = await generateDeviceFingerprint();
         if (!cancelled) {
           hardwareFingerprintRef.current = fp.hardwareFingerprint;
@@ -207,7 +209,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers,
-                    body: JSON.stringify({
+          body: JSON.stringify({
             sessionId: item.session,
             telemetry: item.telemetry,
             hardwareFingerprint: item.hardwareFingerprint,
@@ -241,6 +243,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     if (matricNumber.length < 5) return;
     setStatus('checking');
     setErrorMessage('');
+    setCurrentFlagCode(null);
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -278,11 +281,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-            const options = await genRes.json();
+      const options = await genRes.json();
       if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
 
       // ─── THE PRE-CHECK (Blocks Cleared Cache / Incognito) ───
-                  try {
+      try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const authOptions: any = {
           challenge: options.challenge,
@@ -324,7 +327,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         throw err;
       }
 
-            // Wait for the fingerprint to be generated
+      // Wait for the fingerprint to be generated
       let fp = hardwareFingerprintRef.current;
       let dId = deviceIdRef.current;
       if (!fp || !dId) {
@@ -338,11 +341,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+        body: JSON.stringify({ 
           matricNumber, 
           authResponse: attResp,
-          hardwareFingerprint: hardwareFingerprintRef.current || 'unknown',
-          deviceFingerprint: fp || 'unknown', // Keep sending this if used elsewhere
+          hardwareFingerprint: fp || 'unknown',
+          deviceFingerprint: fp || 'unknown',
           deviceId: dId || 'unknown'
         })
       });
@@ -359,9 +362,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
       setErrorMessage(msg);
       setStatus('failed');
     }
-  };  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
+  };  
+
+  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
-            let hardwareFingerprint = hardwareFingerprintRef.current;
+      let hardwareFingerprint = hardwareFingerprintRef.current;
       if (!hardwareFingerprint) {
         const start = Date.now();
         while (!hardwareFingerprint && Date.now() - start < FINGERPRINT_WAIT_MS) {
@@ -378,10 +383,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers,
-                body: JSON.stringify({
+        body: JSON.stringify({
           sessionId,
           telemetry: gpsTelemetry,
-          hardwareFingerprint: hardwareFingerprintRef.current || 'unknown',
+          hardwareFingerprint: hardwareFingerprint || 'unknown',
           verificationMethod,
           userAgent: navigator.userAgent
         })
@@ -398,7 +403,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
         localStorage.setItem(STORAGE_KEYS.checkinCount, String(currentCount + 1));
       } else {
         setErrorMessage(result.message || "Verification failed.");
-        if (result.status === 'disqualified') {
+        if (result.code) {
+          setCurrentFlagCode(result.code as FlagCode);
+        }
+        if (result.status === 'disqualified' || result.status === 'blocked') {
           setStatus('disqualified');
         } else {
           setStatus('failed');
@@ -408,8 +416,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
-                        if (!existing.some(item => item.session === sessionId)) {
-          existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hardwareFingerprintRef.current, verificationMethod, timestamp: Date.now() });          safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
+        if (!existing.some(item => item.session === sessionId)) {
+          existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hardwareFingerprintRef.current, verificationMethod, timestamp: Date.now() });
+          safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
         }
         setStatus('offline-queued');
       } else {
@@ -422,6 +431,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const executeFinalCheckIn = async () => {
     setStatus('locating');
     setErrorMessage('');
+    setCurrentFlagCode(null);
     setLiveAccuracy(null);
 
     checkPermissionFromGesture();
@@ -458,7 +468,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       console.error("Biometric verification failed:", error);
       setErrorMessage("Biometric verification failed or was cancelled. You must scan your fingerprint/FaceID to check in.");
       setStatus('failed');
-      return; // Stop here. Do not proceed to GPS.
+      return;
     }
 
     if (!navigator.geolocation) {
@@ -793,38 +803,46 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {status === 'failed' && (
+        {status === 'failed' && currentFlagCode && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <AlertTriangle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Verification Failed</h3>
-            <p className="text-orange-700 dark:text-orange-300 mt-2 text-sm font-bold bg-orange-50 dark:bg-orange-900/20 p-3 rounded-xl border border-orange-100 dark:border-orange-800 transition-colors">
-              {errorMessage}
-            </p>
-            <div className="mt-6 space-y-3">
-              <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
-
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
-                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
-              </button>
-
-              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">Start Over</button>
+            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${FLAG_REASONS[currentFlagCode].severity === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
+              <AlertTriangle size={32} />
             </div>
-          </div>
-        )}
-
-        {status === 'disqualified' && (
-          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <ShieldAlert className="w-16 h-16 text-red-600 dark:text-red-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Attempt Blocked</h3>
-            <p className="text-red-700 dark:text-red-300 mt-2 text-sm font-bold bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-800 transition-colors">
-              {errorMessage}
+            
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+              {FLAG_REASONS[currentFlagCode].severity === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
+            </h3>
+            
+            <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
+              {FLAG_REASONS[currentFlagCode].messageStudent}
             </p>
+
             <div className="mt-6 space-y-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Show this screen to your lecturer to be verified manually.</p>
-              <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
-                {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand
-              </button>
-              <button onClick={() => router.push('/student-hub')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Return to Student Hub</button>
+              {/* Retry Button */}
+              {FLAG_REASONS[currentFlagCode].suggestedAction === 'retry' && (
+                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md">
+                  <RefreshCw size={18} /> Try Again
+                </button>
+              )}
+
+              {/* Raise Hand Button */}
+              {FLAG_REASONS[currentFlagCode].category !== 'proxy' && FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
+                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
+                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
+                </button>
+              )}
+
+              {/* See Lecturer Text */}
+              {FLAG_REASONS[currentFlagCode].suggestedAction === 'see_lecturer' && (
+                <p className="text-sm font-bold text-gray-500 mt-2">Show this screen to your lecturer.</p>
+              )}
+
+              {/* Start Over Button */}
+              {FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
+                <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
+                  Start Over
+                </button>
+              )}
             </div>
           </div>
         )}

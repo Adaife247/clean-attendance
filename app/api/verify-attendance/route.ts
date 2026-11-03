@@ -65,7 +65,7 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
 
 export async function POST(request: Request) {
   try {
-    // 1. Auth FIRST (we need the matric for rate limiting)
+    // 1. Auth FIRST
     const auth = verifyStudentToken(request);
     if (auth.error) return auth.error;
     const cleanMatric = auth.matric!;
@@ -73,8 +73,7 @@ export async function POST(request: Request) {
 
     const ip = getClientIp(request);
     
-    // 2. RATE LIMITING (Fixed DoS)
-    // We allow 100 IP hits/min to stop raw spam, but 10 hits/min per student.
+    // 2. RATE LIMITING
     const ipRateCheck = await checkRateLimit(`verify-att-ip:${ip}`, 100);
     if (!ipRateCheck.allowed) {
       return NextResponse.json(
@@ -112,7 +111,8 @@ export async function POST(request: Request) {
       await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({
         status: 'failed',
-        message: "Biometric verification is required to check in."
+        code: 'NO_BIOMETRIC',
+        message: FLAG_REASONS.NO_BIOMETRIC.messageStudent
       }, { status: 403 });
     }
 
@@ -124,6 +124,7 @@ export async function POST(request: Request) {
       await supabase.from('checkin_attempts').insert(auditLogPayload);
       return NextResponse.json({
         status: 'failed',
+        code: 'GPS_WEAK',
         message: FLAG_REASONS.GPS_WEAK.messageStudent,
         distance: null,
         maxAllowedDistance: GEOFENCE_RADIUS_METERS,
@@ -227,6 +228,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           status: 'blocked',
+          code: 'SAME_DEVICE_TODAY',
           message: FLAG_REASONS.SAME_DEVICE_TODAY.messageStudent
         }, { status: 403 });
       }
@@ -322,6 +324,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       status: finalStatus,
+      code: reasonCode,
       distance: Math.round(bestDistance),
       accuracy: bestAccuracy,
       maxAllowedDistance: allowedRadius,
