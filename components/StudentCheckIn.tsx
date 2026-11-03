@@ -21,7 +21,7 @@ interface OfflineQueueItem {
   session: string;
   matric: string;
   telemetry: Telemetry[];
-  fingerprint: string | null;
+  hardwareFingerprint: string | null;
   verificationMethod: string;
   timestamp: number;
 }
@@ -74,8 +74,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
-  const fingerprintRef = useRef<string | null>(null);
-  const deviceIdRef = useRef<string | null>(null); // <-- NEW: Track the local UUID
+  const hardwareFingerprintRef = useRef<string | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -161,11 +161,11 @@ export default function StudentCheckIn({ sessionId }: Props) {
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
-      try {
+            try {
         const fp = await generateDeviceFingerprint();
         if (!cancelled) {
-          fingerprintRef.current = fp.hash;
-          deviceIdRef.current = fp.deviceId; // <-- Save the UUID
+          hardwareFingerprintRef.current = fp.hardwareFingerprint;
+          deviceIdRef.current = fp.deviceId;
         }
       } catch (err) {
         logger.warn('Fingerprint generation failed', err);
@@ -207,10 +207,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers,
-          body: JSON.stringify({
+                    body: JSON.stringify({
             sessionId: item.session,
             telemetry: item.telemetry,
-            deviceFingerprint: item.fingerprint,
+            hardwareFingerprint: item.hardwareFingerprint,
             verificationMethod: item.verificationMethod,
             userAgent: navigator.userAgent
           })
@@ -306,25 +306,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
         throw err;
       }
 
-      // Wait for the fingerprint to be generated
-      let fp = fingerprintRef.current;
+            // Wait for the fingerprint to be generated
+      let fp = hardwareFingerprintRef.current;
       let dId = deviceIdRef.current;
       if (!fp || !dId) {
         const start = Date.now();
         while ((!fp || !dId) && Date.now() - start < 3000) {
           await new Promise(r => setTimeout(r, 100));
-          fp = fingerprintRef.current;
+          fp = hardwareFingerprintRef.current;
           dId = deviceIdRef.current;
         }
       }
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+                body: JSON.stringify({ 
           matricNumber, 
           authResponse: attResp,
-          deviceFingerprint: fp || 'unknown',
-          deviceId: dId || 'unknown' // <-- Send the UUID
+          hardwareFingerprint: hardwareFingerprintRef.current || 'unknown',
+          deviceFingerprint: fp || 'unknown', // Keep sending this if used elsewhere
+          deviceId: dId || 'unknown'
         })
       });
       const verifyResult = await verifyRes.json();
@@ -342,12 +343,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
     try {
-      let fingerprint = fingerprintRef.current;
-      if (!fingerprint) {
+            let hardwareFingerprint = hardwareFingerprintRef.current;
+      if (!hardwareFingerprint) {
         const start = Date.now();
-        while (!fingerprint && Date.now() - start < FINGERPRINT_WAIT_MS) {
+        while (!hardwareFingerprint && Date.now() - start < FINGERPRINT_WAIT_MS) {
           await new Promise(r => setTimeout(r, 100));
-          fingerprint = fingerprintRef.current;
+          hardwareFingerprint = hardwareFingerprintRef.current;
         }
       }
 
@@ -359,10 +360,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers,
-        body: JSON.stringify({
+                body: JSON.stringify({
           sessionId,
           telemetry: gpsTelemetry,
-          deviceFingerprint: fingerprint || 'unknown',
+          hardwareFingerprint: hardwareFingerprintRef.current || 'unknown',
           verificationMethod,
           userAgent: navigator.userAgent
         })
@@ -389,9 +390,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
       if (isNetwork) {
         const existing = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
-        if (!existing.some(item => item.session === sessionId)) {
-          existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, fingerprint: fingerprintRef.current, verificationMethod, timestamp: Date.now() });
-          safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
+                        if (!existing.some(item => item.session === sessionId)) {
+          existing.push({ session: sessionId, matric: matricNumber, telemetry: gpsTelemetry, hardwareFingerprint: hardwareFingerprintRef.current, verificationMethod, timestamp: Date.now() });          safeStorage.setJSON(STORAGE_KEYS.offlineQueue, existing);
         }
         setStatus('offline-queued');
       } else {

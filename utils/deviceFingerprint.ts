@@ -5,12 +5,9 @@ interface NavigatorWithMemory extends Navigator {
 }
 
 export interface DeviceFingerprintResult {
-  hash: string;        // The combined hardware + UUID hash
-  deviceId: string;    // The persistent UUID (for the server)
-  components: {
-    hardware: string;
-    deviceId: string;
-  };
+  hash: string;                // The combined hardware + UUID hash (device_hash)
+  hardwareFingerprint: string; // The raw hardware hash (cross-browser)
+  deviceId: string;            // The persistent UUID
   duration: number;
 }
 
@@ -72,21 +69,20 @@ function getLocalDeviceId(): string {
 export async function generateDeviceFingerprint(): Promise<DeviceFingerprintResult> {
   const start = performance.now();
 
-  const hardware = getHardwareFingerprint();
+  const rawHardware = getHardwareFingerprint();
+  const hardwareFingerprint = hashString(rawHardware);
+  
   const deviceId = getLocalDeviceId();
   
-  const combined = `${hardware}||${deviceId}`;
+  const combined = `${rawHardware}||${deviceId}`;
   const hash = hashString(combined);
   
   const duration = performance.now() - start;
 
   return {
     hash,
+    hardwareFingerprint,
     deviceId,
-    components: {
-      hardware,
-      deviceId,
-    },
     duration,
   };
 }

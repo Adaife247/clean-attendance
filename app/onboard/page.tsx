@@ -18,7 +18,10 @@ export default function OnboardPage() {
 
   const [matricNumber, setMatricNumber] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
-  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  
+  // UPDATED: Track hardwareFingerprint, hash, and deviceId
+  const [hardwareFingerprint, setHardwareFingerprint] = useState<string | null>(null);
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const [isChecking, setIsChecking] = useState(false);
@@ -29,7 +32,8 @@ export default function OnboardPage() {
     const id = setTimeout(async () => {
       try {
         const fp = await generateDeviceFingerprint();
-        setFingerprint(fp.hash);
+        setHardwareFingerprint(fp.hardwareFingerprint);
+        setDeviceFingerprint(fp.hash);
         setDeviceId(fp.deviceId);
       } catch (err) {
         console.warn("Fingerprint generation failed", err);
@@ -171,7 +175,8 @@ export default function OnboardPage() {
         body: JSON.stringify({
           matricNumber,
           authResponse: attResp,
-          deviceFingerprint: fingerprint || 'unknown',
+          hardwareFingerprint: hardwareFingerprint || 'unknown',
+          deviceFingerprint: deviceFingerprint || 'unknown',
           deviceId: deviceId || 'unknown'
         })
       });

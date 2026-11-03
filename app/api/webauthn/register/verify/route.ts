@@ -1,21 +1,19 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { supabaseAdmin as supabase } from '@/utils/supabase-admin';
 import { rpID, origin } from '@/utils/webauthn';
+import { FLAG_REASONS } from '@/utils/flag-reasons';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { matricNumber, authResponse, deviceFingerprint, deviceId } = body;
+    const { matricNumber, authResponse, hardwareFingerprint, deviceId, deviceFingerprint } = body;
     const cleanMatric = matricNumber.toUpperCase().trim();
 
-    if (!deviceFingerprint || deviceFingerprint === 'unknown') {
-      return NextResponse.json({ error: "Device fingerprint missing." }, { status: 400 });
-    }
-    if (!deviceId) {
-      return NextResponse.json({ error: "Device ID missing." }, { status: 400 });
+    if (!hardwareFingerprint || !deviceId || !deviceFingerprint) {
+      return NextResponse.json({ error: "Device fingerprint data missing." }, { status: 400 });
     }
 
     const cookieStore = await cookies();
@@ -23,41 +21,61 @@ export async function POST(request: Request) {
 
     if (!expectedChallenge) return NextResponse.json({ error: "Session expired." }, { status: 400 });
 
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    // Get IP and User Agent for collision context
+    const headersList = await headers();
+    const forwarded = headersList.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0].trim() : (headersList.get('x-real-ip') || 'unknown');
+    const ua = headersList.get('user-agent') || 'unknown';
 
-    // 1. Block if the hardware fingerprint was used by another student today
-    const { data: deviceReuse } = await supabase
+    // ─── 1. CONTEXTUAL COLLISION RESOLUTION ───
+    // Look up the most recent registration on this exact hardware fingerprint
+    const { data: existingHwDevice } = await supabase
       .from('user_devices')
-      .select('matric_number')
-      .eq('device_hash', deviceFingerprint)
-      .gte('created_at', startOfToday.toISOString())
-      .neq('matric_number', cleanMatric)
-      .limit(1);
+      .select('matric_number, registration_ip, created_at')
+      .eq('hardware_fingerprint', hardwareFingerprint)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (deviceReuse && deviceReuse.length > 0) {
-      return NextResponse.json(
-        { error: "This phone has already been used to set up another student's account today." },
-        { status: 409 }
-      );
+    if (existingHwDevice && existingHwDevice.matric_number !== cleanMatric) {
+      const sameIp = existingHwDevice.registration_ip === ip;
+      const timeGapMs = Date.now() - new Date(existingHwDevice.created_at).getTime();
+      const thirtyMinutes = 30 * 60 * 1000;
+      const oneHour = 60 * 60 * 1000;
+
+      // Scenario A: Same IP and < 30 mins apart. Highly likely proxy.
+      if (sameIp && timeGapMs < thirtyMinutes) {
+        cookieStore.delete('webauthn_challenge');
+        return NextResponse.json(
+          { 
+            error: FLAG_REASONS.DUPLICATE_HARDWARE.messageStudent,
+            code: 'DUPLICATE_HARDWARE' 
+          },
+          { status: 409 }
+        );
+      }
+
+      // Scenario B: Same IP (any time) OR < 1 hour apart. Ambiguous (could be identical phones).
+      if (sameIp || timeGapMs < oneHour) {
+        // Write a soft flag for the lecturer to review, but allow the registration to proceed.
+        await supabase.from('registration_flags').insert({
+          matric_number: cleanMatric,
+          hardware_fingerprint: hardwareFingerprint,
+          reason_code: 'AMBIGUOUS_COLLISION',
+          reason_detail: JSON.stringify({
+            previous_matric: existingHwDevice.matric_number,
+            previous_ip: existingHwDevice.registration_ip,
+            current_ip: ip,
+            time_gap_minutes: Math.round(timeGapMs / 60000)
+          }),
+          ip_address: ip
+        });
+      }
+      
+      // Scenario C: Different IP and > 1 hour apart. Silently allow (likely two identical phones).
     }
 
-    // 2. Block if the Local Device UUID was used by another student today
-    const { data: localReuse } = await supabase
-      .from('user_devices')
-      .select('matric_number')
-      .eq('local_device_id', deviceId)
-      .gte('created_at', startOfToday.toISOString())
-      .neq('matric_number', cleanMatric)
-      .limit(1);
-
-    if (localReuse && localReuse.length > 0) {
-      return NextResponse.json(
-        { error: "This device is already linked to another student. You cannot register a second account." },
-        { status: 409 }
-      );
-    }
-
+    // ─── 2. VERIFY WEBAUTHN ───
     const { data: existingDevice } = await supabase
       .from('user_devices')
       .select('credential_id')
@@ -88,6 +106,7 @@ export async function POST(request: Request) {
     const hex = Array.from(credential.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
     const immuneKey = `\\x${hex}`;
 
+    // ─── 3. SAVE DEVICE ───
     const { error: dbError } = await supabase
       .from('user_devices')
       .upsert({
@@ -96,8 +115,13 @@ export async function POST(request: Request) {
         public_key: immuneKey,
         counter: credential.counter,
         transports: credential.transports || [],
-        device_hash: deviceFingerprint,
+        
+        device_hash: deviceFingerprint, 
+        hardware_fingerprint: hardwareFingerprint, 
         local_device_id: deviceId,
+        registration_ip: ip,
+        registration_ua: ua,
+        
         created_at: new Date().toISOString()
       }, { onConflict: 'matric_number' });
 
