@@ -58,7 +58,6 @@ export default function StudentPortal() {
   const [studentDept, setStudentDept] = useState('');
   const [studentLevel, setStudentLevel] = useState('');
   
-  // NEW: Track which specific courses they represent
   const [repCourseCodes, setRepCourseCodes] = useState<string[]>([]);
   const isClassRep = repCourseCodes.length > 0;
   
@@ -88,7 +87,6 @@ export default function StudentPortal() {
   const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications(matricNumber);
 
   const fetchStudentData = useCallback(async (cleanMatric: string) => {
-    // 1. Fetch profile (no longer has is_class_rep)
     const { data: profile } = await supabase
       .from('student_profiles')
       .select('nickname, department, level')
@@ -102,7 +100,6 @@ export default function StudentPortal() {
     if (profile?.department) setStudentDept(profile.department);
     if (profile?.level) setStudentLevel(profile.level);
 
-    // 2. Fetch feed
     const { data: feedData } = await supabase
       .from('campus_updates')
       .select('*')
@@ -110,7 +107,6 @@ export default function StudentPortal() {
       .limit(20);
     if (feedData) setFeed(feedData);
 
-    // 3. Fetch enrollments
     const { data: enrollmentRows, error: enrollError } = await supabase
       .from('enrollments')
       .select('course_id')
@@ -126,7 +122,6 @@ export default function StudentPortal() {
 
     const courseIds = enrollmentRows.map(e => e.course_id);
 
-    // 4. Fetch courses
     const { data: courseRows, error: courseError } = await supabase
       .from('courses')
       .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
@@ -135,7 +130,6 @@ export default function StudentPortal() {
     if (courseError) throw courseError;
     const courseCodes = courseRows?.map(c => c.course_code) || [];
 
-    // 5. NEW: Check which courses they are a rep for
     const { data: repRows } = await supabase
       .from('course_reps')
       .select('course_id')
@@ -145,7 +139,6 @@ export default function StudentPortal() {
     const myRepCourseCodes = courseRows?.filter(c => myRepCourseIds.includes(c.id)).map(c => c.course_code) || [];
     setRepCourseCodes(myRepCourseCodes);
 
-    // 6. Fetch sessions
     const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('session_id, course_code, created_at, is_active, expires_at')
@@ -371,6 +364,22 @@ export default function StudentPortal() {
     }).length;
   }, [feed, lastSeenTimestamp, now]);
 
+  // NEW: Calculate XP and Level
+  const totalXP = useMemo(() => {
+    if (!records) return 0;
+    return records.reduce((acc, record) => {
+      return acc + (record.attended_classes * 10) + (record.streak * 5);
+    }, 0);
+  }, [records]);
+
+  const levelData = useMemo(() => {
+    // Simple leveling curve: Level 1 = 0-500, Level 2 = 501-1500, Level 3 = 1501-3000, Level 4 = 3001+
+    if (totalXP <= 500) return { level: 1, title: 'Rookie', currentXP: totalXP, nextLevelXP: 500 };
+    if (totalXP <= 1500) return { level: 2, title: 'Regular', currentXP: totalXP - 500, nextLevelXP: 1000 };
+    if (totalXP <= 3000) return { level: 3, title: 'Scholar', currentXP: totalXP - 1500, nextLevelXP: 1500 };
+    return { level: 4, title: 'Legend', currentXP: totalXP - 3000, nextLevelXP: 9999 }; // Max level
+  }, [totalXP]);
+
   const handleRegister = async () => {
     if (matricNumber.length < 5) return;
     setUnlockState('authenticating');
@@ -485,7 +494,6 @@ export default function StudentPortal() {
     if (!matricNumber) return;
     const cleanMatric = matricNumber.toUpperCase().trim();
     
-    // NEW: We no longer send is_class_rep here, the DB handles it now.
     const { error } = await supabase.from('student_profiles').upsert({
       matric_number: cleanMatric,
       nickname: nickname.trim(),
@@ -613,8 +621,6 @@ export default function StudentPortal() {
   };
 
   const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
-
-  // Filter records to only the courses this student represents for the Rep Desk UI
   const repRecords = records?.filter(r => repCourseCodes.includes(r.course_code)) || [];
 
   return (
@@ -631,7 +637,7 @@ export default function StudentPortal() {
               <button
                 onClick={() => setActiveTab('feed')}
                 aria-label={unreadCount > 0 ? `${unreadCount} unread updates` : 'Open updates feed'}
-                className="relative w-10 h-10 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-all"
+                className="relative w-10 h-10 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-95 transition-all"
               >
                 <Bell size={18} className={unreadCount > 0 ? 'text-[#2563EB] dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'} />
                 {unreadCount > 0 && (
@@ -655,7 +661,7 @@ export default function StudentPortal() {
 
         {activeLiveSession && (
           liveSessionCheckedIn ? (
-            <div className="mb-6 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="mb-6 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-500 shadow-sm">
               <div className="bg-emerald-100 dark:bg-emerald-900/50 p-2 rounded-full text-emerald-600 dark:text-emerald-400">
                 <CheckCircle size={20} />
               </div>
@@ -739,6 +745,8 @@ export default function StudentPortal() {
                   permission={permission}
                   isSubscribed={isSubscribed}
                   subscribe={subscribe}
+                  totalXP={totalXP}
+                  levelData={levelData}
                 />
               )}
 
