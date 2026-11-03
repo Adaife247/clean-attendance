@@ -1,8 +1,4 @@
 
----
-
-### 2. `AGENTS.md` (Full File)
-
 This is the AI developer rulebook. It has been strictly updated to enforce the new 8px spacing grid, Accessibility (A11y) standards, and the new component architecture.
 
 ```markdown
