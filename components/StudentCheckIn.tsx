@@ -924,7 +924,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 </button>
               )}
 
-              {FLAG_REASONS[currentFlagCode]?.category !== 'proxy' && FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
+                            {/* Raise Hand is ONLY for manual/technical edge cases, NOT GPS/Motion failures */}
+              {(FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' || FLAG_REASONS[currentFlagCode]?.suggestedAction === 'ask_rep') && (
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
                 </button>

@@ -1,6 +1,14 @@
+
+---
+
+### 2. `AGENTS.md` (Full File)
+
+This is the AI developer rulebook. It has been strictly updated to enforce the new 8px spacing grid, Accessibility (A11y) standards, and the new component architecture.
+
+```markdown
 # 🛠️ CampusCheck — AI Development Standards & Project Context
 
-> **AI Instructions:** Read this document completely before writing any code. Adhere strictly to the architectural patterns, styling tokens, and output rules defined below.
+> **AI Instructions:** Read this document completely before writing any code. Adhere strictly to the architectural patterns, styling tokens, and security rules defined below.
 
 ---
 
@@ -10,7 +18,7 @@
 * **Primary Tech Stack:** Next.js 16 (App Router), Tailwind CSS v4, TypeScript, Supabase (Postgres), Upstash Redis, Sentry.
 * **Authentication:** 
   * **Lecturers:** Supabase Auth (Email + Password).
-  * **Students:** Custom JWT + WebAuthn (Passkeys) bound to device hardware.
+  * **Students:** Custom JWT + WebAuthn (Passkeys) bound to device hardware (Canvas/WebGL fingerprints).
 * **Deployment Target:** Vercel.
 
 ---
@@ -18,52 +26,53 @@
 ## 2. Code & Output Standards
 You must follow these strict engineering constraints for every response:
 
-* **No Truncation / Placeholders:** Never use comments like `// TODO: implement later` or `// ... rest of your code`. Write full, production-ready files. If a file is too long, split it into logical parts and explicitly tell the user how to concatenate them.
-* **Component Pattern:** Use functional, modular components. Keep them focused on a single responsibility.
-* **Mobile-First Responsive:** Use layout frameworks (Flexbox/Grid) with a mobile-first approach. All interactive elements must have a minimum touch target of 44x44px.
-* **TypeScript Rigour:** No implicit `any`. Define clear interfaces or types for all component props and API payloads.
+* **No Truncation / Placeholders:** Never use comments like `// TODO: implement later`. Write full, production-ready files.
+* **Component Pattern:** Use functional, modular components. Keep them focused on a single responsibility (e.g., `DashboardTab`, `FeedTab`, `RepDeskTab`).
+* **Mobile-First Responsive:** All interactive elements must have a minimum touch target of 44x44px.
+* **TypeScript Rigour:** No implicit `any`. Define clear interfaces for all component props and API payloads.
 * **UI Consistency:** 
-  * **DO NOT** use raw browser `alert()` or `window.confirm()`. Use the custom `<ConfirmModal>` and `useToast()` components located in `components/`.
-  * All data fetching from the client side must use the `getStudentHeaders()` or `getLecturerHeaders()` utility from `utils/api-client.ts`.
+  * **DO NOT** use raw browser `alert()` or `window.confirm()`. Use the custom `<ConfirmModal>` and `useToast()` components.
+  * All data fetching from the client side must use `getStudentHeaders()` or `getLecturerHeaders()` from `utils/api-client.ts`.
+  * **Accessibility (WCAG 2.2 AA):** 
+    * All toasts must use `role="status"` (info/success) or `role="alert"` (error).
+    * Modals must trap focus and support `Escape` to close.
+    * Never remove focus outlines. Use `focus-visible:ring-2`.
 
 ---
 
 ## 3. Design Tokens & Styling
 Ensure all UI generation matches these visual specs:
 
-* **Theme / Vibe:** Clean, institutional, modern.
-* **Dark Mode:** Mandatory. Every UI component must have explicit `dark:` variants (e.g., `bg-white dark:bg-gray-900`, `text-gray-900 dark:text-white`).
+* **Theme / Vibe:** Clean, institutional, modern. "Quiet Chrome" (minimal borders, rely on spacing/typography for hierarchy).
+* **Spacing Grid:** Use multiples of **8px** (or 4px for tight elements). E.g., `p-2`, `p-4`, `gap-4`, `py-6`. Avoid arbitrary values like `p-5` or `gap-1.5` unless necessary.
+* **Dark Mode:** Mandatory. Every component must have explicit `dark:` variants (e.g., `bg-white dark:bg-gray-900`).
 * **Primary Color:** `brand-blue: #2563EB`
-* **Backgrounds:** Light (`bg-gray-50`), Dark (`bg-gray-950`).
-* **Cards / Surfaces:** Light (`bg-white border-gray-200`), Dark (`dark:bg-gray-900 dark:border-gray-800`).
-* **Typography:** Geist Sans (UI body) and Geist Mono (code/number displays).
-* **Spacing Scale:** Standardize on 4px/8px multiples (`p-4`, `p-6`, `gap-4`). Border radius should default to `rounded-xl` or `rounded-2xl` for cards, `rounded-3xl` for modals.
+* **Surfaces:** Light (`bg-white`, `bg-gray-50`), Dark (`bg-gray-900`, `bg-gray-950`).
+* **Typography:** Geist Sans (UI body) and Geist Mono (code/number displays). Use `tracking-tight` for large headings.
 
 ---
 
 ## 4. Repository Structure & Routing Map
-Align your file generation with this directory outline:
 
 ```text
 ├── app/
 │   ├── api/                 # Backend route handlers
-│   │   ├── verify-attendance/ # The core GPS + Biometric check
+│   │   ├── verify-attendance/ # Core GPS + Biometric + Anti-Proxy check
 │   │   ├── webauthn/        # Passkey generation & verification
-│   │   └── onboard/         # Secure email saving
+│   │   └── lecturer/        # Dashboard data fetching (flags, etc.)
 │   ├── dashboard/           # Lecturer views (Live Radar, Courses, Analytics)
 │   ├── portal/              # Student views (Dashboard, Feed, Rep Desk)
 │   ├── onboard/             # Student account creation wizard
 │   ├── login/               # Lecturer login page
-│   └── layout.tsx           # Root layout (Sentry + Font setup)
-├── components/              # Shared UI Components
-│   ├── StudentCheckIn.tsx   # The live check-in UI
-│   ├── ConfirmModal.tsx     # Reusable modal
-│   ├── Toast.tsx            # Notification toasts
-│   └── ThemeToggle.tsx      # Dark/Light mode switcher
-├── utils/                   # Utility functions
+├── components/              
+│   ├── CommandPalette.tsx   # Global ⌘K search for lecturers
+│   ├── ConfirmModal.tsx     # Accessible modal
+│   ├── Toast.tsx            # Accessible notifications
+│   ├── student-hub/         # Modularized student tabs (Dashboard, Feed, Rep)
+│   └── lecturer/            # Modularized lecturer components (FlagReview)
+├── utils/                   
 │   ├── supabase-admin.ts    # Service-role DB client (Server only)
-│   ├── supabase.ts          # Anon-key DB client (Client side)
 │   ├── student-auth.ts      # JWT generation and verification
-│   ├── constants.ts         # Global magic numbers (geofence radius, etc.)
+│   ├── flag-reasons.ts      # Central taxonomy for all security flags
 │   └── rate-limit.ts        # Upstash Redis limiter
 └── types/                   # Global TypeScript interfaces

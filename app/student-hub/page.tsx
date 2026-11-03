@@ -653,11 +653,10 @@ export default function StudentPortal() {
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            {savedNickname ? `Hey, ${savedNickname}!` : 'Survival Companion'}
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+            {savedNickname ? `Welcome back, ${savedNickname}` : 'Student Portal'}
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Track your NUC clearance status</p>
-        </div>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Monitor your attendance & eligibility</p>        </div>
 
         {activeLiveSession && (
           liveSessionCheckedIn ? (

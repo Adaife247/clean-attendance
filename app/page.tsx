@@ -25,9 +25,9 @@ function CheckInWrapper() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Announcement Bar */}
-                <div className="bg-[#2563EB] text-white text-xs font-bold text-center py-2 px-4 tracking-wide flex items-center justify-center gap-2">
+        <div className="bg-[#2563EB] text-white text-xs font-bold text-center py-2 px-4 tracking-wide flex items-center justify-center gap-2">
           <Sparkles size={14} className="text-blue-200" />
-          <span>NEW: Secure biometric check-in is now live for all students. <a href="/onboard" className="underline hover:text-blue-100">Set up your account</a>.</span>
+          <span>NEW: Hardware-bound biometric check-in is now live. <a href="/onboard" className="underline hover:text-blue-100">Set up your account</a>.</span>
         </div>
 
         {/* Sticky Header */}
@@ -46,7 +46,7 @@ function CheckInWrapper() {
                 Faculty Login
               </Link>
               <Link href="/student-hub" className="hidden sm:block bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all">
-                Student Hub
+                Student Portal
               </Link>
             </div>
           </div>
@@ -67,7 +67,7 @@ function CheckInWrapper() {
           </h1>
 
           <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 font-medium max-w-2xl mx-auto mb-10 animate-in fade-in slide-in-from-bottom-8">
-            No proxy. No manual roll calls. Just FaceID, Fingerprint, or PIN, plus GPS verification, and instant analytics for your lecture hall.
+            Eliminate proxy attendance with hardware-bound biometrics and strict GPS verification. No downloads required.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-10">
@@ -82,7 +82,7 @@ function CheckInWrapper() {
                 <LogIn size={20} className="text-white" strokeWidth={3} />
               )}
               <span className="font-black text-white text-lg tracking-wide">
-                {isNavigating ? "Entering..." : "Enter Student Hub"}
+                {isNavigating ? "Entering..." : "Enter Student Portal"}
               </span>
             </Link>
 
@@ -91,7 +91,7 @@ function CheckInWrapper() {
               className="group w-full sm:w-auto flex items-center justify-center gap-2 py-4 px-8 rounded-2xl bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white font-bold text-lg hover:border-[#2563EB] dark:hover:border-blue-500 transition-all"
             >
               <Fingerprint size={20} className="text-[#2563EB] dark:text-blue-400" />
-              Set Up Device
+              Link Device
             </a>
           </div>
 
@@ -112,28 +112,30 @@ function CheckInWrapper() {
           </div>
         </main>
 
-        {/* Comparison Section (Before / After) */}
+        {/* Comparison Section */}
         <section className="max-w-5xl mx-auto px-4 sm:px-6 py-20 relative z-10">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight mb-4">
-              Attendance is broken. <br />
-              <span className="text-gray-400 dark:text-gray-500">Let&apos;s fix it.</span>
+              The Proxy Problem.
             </h2>
+            <p className="text-gray-500 dark:text-gray-400 font-medium max-w-2xl mx-auto">
+              Traditional attendance systems are easily exploited, undermining academic integrity and NUC compliance.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border border-red-100 dark:border-red-900/30 relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/10 rounded-bl-full pointer-events-none"></div>
               <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-6 flex items-center gap-2">
-                <XCircle size={24} /> The Old Way
+                <XCircle size={24} /> The Vulnerabilities
               </h3>
               <ul className="space-y-4">
                 {[
-                  "Attendance sheet is passed around the room.",
-                  "Students sign for their friends who are absent.",
-                  "Someone tears the sheet or spills water on it.",
-                  "Lecturer has to manually count the signatures.",
-                  "Zero data for NUC compliance."
+                  "Paper sheets are passed around and signed by friends.",
+                  "Students check in remotely using fake GPS apps.",
+                  "Multiple accounts are created on a single device.",
+                  "Lecturers have no forensic evidence of fraud.",
+                  "Zero data for NUC compliance audits."
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
                     <span className="text-red-400 mt-0.5">✕</span> {item}
@@ -145,15 +147,15 @@ function CheckInWrapper() {
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border border-emerald-100 dark:border-emerald-900/30 relative overflow-hidden shadow-lg shadow-emerald-500/5">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 dark:bg-emerald-900/10 rounded-bl-full pointer-events-none"></div>
               <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400 mb-6 flex items-center gap-2">
-                <CheckCircle size={24} /> The CampusCheck Way
+                <CheckCircle size={24} /> The CampusCheck Standard
               </h3>
-                            <ul className="space-y-4">
+              <ul className="space-y-4">
                 {[
-                  "Students scan their FaceID, Fingerprint, or PIN.",
-                  "GPS ensures they are actually in the hall.",
-                  "Attendance takes 30 seconds, not 15 minutes.",
-                  "Data is instantly saved to the cloud.",
-                  "Automatic NUC compliance reports."
+                  "Hardware-bound biometrics (FaceID/Fingerprint) required.",
+                  "Server-side GPS verification with strict geofencing.",
+                  "Persistent device binding prevents multiple accounts.",
+                  "Every check-in attempt is logged with forensic evidence.",
+                  "One-click Senate-ready CSV exports for compliance."
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
                     <span className="text-emerald-400 mt-0.5 shrink-0">✓</span> 
@@ -165,7 +167,7 @@ function CheckInWrapper() {
           </div>
         </section>
 
-                {/* How It Works Section */}
+        {/* How It Works Section */}
         <section className="bg-white dark:bg-gray-900/50 border-y border-gray-200 dark:border-gray-800 py-24 relative z-10">
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="text-center mb-16">
@@ -185,32 +187,25 @@ function CheckInWrapper() {
                   <User size={18} /> For Students
                 </h3>
                 
-                {/* The Track */}
                 <div className="relative ml-5 border-l-2 border-blue-100 dark:border-blue-900/50">
-                  
-                  {/* Step 1 */}
                   <div className="relative pl-10 pb-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <Fingerprint size={18} />
                     </div>
                     <div>
-                      <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. Set Up Once</h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Link your phone to your matric number using FaceID, Fingerprint, or PIN. No passwords required.</p>
+                      <h4 className="font-bold text-gray-900 dark:text-white text-lg">1. One-Time Setup</h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Link your device to your matric number using biometrics. No passwords.</p>
                     </div>
                   </div>
-
-                  {/* Step 2 */}
                   <div className="relative pl-10 pb-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <MapPin size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Tap the Link</h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When your lecturer starts a class, a &quot;Live Now&quot; banner appears on your hub. Tap it.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When your lecturer starts a class, a &quot;Live Now&quot; banner appears. Tap it.</p>
                     </div>
                   </div>
-
-                  {/* Step 3 */}
                   <div className="relative pl-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <CheckCircle size={18} />
@@ -220,7 +215,6 @@ function CheckInWrapper() {
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Scan your biometrics. Our system verifies your location and identity instantly.</p>
                     </div>
                   </div>
-
                 </div>
               </div>
 
@@ -230,10 +224,7 @@ function CheckInWrapper() {
                   <ShieldCheck size={18} /> For Lecturers
                 </h3>
                 
-                {/* The Track */}
                 <div className="relative ml-5 border-l-2 border-emerald-100 dark:border-emerald-900/50">
-                  
-                  {/* Step 1 */}
                   <div className="relative pl-10 pb-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Zap size={18} />
@@ -243,19 +234,15 @@ function CheckInWrapper() {
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tap &quot;Start Lecture&quot;. The system locks your GPS location as the class anchor.</p>
                     </div>
                   </div>
-
-                  {/* Step 2 */}
                   <div className="relative pl-10 pb-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Activity size={18} />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-900 dark:text-white text-lg">2. Live Radar</h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Watch students check in live. Biometric check-ins auto-verify. GPS-only check-ins require your approval.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Watch students check in live. Biometric check-ins auto-verify. GPS anomalies require approval.</p>
                     </div>
                   </div>
-
-                  {/* Step 3 */}
                   <div className="relative pl-10">
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
                       <Upload size={18} />
@@ -265,7 +252,6 @@ function CheckInWrapper() {
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Download a Senate-ready CSV at the end of the semester. Fully NUC compliant.</p>
                     </div>
                   </div>
-
                 </div>
               </div>
 
@@ -289,9 +275,9 @@ function CheckInWrapper() {
               <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-6">
                 <Fingerprint className="text-[#2563EB] dark:text-blue-400" size={24} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Biometric Lock</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hardware Binding</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                Powered by WebAuthn. Your fingerprint or FaceID never leaves your device. We only store a cryptographic public key that proves it was you.
+                Powered by WebAuthn. Your fingerprint never leaves your device. We store a cryptographic public key that ties the account to your specific hardware.
               </p>
             </div>
 
@@ -301,7 +287,7 @@ function CheckInWrapper() {
               </div>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Dynamic Geofencing</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                Strict 250m radius for outdoor check-ins. Auto-expands to 800m indoors when GPS accuracy drops. You must physically be in the hall.
+                Strict server-side radius checks. Auto-expands indoors when GPS accuracy drops. You must physically be in the hall to check in.
               </p>
             </div>
 
@@ -370,9 +356,9 @@ function CheckInWrapper() {
               <div>
                 <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-sm uppercase tracking-wider">Product</h4>
                 <ul className="space-y-3">
-                  <li><Link href="/student-hub" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Student Hub</Link></li>
+                  <li><Link href="/student-hub" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Student Portal</Link></li>
                   <li><Link href="/login" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Faculty Login</Link></li>
-                  <li><Link href="/onboard" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Set Up Device</Link></li>
+                  <li><Link href="/onboard" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Link Device</Link></li>
                 </ul>
               </div>
 
@@ -431,7 +417,7 @@ function CheckInWrapper() {
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">CampusCheck</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-sm">Live Student Check-In</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-sm">Secure Student Check-In</p>
         </div>
 
         <StudentCheckInComponent sessionId={sessionId} />
