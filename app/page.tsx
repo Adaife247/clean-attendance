@@ -213,7 +213,8 @@ function CheckInWrapper() {
                     </div>
                   </div>
                   <div className="relative pl-10">
-                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-emerald-100 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400 shadow-sm z-10">
+                    {/* THIS IS THE LINE THAT CHANGED: emerald -> blue */}
+                    <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <CheckCircle size={18} />
                     </div>
                     <div>
