@@ -79,7 +79,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
-  const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('checking');
+  
+  const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('prompt');
+  
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
   const [inAppBrowser, setInAppBrowser] = useState(false);
 
@@ -117,6 +119,31 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     return () => clearTimeout(id);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.permissions) return;
+
+    let permissionStatus: PermissionStatus | null = null;
+
+    navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+      permissionStatus = result;
+      if (result.state === 'granted') setGpsStatus('granted');
+      if (result.state === 'denied') setGpsStatus('denied');
+      if (result.state === 'prompt') setGpsStatus('prompt');
+
+      result.onchange = () => {
+        if (result.state === 'granted') setGpsStatus('granted');
+        if (result.state === 'denied') setGpsStatus('denied');
+        if (result.state === 'prompt') setGpsStatus('prompt');
+      };
+    }).catch(() => {
+      setGpsStatus('prompt');
+    });
+
+    return () => {
+      if (permissionStatus) permissionStatus.onchange = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
@@ -854,38 +881,38 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-        {status === 'failed' && currentFlagCode && (
+        {(status === 'failed' || status === 'disqualified') && currentFlagCode && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${FLAG_REASONS[currentFlagCode].severity === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
+            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
               <AlertTriangle size={32} />
             </div>
             
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              {FLAG_REASONS[currentFlagCode].severity === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
+              {(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
             </h3>
             
             <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
-              {FLAG_REASONS[currentFlagCode].messageStudent}
+              {FLAG_REASONS[currentFlagCode]?.messageStudent || "An unknown error occurred. Please try again."}
             </p>
 
             <div className="mt-6 space-y-3">
-              {FLAG_REASONS[currentFlagCode].suggestedAction === 'retry' && (
+              {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'retry' && (
                 <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md">
                   <RefreshCw size={18} /> Try Again
                 </button>
               )}
 
-              {FLAG_REASONS[currentFlagCode].category !== 'proxy' && FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
+              {FLAG_REASONS[currentFlagCode]?.category !== 'proxy' && FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
                 </button>
               )}
 
-              {FLAG_REASONS[currentFlagCode].suggestedAction === 'see_lecturer' && (
+              {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' && (
                 <p className="text-sm font-bold text-gray-500 mt-2">Show this screen to your lecturer.</p>
               )}
 
-              {FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
+              {FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
                 <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
                   Start Over
                 </button>

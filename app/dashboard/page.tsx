@@ -52,6 +52,9 @@ export default function LecturerDashboard() {
 
   const [sessionDuration, setSessionDuration] = useState<number>(60);
   const [checkinOpensAfter, setCheckinOpensAfter] = useState<number>(10);
+  
+  // NEW: Countdown timer state
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   const [manualMatric, setManualMatric] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
@@ -66,7 +69,7 @@ export default function LecturerDashboard() {
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // NEW: Network monitoring state
+  // Network monitoring state
   const [isOnline, setIsOnline] = useState(true);
   const [isSlowNetwork, setIsSlowNetwork] = useState(false);
 
@@ -84,8 +87,7 @@ export default function LecturerDashboard() {
     };
   };
 
-  // NEW: Monitor network status and latency
-   // NEW: Monitor network status and latency
+  // Monitor network status and latency
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -93,7 +95,6 @@ export default function LecturerDashboard() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    // Wrap the initial check in a timeout to satisfy React linter
     const initCheck = setTimeout(() => {
       setIsOnline(navigator.onLine);
     }, 0);
@@ -103,14 +104,12 @@ export default function LecturerDashboard() {
       try {
         await fetch('/api/health', { method: 'GET', cache: 'no-store' });
         const latency = Date.now() - start;
-        // Wrap this in a timeout too
         setTimeout(() => setIsSlowNetwork(latency > 2000), 0);
       } catch {
         setTimeout(() => setIsSlowNetwork(true), 0);
       }
     };
     
-    // Only run the latency check after mount
     const latencyTimeout = setTimeout(() => {
       checkLatency();
     }, 1000);
@@ -128,6 +127,7 @@ export default function LecturerDashboard() {
     setActiveSessionId(null);
     setData(null);
     setSetupError('');
+    setTimeLeft(null);
     if (reason) setExpiredMessage(reason);
   }, []);
 
@@ -196,6 +196,36 @@ export default function LecturerDashboard() {
     return () => clearInterval(intervalId);
   }, [activeSessionId, clearStaleSession]);
 
+  // NEW: Live countdown timer for the active session
+    // NEW: Live countdown timer for the active session
+  useEffect(() => {
+    if (!activeSessionId) {
+      const id = setTimeout(() => setTimeLeft(null), 0);
+      return () => clearTimeout(id);
+    }
+
+    const fetchExpiry = async () => {
+      const { data: session } = await supabase.from('lecture_sessions').select('expires_at').eq('session_id', activeSessionId).single();
+      if (session?.expires_at) {
+        const msLeft = new Date(session.expires_at).getTime() - Date.now();
+        if (msLeft > 0) {
+          const mins = Math.floor(msLeft / 60000);
+          const secs = Math.floor((msLeft % 60000) / 1000);
+          setTimeLeft(`${mins}m ${secs}s`);
+        } else {
+          setTimeLeft("Expired");
+        }
+      }
+    };
+
+    const initialFetchId = setTimeout(() => { fetchExpiry(); }, 0);
+    const interval = setInterval(fetchExpiry, 10000); // Update every 10 seconds
+    
+    return () => {
+      clearTimeout(initialFetchId);
+      clearInterval(interval);
+    };
+  }, [activeSessionId]);
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     const id = navigator.geolocation.watchPosition(
@@ -451,7 +481,9 @@ export default function LecturerDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [activeSessionId, viewMode, fetchDashboardData]);  const handleManualOverride = async (targetMatric: string) => {
+  }, [activeSessionId, viewMode, fetchDashboardData]);
+
+  const handleManualOverride = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || '').trim();
     if (!activeSessionId) return;
     if (!safeMatric) return;
@@ -574,7 +606,6 @@ export default function LecturerDashboard() {
     new Date(s.created_at).toLocaleString().toLowerCase().includes(historySearch.toLowerCase())
   );
 
-  // NEW: Calculate check-in velocity for the sparkline
   const getVelocityData = () => {
     if (!data || !data.logs) return [];
     const timeBuckets: Record<string, number> = {};
@@ -668,6 +699,11 @@ export default function LecturerDashboard() {
                     <option value={30}>Opens: After 30 minutes</option>
                   </select>
                 </div>
+                {sessionDuration <= checkinOpensAfter && (
+                  <p className="text-xs text-red-500 font-bold text-center mt-2 animate-pulse">
+                    ⚠️ Warning: Check-in opens after {checkinOpensAfter} mins, but the class ends at {sessionDuration} mins. Students will have zero time to check in!
+                  </p>
+                )}
                 <button onClick={startNewSession} disabled={isStarting || courses.length === 0} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-2">
                   {isStarting ? <RefreshCw className="animate-spin" size={20} /> : <MapPin size={20} />} {isStarting ? "Anchoring Geofence..." : "Establish Geofence"}
                 </button>
@@ -787,6 +823,13 @@ export default function LecturerDashboard() {
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
                 <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>
+
+                {/* NEW: Countdown Timer */}
+                {timeLeft && (
+                  <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md border ml-2 ${timeLeft === 'Expired' ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'}`}>
+                    <Clock size={12} /> {timeLeft === 'Expired' ? 'Session Ended' : `Ends in ${timeLeft}`}
+                  </span>
+                )}
                 
                 {data?.startedBy === 'Class Rep' && (
                   <span className="flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 ml-2">
@@ -821,7 +864,8 @@ export default function LecturerDashboard() {
                 )}
               </div>
             </div>
-                        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-4 w-full md:w-auto mt-2 md:mt-0">
+            
+            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 gap-4 w-full md:w-auto mt-2 md:mt-0">
               <div className="flex items-center gap-2">
                 <ThemeToggle />
                 <div>
@@ -829,7 +873,6 @@ export default function LecturerDashboard() {
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
                 </div>
                 
-                {/* NEW: Sparkline Chart (Hidden if slow/offline) */}
                 {velocityData.length > 1 && isOnline && !isSlowNetwork && (
                   <div className="w-24 h-10 hidden sm:block" title="Check-in velocity">
                     <ResponsiveContainer width="100%" height="100%">
