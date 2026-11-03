@@ -1,11 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { CampusUpdate } from '@/types/db';
 import { supabase } from '@/utils/supabase';
 import { 
   ShieldCheck, User, Lock, Megaphone, Zap, AlertTriangle, 
   Fingerprint, Bell, Loader2, ArrowLeft, BookOpen, CheckCircle
 } from 'lucide-react';
+import type { CampusUpdate } from '@/types/db';
 import Link from 'next/link';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
@@ -21,7 +21,6 @@ import FeedTab from '@/components/student-hub/FeedTab';
 import RepDeskTab from '@/components/student-hub/RepDeskTab';
 import EnrollModal from '@/components/student-hub/EnrollModal';
 
-// Interfaces for state
 interface CourseRecord {
   course_code: string;
   total_held: number;
@@ -58,7 +57,10 @@ export default function StudentPortal() {
   const [matricNumber, setMatricNumber] = useState('');
   const [studentDept, setStudentDept] = useState('');
   const [studentLevel, setStudentLevel] = useState('');
-  const [isClassRep, setIsClassRep] = useState(false);
+  
+  // NEW: Track which specific courses they represent
+  const [repCourseCodes, setRepCourseCodes] = useState<string[]>([]);
+  const isClassRep = repCourseCodes.length > 0;
   
   const [unlockState, setUnlockState] = useState<UnlockState>('idle');
   const [unlockError, setUnlockError] = useState('');
@@ -86,9 +88,10 @@ export default function StudentPortal() {
   const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications(matricNumber);
 
   const fetchStudentData = useCallback(async (cleanMatric: string) => {
+    // 1. Fetch profile (no longer has is_class_rep)
     const { data: profile } = await supabase
       .from('student_profiles')
-      .select('nickname, department, level, is_class_rep')
+      .select('nickname, department, level')
       .eq('matric_number', cleanMatric)
       .maybeSingle();
 
@@ -98,8 +101,8 @@ export default function StudentPortal() {
     }
     if (profile?.department) setStudentDept(profile.department);
     if (profile?.level) setStudentLevel(profile.level);
-    if (profile?.is_class_rep === true) setIsClassRep(true);
 
+    // 2. Fetch feed
     const { data: feedData } = await supabase
       .from('campus_updates')
       .select('*')
@@ -107,6 +110,7 @@ export default function StudentPortal() {
       .limit(20);
     if (feedData) setFeed(feedData);
 
+    // 3. Fetch enrollments
     const { data: enrollmentRows, error: enrollError } = await supabase
       .from('enrollments')
       .select('course_id')
@@ -116,10 +120,13 @@ export default function StudentPortal() {
 
     if (!enrollmentRows || enrollmentRows.length === 0) {
       setRecords([]);
+      setRepCourseCodes([]);
       return;
     }
 
     const courseIds = enrollmentRows.map(e => e.course_id);
+
+    // 4. Fetch courses
     const { data: courseRows, error: courseError } = await supabase
       .from('courses')
       .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
@@ -128,6 +135,17 @@ export default function StudentPortal() {
     if (courseError) throw courseError;
     const courseCodes = courseRows?.map(c => c.course_code) || [];
 
+    // 5. NEW: Check which courses they are a rep for
+    const { data: repRows } = await supabase
+      .from('course_reps')
+      .select('course_id')
+      .eq('matric_number', cleanMatric);
+
+    const myRepCourseIds = repRows?.map(r => r.course_id) || [];
+    const myRepCourseCodes = courseRows?.filter(c => myRepCourseIds.includes(c.id)).map(c => c.course_code) || [];
+    setRepCourseCodes(myRepCourseCodes);
+
+    // 6. Fetch sessions
     const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('session_id, course_code, created_at, is_active, expires_at')
@@ -413,7 +431,7 @@ export default function StudentPortal() {
     setRecords(null);
     setHistory(null);
     setActiveLiveSession(null);
-    setIsClassRep(false);
+    setRepCourseCodes([]);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
@@ -467,12 +485,12 @@ export default function StudentPortal() {
     if (!matricNumber) return;
     const cleanMatric = matricNumber.toUpperCase().trim();
     
+    // NEW: We no longer send is_class_rep here, the DB handles it now.
     const { error } = await supabase.from('student_profiles').upsert({
       matric_number: cleanMatric,
       nickname: nickname.trim(),
       department: studentDept,
       level: studentLevel,
-      is_class_rep: isClassRep 
     });
 
     if (error) {
@@ -595,6 +613,9 @@ export default function StudentPortal() {
   };
 
   const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
+
+  // Filter records to only the courses this student represents for the Rep Desk UI
+  const repRecords = records?.filter(r => repCourseCodes.includes(r.course_code)) || [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
@@ -730,7 +751,7 @@ export default function StudentPortal() {
 
               {activeTab === 'rep' && isClassRep && (
                 <RepDeskTab 
-                  records={records}
+                  records={repRecords}
                   matricNumber={matricNumber}
                   activeLiveSession={activeLiveSession}
                   onRefresh={() => fetchStudentData(matricNumber.toUpperCase().trim())}

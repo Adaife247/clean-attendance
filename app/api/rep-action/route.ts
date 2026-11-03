@@ -28,16 +28,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing session" }, { status: 400 });
     }
 
-    const { data: repProfile } = await supabase
-      .from('student_profiles')
-      .select('is_class_rep')
-      .eq('matric_number', repMatric)
-      .single();
-
-    if (!repProfile?.is_class_rep) {
-      return NextResponse.json({ error: "Unauthorized. Only Class Reps can do this." }, { status: 403 });
-    }
-
     const { data: session } = await supabase
       .from('lecture_sessions')
       .select('course_code, created_at')
@@ -55,6 +45,19 @@ export async function POST(request: Request) {
 
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
+    // NEW: Check if they are the designated rep for THIS specific course
+    const { data: repAssignment } = await supabase
+      .from('course_reps')
+      .select('id')
+      .eq('course_id', course.id)
+      .eq('matric_number', repMatric)
+      .maybeSingle();
+
+    if (!repAssignment) {
+      return NextResponse.json({ error: "Unauthorized. You are not the designated rep for this course." }, { status: 403 });
+    }
+
+    // Verify they are enrolled (safety check)
     const { data: repEnrollment } = await supabase
       .from('enrollments')
       .select('id')
@@ -107,7 +110,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Student is already verified." }, { status: 409 });
       }
 
-      // NEW: Use upsert to prevent race conditions
       const { error: upsertError } = await supabase
         .from('attendance_logs')
         .upsert({

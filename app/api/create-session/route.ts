@@ -6,7 +6,6 @@ import webpush from 'web-push';
 
 export const dynamic = 'force-dynamic';
 
-// Configure web-push with your VAPID keys
 const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 const privateVapidKey = process.env.VAPID_PRIVATE_KEY || '';
 const subject = process.env.VAPID_SUBJECT || 'mailto:admin@campuscheck.com';
@@ -28,36 +27,48 @@ export async function POST(request: Request) {
     let authUserId = null;
     let finalStartedBy = 'lecturer';
 
-    if (isRepStarting) {
-      const { data: rep } = await supabase
-        .from('student_profiles')
-        .select('is_class_rep')
-        .eq('matric_number', body.repMatric)
-        .single();
+    if (!courseCodeToSave) {
+      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
+    }
 
-      if (!rep?.is_class_rep) {
-        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep' }, { status: 403 });
+    // Fetch course first so we can verify rep status against the specific course
+    const { data: course } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('course_code', courseCodeToSave)
+      .maybeSingle();
+
+    if (!course) {
+      return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+    }
+
+    if (isRepStarting) {
+      // NEW: Check course_reps table instead of student_profiles
+      const { data: rep } = await supabase
+        .from('course_reps')
+        .select('id')
+        .eq('course_id', course.id)
+        .eq('matric_number', body.repMatric)
+        .maybeSingle();
+
+      if (!rep) {
+        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep for this course' }, { status: 403 });
       }
       finalStartedBy = 'Class Rep';
     } else {
       const auth = await verifyLecturer(request);
       if (auth.error) return auth.error;
       authUserId = auth.user.id;
-    }
 
-    if (!courseCodeToSave) {
-      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
-    }
-
-    if (!isRepStarting) {
-      const { data: course } = await supabase
+      // Verify the lecturer owns this course
+      const { data: ownedCourse } = await supabase
         .from('courses')
         .select('id')
-        .eq('course_code', courseCodeToSave)
+        .eq('id', course.id)
         .eq('lecturer_id', authUserId)
-        .single();
+        .maybeSingle();
 
-      if (!course) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+      if (!ownedCourse) return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
     }
 
     const parsedDuration = parseInt(body.duration);
@@ -87,47 +98,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
     }
 
-    // ─── NEW: SEND PUSH NOTIFICATIONS ───
+    // ─── SEND PUSH NOTIFICATIONS ───
     try {
-      // 1. Get all students enrolled in this course
-      const { data: course } = await supabase.from('courses').select('id').eq('course_code', courseCodeToSave).single();
+      const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
       
-      if (course) {
-        const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
+      if (enrollments && enrollments.length > 0) {
+        const matrics = enrollments.map(e => e.matric_number);
         
-        if (enrollments && enrollments.length > 0) {
-          const matrics = enrollments.map(e => e.matric_number);
-          
-          // 2. Find any of these students who have a push subscription
-          const { data: subscriptions } = await supabase
-            .from('push_subscriptions')
-            .select('subscription')
-            .in('matric_number', matrics);
+        const { data: subscriptions } = await supabase
+          .from('push_subscriptions')
+          .select('subscription')
+          .in('matric_number', matrics);
 
-          // 3. Blast the notification
-          if (subscriptions && subscriptions.length > 0) {
-            const payload = JSON.stringify({
-              title: `Class is Live: ${courseCodeToSave}`,
-              body: `The lecturer has started attendance. Tap to check in now!`,
-              url: `/?sessionId=${data.session_id}` // Direct link to check-in
-            });
+        if (subscriptions && subscriptions.length > 0) {
+          const payload = JSON.stringify({
+            title: `Class is Live: ${courseCodeToSave}`,
+            body: `The lecturer has started attendance. Tap to check in now!`,
+            url: `/?sessionId=${data.session_id}`
+          });
 
-            const pushPromises = subscriptions.map(sub => 
-              webpush.sendNotification(sub.subscription, payload).catch(err => {
-                // If the subscription is expired (410), delete it from DB
-                if (err.statusCode === 410) {
-                  return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
-                }
-              })
-            );
+          const pushPromises = subscriptions.map(sub => 
+            webpush.sendNotification(sub.subscription, payload).catch(err => {
+              if (err.statusCode === 410) {
+                return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
+              }
+            })
+          );
 
-            await Promise.all(pushPromises);
-          }
+          await Promise.all(pushPromises);
         }
       }
     } catch (pushError) {
       console.error("Push notification failed, but session was created:", pushError);
-      // We don't return an error here because the session WAS created successfully.
     }
 
     return NextResponse.json({
