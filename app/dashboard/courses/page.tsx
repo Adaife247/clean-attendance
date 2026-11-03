@@ -774,6 +774,16 @@ export default function CourseManagement() {
             ))}
           </div>
         )}
+
+        {courses.length === 0 && (
+          <div className="text-center py-16 bg-gray-50 dark:bg-gray-800/30 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 mt-8">
+            <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+              <BookOpen className="text-gray-400" size={28} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">No courses yet</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">Create your first course using the form above to start managing student rosters.</p>
+          </div>
+        )}
       </div>
 
       {/* MODAL: EDIT COURSE & MANAGE STUDENTS */}
@@ -899,7 +909,7 @@ export default function CourseManagement() {
 
         {auditRecords && (
           <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in slide-in-from-bottom-4 transition-colors">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm">
               <h3 className="font-extrabold text-gray-900 dark:text-white text-lg">Audit Trail: {auditMatric}</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{auditCourseCode} Semester History</p>
             </div>

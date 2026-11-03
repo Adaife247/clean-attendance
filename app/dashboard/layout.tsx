@@ -3,10 +3,11 @@ import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
 import { 
-  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone
+  Radio, BarChart3, LogOut, ShieldCheck, Menu, X, Users, Award, Megaphone, Search
 } from 'lucide-react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
+import CommandPalette from '@/components/CommandPalette';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -47,6 +48,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-[#F9FAFB] dark:bg-gray-950 overflow-hidden font-sans transition-colors duration-300">
       
+      <CommandPalette />
+
       {/* Mobile Top Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-50 flex items-center justify-between px-4 transition-colors">
         <div className="flex items-center gap-2">
@@ -81,7 +84,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <ThemeToggle />
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <div className="p-4">
+          <button 
+            onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+            className="w-full flex items-center gap-3 px-4 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-500 dark:text-gray-400 transition-colors"
+          >
+            <Search size={16} />
+            <span>Search...</span>
+            <kbd className="ml-auto text-[10px] font-bold bg-white dark:bg-gray-900 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700">⌘K</kbd>
+          </button>
+        </div>
+
+        <nav className="flex-1 px-4 py-2 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (

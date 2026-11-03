@@ -43,7 +43,7 @@ export default function FlagReview() {
 
   if (totalFlags === 0) {
     return (
-      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center transition-colors">
+      <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center transition-colors">
         <div className="bg-emerald-50 dark:bg-emerald-900/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
           <ShieldCheck className="text-emerald-500" size={32} />
         </div>
@@ -102,18 +102,16 @@ export default function FlagReview() {
               {expanded === code && (
                 <div className="bg-gray-50 dark:bg-gray-800/30 p-4 space-y-2 border-t border-gray-100 dark:border-gray-800">
                   {flags.map((flag) => (
-                    <div key={flag.id} className="bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-700 flex justify-between items-center shadow-sm">
-                      <div className="w-full">
-                        <div className="flex justify-between items-center w-full">
-                          <p className="font-bold text-gray-900 dark:text-white text-sm">{flag.matric_number}</p>
-                          <p className="text-[10px] text-gray-500 font-medium">{new Date(flag.created_at).toLocaleString()}</p>
-                        </div>
-                        {flag.reason_detail && (
-                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-mono bg-gray-50 dark:bg-gray-800 p-1.5 rounded break-all">
-                            {JSON.stringify(flag.reason_detail).replace(/["{}]/g, '').replace(/,/g, ', ')}
-                          </p>
-                        )}
+                    <div key={flag.id} className="bg-white dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center shadow-sm gap-2">
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white text-sm">{flag.matric_number}</p>
+                        <p className="text-[10px] text-gray-500 font-medium">{new Date(flag.created_at).toLocaleString()}</p>
                       </div>
+                      {flag.reason_detail && (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-800 p-1.5 rounded break-all w-full md:w-auto text-left md:text-right">
+                          {JSON.stringify(flag.reason_detail).replace(/["{}]/g, '').replace(/,/g, ', ')}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
