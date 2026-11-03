@@ -23,12 +23,13 @@ export default function Footer() {
             </div>
           </div>
 
-          <div>
+                    <div>
             <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-sm uppercase tracking-wider">Product</h4>
             <ul className="space-y-3">
               <li><Link href="/student-hub" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Student Portal</Link></li>
               <li><Link href="/login" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Faculty Login</Link></li>
               <li><Link href="/onboard" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Link Device</Link></li>
+              <li><Link href="/guide" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">User Guide</Link></li>
               <li><Link href="/changelog" className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-blue-400 transition-colors">Changelog</Link></li>
             </ul>
           </div>

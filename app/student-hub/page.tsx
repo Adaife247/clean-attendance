@@ -364,7 +364,6 @@ export default function StudentPortal() {
     }).length;
   }, [feed, lastSeenTimestamp, now]);
 
-  // NEW: Calculate XP and Level
   const totalXP = useMemo(() => {
     if (!records) return 0;
     return records.reduce((acc, record) => {
@@ -373,11 +372,10 @@ export default function StudentPortal() {
   }, [records]);
 
   const levelData = useMemo(() => {
-    // Simple leveling curve: Level 1 = 0-500, Level 2 = 501-1500, Level 3 = 1501-3000, Level 4 = 3001+
     if (totalXP <= 500) return { level: 1, title: 'Rookie', currentXP: totalXP, nextLevelXP: 500 };
     if (totalXP <= 1500) return { level: 2, title: 'Regular', currentXP: totalXP - 500, nextLevelXP: 1000 };
     if (totalXP <= 3000) return { level: 3, title: 'Scholar', currentXP: totalXP - 1500, nextLevelXP: 1500 };
-    return { level: 4, title: 'Legend', currentXP: totalXP - 3000, nextLevelXP: 9999 }; // Max level
+    return { level: 4, title: 'Legend', currentXP: totalXP - 3000, nextLevelXP: 9999 };
   }, [totalXP]);
 
   const handleRegister = async () => {
@@ -653,10 +651,11 @@ export default function StudentPortal() {
             <ShieldCheck className="w-7 h-7 text-white z-10" strokeWidth={2.5} />
             <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10 rounded-t-2xl"></div>
           </div>
-                    <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
             {savedNickname ? `Welcome back, ${savedNickname}` : 'Student Portal'}
           </h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Monitor your attendance & eligibility</p>        </div>
+          <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-base">Monitor your attendance & eligibility</p>
+        </div>
 
         {activeLiveSession && (
           liveSessionCheckedIn ? (
@@ -795,6 +794,8 @@ export default function StudentPortal() {
             <ArrowLeft size={16} /> Back to Hub
           </Link>
           <div className="flex justify-center items-center gap-3 text-xs font-bold text-gray-400 dark:text-gray-500">
+            <Link href="/guide" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">User Guide</Link>
+            <span className="text-gray-300 dark:text-gray-600">•</span>
             <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy</Link>
             <span className="text-gray-300 dark:text-gray-600">•</span>
             <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms</Link>

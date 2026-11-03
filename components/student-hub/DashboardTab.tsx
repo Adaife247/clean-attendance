@@ -1,7 +1,7 @@
 'use client';
 import { 
   BellRing, Edit3, Save, ChevronDown, BookOpen, 
-  CheckCircle, Plus, FileText, Award, Star, Inbox, AlertTriangle
+  CheckCircle, Plus, FileText, Award, Star, Inbox, AlertTriangle, Info
 } from 'lucide-react';
 
 interface CourseRecord {
@@ -115,6 +115,11 @@ export default function DashboardTab({
                 style={{ width: `${progressPercent}%` }} 
               />
             </div>
+          </div>
+
+          <div className="mt-3 flex items-start gap-1.5 text-[10px] text-gray-400 font-medium bg-black/20 p-2 rounded-lg">
+            <Info size={12} className="shrink-0 mt-0.5" />
+            <p>Earn 10 XP per class attended, plus 5 XP for every current streak point. Reach 500 XP for Level 2!</p>
           </div>
         </div>
       </div>
