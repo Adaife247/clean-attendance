@@ -35,8 +35,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">1. Acceptance</h2>
             <p>
-              By using CampusCheck you agree to these terms. If you do not
-              agree, do not use the service.
+              By using CampusCheck you agree to these terms. If you do not agree, do not use the service.
             </p>
           </section>
 
@@ -44,54 +43,55 @@ export default function TermsPage() {
             <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">2. Eligibility</h2>
             <p>
               CampusCheck is available only to students and lecturers of
-              <strong className="text-gray-900 dark:text-white"> [Your University Name]</strong>. Accounts must be linked to a valid
-              matriculation number.
+              <strong className="text-gray-900 dark:text-white"> [Your University Name]</strong>. Accounts must be linked to a valid matriculation number.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">3. Acceptable use</h2>
             <p>You agree <strong className="text-gray-900 dark:text-white">not</strong> to:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Attempt to check in for another student.</li>
-              <li>Spoof GPS location or tamper with device fingerprints.</li>
-              <li>Reverse engineer, attack, or overload the service.</li>
-              <li>Share your check-in link with anyone outside your class.</li>
+            <ul className="list-disc pl-5 space-y-2 mt-2">
+              <li><strong>Engage in Proxy Attendance:</strong> Checking in on behalf of another student, or asking another student to check in for you.</li>
+              <li><strong>Share Your Device:</strong> Handing your unlocked phone to another student to bypass the biometric lock.</li>
+              <li><strong>Spoof Your Location or Sensors:</strong> Using mock GPS applications, rooted devices, or hardware injectors to fake your location, speed, or accelerometer data.</li>
+              <li><strong>Manipulate Hardware Fingerprints:</strong> Attempting to bypass device-binding rules by clearing caches, using incognito modes, or spoofing Canvas/WebGL signatures.</li>
+              <li><strong>Attack the Service:</strong> Reverse engineer, overload, or attempt to bypass the rate limiting and audit logging systems.</li>
             </ul>
-            <p className="mt-2">
-              Violation may lead to disqualification from attendance records
-              and disciplinary action by your institution.
+            <p className="mt-3">
+              Violation of these rules will result in the check-in being blocked or flagged. The system provides this forensic evidence directly to your lecturer, which may lead to disqualification from attendance records and disciplinary action by your institution.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">4. Attendance accuracy</h2>
             <p>
-              While we work hard to prevent fraud, no system is perfect.
-              Attendance decisions are ultimately made by your lecturer and
-              institution. CampusCheck is a tool, not the final authority.
+              While we work hard to prevent fraud, no software system is perfect. CampusCheck uses advanced heuristics to flag suspicious activity (such as identical devices or motion sensor mismatches), but final attendance decisions are made by your lecturer. CampusCheck is an investigative tool, not the final authority.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">5. Availability</h2>
             <p>
-              We aim for 99% uptime but do not guarantee it. Downtime may occur
-              for maintenance or reasons outside our control.
+              We aim for 99% uptime but do not guarantee it. Downtime may occur for maintenance or reasons outside our control. Offline check-ins are queued locally and synced when the connection is restored.
             </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">6. Liability</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">6. Device Compatibility</h2>
             <p>
-              CampusCheck is provided &quot;as is&quot; without warranty. To
-              the maximum extent permitted by law, we are not liable for
-              indirect damages arising from use of the service.
+              CampusCheck requires a device with a modern browser, GPS capabilities, and hardware support for WebAuthn (FaceID, TouchID, or screen lock). It is your responsibility to ensure your device is charged and functional before attending a lecture.
             </p>
           </section>
 
           <section>
-            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">7. Contact</h2>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">7. Liability</h2>
+            <p>
+              CampusCheck is provided &quot;as is&quot; without warranty. To the maximum extent permitted by law, we are not liable for indirect damages arising from use of the service.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mb-2">8. Contact</h2>
             <p>
               Questions? Email{' '}
               <a href="mailto:support@youruniversity.edu" className="text-[#2563EB] dark:text-blue-400 underline">
