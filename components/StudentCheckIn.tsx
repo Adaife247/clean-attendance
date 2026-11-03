@@ -2,12 +2,12 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import {
   CheckCircle, AlertTriangle, Loader2, Navigation, User, WifiOff,
   ShieldCheck, Hand, ArrowRight, RefreshCw, Star, Signal, MapPin, ShieldAlert,
   Zap, Clock, Flame
 } from 'lucide-react';
-import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS } from '@/utils/constants';
@@ -278,8 +278,26 @@ export default function StudentCheckIn({ sessionId }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matricNumber })
       });
-      const options = await genRes.json();
+            const options = await genRes.json();
       if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
+
+      // ─── THE PRE-CHECK (Blocks Cleared Cache / Incognito) ───
+                  try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const authOptions: any = {
+          challenge: options.challenge,
+          rpId: options.rp.id,
+          allowCredentials: [], 
+          userVerification: 'required',
+        };
+        await startAuthentication(authOptions);
+        throw new Error("This phone is already linked to an account. Ask your lecturer to reset it if this is a mistake.");
+      } catch (err) {
+        if (err instanceof Error && err.name !== 'NotAllowedError') {
+          throw err;
+        }
+      }
+      // ────────────────────────────────────────────────────────
 
       const hardenedOptions = {
         ...options,

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
-import { startRegistration } from '@simplewebauthn/browser';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { generateDeviceFingerprint } from '@/utils/deviceFingerprint';
 import { ShieldCheck, Mail, User, ArrowRight, Loader2, CheckCircle, AlertTriangle, Fingerprint, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -19,7 +19,6 @@ export default function OnboardPage() {
   const [matricNumber, setMatricNumber] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
   
-  // UPDATED: Track hardwareFingerprint, hash, and deviceId
   const [hardwareFingerprint, setHardwareFingerprint] = useState<string | null>(null);
   const [deviceFingerprint, setDeviceFingerprint] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -144,6 +143,27 @@ export default function OnboardPage() {
       if (!genRes.ok || options.error) {
         throw new Error(options.message || options.error || "Server rejected registration.");
       }
+
+      // ─── THE PRE-CHECK (Blocks Cleared Cache / Incognito) ───
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const authOptions: any = {
+          challenge: options.challenge,
+          rpId: options.rp.id,
+          allowCredentials: [], 
+          userVerification: 'required',
+        };
+        await startAuthentication(authOptions);
+        
+        // If we get here, they have an existing passkey.
+        throw new Error("This phone is already linked to an account. Ask your lecturer to reset it if this is a mistake.");
+      } catch (err) {
+        // If it's NotAllowedError, it means no passkey was found (or they cancelled). We proceed.
+        if (err instanceof Error && err.name !== 'NotAllowedError') {
+          throw err; // Re-throw our custom error above
+        }
+      }
+      // ────────────────────────────────────────────────────────
 
       const hardenedOptions = {
         ...options,
