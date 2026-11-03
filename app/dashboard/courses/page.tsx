@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import * as XLSX from 'xlsx';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
+import FlagReview from '@/components/lecturer/FlagReview';
 import {
   BookOpen, Users, Plus, Loader2, FileSpreadsheet, Trash2,
   Fingerprint, RefreshCw, UserPlus, Search, FileText,
@@ -230,15 +231,14 @@ export default function CourseManagement() {
       setModalStudents(matrics);
 
       if (matrics.length > 0) {
-        const { data: profiles } = await supabase
-          .from('student_profiles')
-          .select('matric_number, is_class_rep')
-          .in('matric_number', matrics)
-          .eq('is_class_rep', true)
-          .limit(1);
+        const { data: reps } = await supabase
+          .from('course_reps')
+          .select('matric_number')
+          .eq('course_id', course.id)
+          .maybeSingle();
           
-        if (profiles && profiles.length > 0) {
-          setRepMatric(profiles[0].matric_number);
+        if (reps) {
+          setRepMatric(reps.matric_number);
         }
       }
     }
@@ -968,6 +968,8 @@ export default function CourseManagement() {
           </button>
         </div>
       </div>
+
+      <FlagReview />
 
       <ConfirmModal config={confirm.config} onClose={confirm.close} />
     </div>
