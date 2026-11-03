@@ -1,21 +1,27 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { CampusUpdate } from '@/types/db';
 import { supabase } from '@/utils/supabase';
-import * as XLSX from 'xlsx';
 import { 
-  ShieldCheck, User, Clock, ArrowLeft, Lock,
-  Megaphone, Calendar, Edit3, Save, FileText, Plus, CheckCircle, Zap, ChevronDown, AlertTriangle, Upload, PlayCircle, MapPin, BookOpen, Loader2, Bell, Smartphone, Fingerprint, BellRing, X
+  ShieldCheck, User, Lock, Megaphone, Zap, AlertTriangle, 
+  Fingerprint, Bell, Loader2, ArrowLeft, BookOpen, CheckCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
+import { ToastContainer, useToast } from '@/components/Toast';
 import { safeStorage } from '@/utils/safe-storage';
 import { STORAGE_KEYS, PORTAL_UNLOCK_GRACE_MS } from '@/utils/constants';
 import { usePushNotifications } from '@/utils/usePushNotifications';
 import PWAInstaller from '@/components/PWAInstaller';
-import { getStudentHeaders } from '@/utils/api-client';
 import ThemeToggle from '@/components/ThemeToggle';
 
+import DashboardTab from '@/components/student-hub/DashboardTab';
+import FeedTab from '@/components/student-hub/FeedTab';
+import RepDeskTab from '@/components/student-hub/RepDeskTab';
+import EnrollModal from '@/components/student-hub/EnrollModal';
+
+// Interfaces for state
 interface CourseRecord {
   course_code: string;
   total_held: number;
@@ -34,17 +40,11 @@ interface CourseRecord {
 interface LogRow { session_id: string; status: string; }
 interface SessionRow { session_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
 interface HistoryRow extends SessionRow { status: string; }
-interface CampusUpdate { id: string; title: string; content: string; author: string; course_code: string | null; created_at: string; }
-interface AvailableCourse { id: string; course_code: string; department: string; level: string; }
 
-const DEPARTMENTS = ['CSC', 'MTH', 'PHY', 'CHM', 'BIO', 'ENG', 'LAW', 'MED', 'AGR', 'ECO'];
-const LEVELS = ['100', '200', '300', '400', '500'];
-const MATRIC_REGEX = /[\/\-]/;
 const POLL_INTERVAL_MS = 15000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
-// Simplified Tabs (Removed "Records" and "Enroll")
 const TABS = [
   { id: 'dashboard' as const, label: 'Dashboard', Icon: Zap },
   { id: 'feed'      as const, label: 'Feed',      Icon: Megaphone },
@@ -72,23 +72,15 @@ export default function StudentPortal() {
   const [nickname, setNickname] = useState('');
   const [savedNickname, setSavedNickname] = useState('');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
+  
   const [feed, setFeed] = useState<CampusUpdate[]>([]);
   const [lastSeenTimestamp, setLastSeenTimestamp] = useState<number>(0);
   const [now, setNow] = useState<number>(0);
   
-  const [availableCourses, setAvailableCourses] = useState<AvailableCourse[]>([]);
-  const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
   const [showEnrollModal, setShowEnrollModal] = useState(false);
 
-  const [repCourseId, setRepCourseId] = useState('');
-  const [repBatteryMatric, setRepBatteryMatric] = useState('');
-  const [isLoggingBattery, setIsLoggingBattery] = useState(false);
-  const [isUploadingList, setIsUploadingList] = useState(false);
-
-  const [isStartingRepSession, setIsStartingRepSession] = useState(false);
-  const [repSessionError, setRepSessionError] = useState('');
-
   const confirm = useConfirmModal();
+  const { toasts, addToast, removeToast } = useToast();
   const autoLoadAttempted = useRef(false);
   
   const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications(matricNumber);
@@ -135,8 +127,6 @@ export default function StudentPortal() {
 
     if (courseError) throw courseError;
     const courseCodes = courseRows?.map(c => c.course_code) || [];
-    
-    if (courseRows && courseRows.length > 0) setRepCourseId(courseRows[0].id);
 
     const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
@@ -262,7 +252,9 @@ export default function StudentPortal() {
 
     finalRecords.sort((a, b) => a.course_code.localeCompare(b.course_code));
     setRecords(finalRecords);
-  }, []);  useEffect(() => {
+  }, []);
+
+  useEffect(() => {
     const saved = safeStorage.getString(STORAGE_KEYS.studentMatric);
     const lastUnlocked = safeStorage.getString('campuscheck_portal_unlocked_at');
     const lastUnlockedTime = lastUnlocked ? parseInt(lastUnlocked, 10) : 0;
@@ -484,215 +476,16 @@ export default function StudentPortal() {
     });
 
     if (error) {
-      alert("Failed to save profile: " + error.message);
+      addToast('Profile save failed', error.message, 'error');
       return;
     }
 
     setSavedNickname(nickname.trim());
     setIsEditingNickname(false);
-    fetchAvailableCourses();
+    addToast('Profile updated', 'Your changes have been saved.', 'success');
   };
 
-  const fetchAvailableCourses = useCallback(async () => {
-    if (!studentDept || !studentLevel) return;
-    
-    const { data: allCourses } = await supabase
-      .from('courses')
-      .select('id, course_code, department, level')
-      .eq('department', studentDept)
-      .eq('level', studentLevel);
-
-    if (allCourses) {
-      const { data: enrolled } = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('matric_number', matricNumber.toUpperCase().trim());
-      
-      const enrolledIds = new Set(enrolled?.map(e => e.course_id) || []);
-      const available = allCourses.filter(c => !enrolledIds.has(c.id));
-      
-      setAvailableCourses(available);
-    }
-  }, [studentDept, studentLevel, matricNumber]);
-
-  useEffect(() => {
-    if (showEnrollModal) {
-      const id = setTimeout(() => fetchAvailableCourses(), 0);
-      return () => clearTimeout(id);
-    }
-  }, [showEnrollModal, fetchAvailableCourses]);
-
-  const handleEnroll = async (courseId: string, courseCode: string) => {
-    setIsEnrolling(courseId);
-    try {
-      const { error } = await supabase.from('enrollments').insert([{
-        course_id: courseId,
-        matric_number: matricNumber.toUpperCase().trim()
-      }]);
-      if (error) throw error;
-      alert(`Successfully enrolled in ${courseCode}!`);
-      handleVerifyAndFetch();
-      setShowEnrollModal(false);
-    } catch {
-      alert("Failed to enroll. Please try again.");
-    } finally {
-      setIsEnrolling(null);
-    }
-  };
-
-  const handleLogBattery = async () => {
-    if (!activeLiveSession) return alert("No active lecture right now.");
-    if (!repBatteryMatric.trim()) return alert("Enter the student's matric number.");
-    
-    setIsLoggingBattery(true);
-    try {
-      const headers = getStudentHeaders();
-      const res = await fetch('/api/rep-action', {
-        method: 'POST', headers,
-        body: JSON.stringify({
-          action: 'log_dead_battery',
-          sessionId: activeLiveSession.sessionId,
-          matricNumber: repBatteryMatric
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert("Logged! Ask the student to see the lecturer for approval.");
-        setRepBatteryMatric('');
-      } else {
-        alert(data.error || "Failed to log battery dead.");
-      }
-    } catch {
-      alert("Network error.");
-    } finally {
-      setIsLoggingBattery(false);
-    }
-  };
-
-  const handleRepUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !repCourseId) return;
-    setIsUploadingList(true);
-
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    const reader = new FileReader();
-
-    reader.onload = async (event) => {
-      try {
-        let rawMatrics: string[] = [];
-
-        if (isExcel) {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as string[][];
-          
-          jsonData.forEach(row => {
-            row.forEach(cell => {
-               if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
-                 rawMatrics.push(cell.trim().toUpperCase());
-               }
-            });
-          });
-        } else {
-          const csvText = event.target?.result as string;
-          const cleanMatrics = csvText
-            .split(/[\n,]+/)
-            .map(m => m.trim().toUpperCase())
-            .filter(m => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
-          rawMatrics = cleanMatrics;
-        }
-
-        const uniqueMatrics = Array.from(new Set(rawMatrics));
-        if (uniqueMatrics.length === 0) {
-          alert("No valid matric numbers found.");
-          setIsUploadingList(false);
-          e.target.value = '';
-          return;
-        }
-
-        const rows = uniqueMatrics.map(matric => ({
-          course_id: repCourseId,
-          matric_number: matric,
-        }));
-
-        const { error } = await supabase
-          .from('enrollments')
-          .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
-
-        if (!error) {
-          alert(`Success! ${uniqueMatrics.length} students synced.`);
-          handleVerifyAndFetch();
-        } else {
-          alert(`Upload failed: ${error.message}`);
-        }
-      } catch {
-        alert("Failed to read file.");
-      }
-      
-      setIsUploadingList(false);
-      e.target.value = '';
-    };
-    
-    if (isExcel) reader.readAsArrayBuffer(file);
-    else reader.readAsText(file);
-  };
-
-  const handleStartBackupSession = async () => {
-    if (!repCourseId) return alert("Select a course first.");
-    if (!navigator.geolocation) return alert("Your phone doesn't support GPS.");
-
-    const course = records?.find(r => r.course_code === repCourseId);
-    if (!course) return;
-
-    if (!window.confirm(`Start a backup session for ${course.course_code}? Your phone will become the GPS anchor.`)) return;
-
-    setIsStartingRepSession(true);
-    setRepSessionError('');
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const res = await fetch('/api/create-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              courseCode: course.course_code,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              duration: 60, 
-              checkinOpensAfter: 0, 
-              startedBy: 'Class Rep',
-              repMatric: matricNumber
-            })
-          });
-
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Failed to start session");
-
-          alert("✅ Backup session started! Students can now check in.");
-          handleVerifyAndFetch(); 
-        } catch (err) {
-          setRepSessionError(err instanceof Error ? err.message : "Failed to start session.");
-        } finally {
-          setIsStartingRepSession(false);
-        }
-      },
-      () => {
-        setRepSessionError("Could not get GPS. Ensure location is on.");
-        setIsStartingRepSession(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
-  };
-
-  const getShieldColor = (pct: number) => {
-    if (pct >= 70) return { bar: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]', text: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-50/50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' };
-    if (pct >= 50) return { bar: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]', text: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-50/50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800' };
-    return { bar: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]', text: 'text-red-700 dark:text-red-400', bg: 'bg-red-50/50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' };
-  };
-
-  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);  const renderUnlockForm = () => {
+  const renderUnlockForm = () => {
     if (unlockState === 'not_enrolled') {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
@@ -720,7 +513,7 @@ export default function StudentPortal() {
       return (
         <div className="space-y-4 text-center animate-in fade-in">
           <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto border border-blue-100 dark:border-blue-800">
-            <Smartphone className="text-[#2563EB] dark:text-blue-400" size={32} />
+            <Fingerprint className="text-[#2563EB] dark:text-blue-400" size={32} />
           </div>
           <h3 className="text-xl font-extrabold text-gray-900 dark:text-white">Let&apos;s set up this phone</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 font-medium leading-relaxed">
@@ -800,6 +593,8 @@ export default function StudentPortal() {
       </>
     );
   };
+
+  const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
@@ -905,233 +700,42 @@ export default function StudentPortal() {
               </div>
 
               {activeTab === 'dashboard' && (
-                <div className="space-y-5 animate-in fade-in">
-                  
-                  {isSupported && permission !== 'granted' && !isSubscribed && (
-                    <div className="bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl flex items-center justify-between mb-4 animate-in slide-in-from-top-4 shadow-lg border border-transparent dark:border-gray-700">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-white/20 p-2 rounded-full"><BellRing size={20} /></div>
-                        <div>
-                          <p className="font-bold text-sm">Never miss a class</p>
-                          <p className="text-[10px] text-gray-300">Enable alerts for when class starts.</p>
-                        </div>
-                      </div>
-                      <button onClick={subscribe} className="bg-white text-gray-900 text-xs font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 transition-all">
-                        Allow
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded-xl space-y-2 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Profile:</span>
-                        {isEditingNickname ? (
-                          <input aria-label="Nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 text-base font-bold text-gray-900 dark:text-white outline-none w-24" placeholder="Nickname" maxLength={15} />
-                        ) : (
-                          <span className="text-base font-black text-blue-900 dark:text-blue-100">{savedNickname || 'Not set'}</span>
-                        )}
-                      </div>
-                      {isEditingNickname ? (
-                        <button aria-label="Save Profile" onClick={saveProfile} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"><Save size={18} /></button>
-                      ) : (
-                        <button aria-label="Edit Profile" onClick={() => setIsEditingNickname(true)} className="text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"><Edit3 size={18} /></button>
-                      )}
-                    </div>
-                    
-                    {isEditingNickname && (
-                      <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
-                        <div className="relative">
-                          <select aria-label="Department" value={studentDept} onChange={e => setStudentDept(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-2 text-sm font-bold text-gray-900 dark:text-white outline-none w-full appearance-none cursor-pointer">
-                            <option value="">Select Dept</option>
-                            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                          </select>
-                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                        </div>
-                        <div className="relative">
-                          <select aria-label="Level" value={studentLevel} onChange={e => setStudentLevel(e.target.value)} className="bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-2 text-sm font-bold text-gray-900 dark:text-white outline-none w-full appearance-none cursor-pointer">
-                            <option value="">Select Level</option>
-                            {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
-                          <ChevronDown size={14} className="absolute right-2 top-3 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* NEW: Enroll Button */}
-                  <div className="flex justify-end">
-                    <button onClick={() => setShowEnrollModal(true)} className="text-xs font-bold text-[#2563EB] dark:text-blue-400 flex items-center gap-1 hover:underline">
-                      <Plus size={14} /> Enroll in a new course
-                    </button>
-                  </div>
-
-                  {records.length === 0 ? (
-                    <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3 transition-colors">
-                      <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-full w-16 h-16 mx-auto flex items-center justify-center">
-                        <BookOpen size={32} className="text-gray-400 dark:text-gray-500" />
-                      </div>
-                      <p className="text-base font-bold text-gray-600 dark:text-gray-300">You have no courses yet.</p>
-                    </div>
-                  ) : (
-                    records.map((record) => {
-                      const colors = getShieldColor(record.percentage);
-                      return (
-                        <div key={record.course_code} className={`relative overflow-hidden ${colors.bg} p-4 rounded-2xl border ${colors.border} transition-colors`}>
-                          {record.is_finalized && (
-                            <div className="absolute top-0 right-0 bg-gray-900 dark:bg-gray-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
-                              <CheckCircle size={10} /> FINALIZED
-                            </div>
-                          )}
-
-                          <div className="flex justify-between items-start mb-3 mt-1">
-                            <div>
-                              <p className="font-black text-gray-900 dark:text-white text-lg">{record.course_code}</p>
-                              <p className="text-xs text-gray-600 dark:text-gray-400 font-semibold mt-0.5">
-                                {record.attended_classes} / {record.total_planned} Classes
-                                {record.total_held < record.total_planned && !record.is_finalized && ` (${record.total_planned - record.total_held} remaining)`}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className={`font-black text-2xl ${colors.text}`}>{record.percentage}%</p>
-                              {record.is_finalized && (
-                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mt-1 bg-white/50 dark:bg-black/20 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700">
-                                  CA: {record.ca_score} / {record.max_score}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="relative w-full h-3 bg-gray-200/50 dark:bg-gray-700/50 rounded-full overflow-hidden border border-gray-300/50 dark:border-gray-600">
-                            <div className={`h-full ${colors.bar}`} style={{ width: `${Math.min(record.percentage, 100)}%` }} />
-                            <div className="absolute top-0 bottom-0 w-1 bg-gray-900/30 dark:bg-white/30" style={{ left: '70%' }} />
-                          </div>
-                          
-                          {!record.is_finalized && (
-                             <div className="mt-2 flex justify-between text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                               <span>{record.streak} Streak ({record.streak_tier})</span>
-                               <span>{record.skips_left} Safe Skips Left</span>
-                             </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-
-                  {/* NEW: Merged Records Section */}
-                  <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
-                    <div className="flex items-center gap-2 mb-4">
-                      <FileText size={18} className="text-gray-400 dark:text-gray-500" />
-                      <h3 className="font-bold text-gray-800 dark:text-white text-base">Attendance History</h3>
-                    </div>
-                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                      {history?.map((h, i) => (
-                        <div key={i} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
-                          <div>
-                            <p className="font-bold text-gray-900 dark:text-white text-sm">{h.course_code}</p>
-                            <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{new Date(h.created_at).toLocaleString()}</p>
-                          </div>
-                          {h.status === 'verified' ? (
-                            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Present</span>
-                          ) : h.status === 'flagged' || h.status === 'pending_override' ? (
-                            <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Flagged</span>
-                          ) : h.status === 'blocked' ? (
-                            <span className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Blocked</span>
-                          ) : (
-                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide">Absent</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <DashboardTab 
+                  records={records}
+                  history={history}
+                  nickname={nickname}
+                  setNickname={setNickname}
+                  savedNickname={savedNickname}
+                  isEditingNickname={isEditingNickname}
+                  setIsEditingNickname={setIsEditingNickname}
+                  studentDept={studentDept}
+                  setStudentDept={setStudentDept}
+                  studentLevel={studentLevel}
+                  setStudentLevel={setStudentLevel}
+                  saveProfile={saveProfile}
+                  setShowEnrollModal={setShowEnrollModal}
+                  isSupported={isSupported}
+                  permission={permission}
+                  isSubscribed={isSubscribed}
+                  subscribe={subscribe}
+                />
               )}
 
               {activeTab === 'feed' && (
-                <div className="animate-in fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Megaphone size={18} className="text-[#2563EB] dark:text-blue-400" />
-                    <h3 className="font-bold text-gray-800 dark:text-white text-base">Campus Updates</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {feed.map((post) => {
-                      const isUnread = new Date(post.created_at).getTime() > lastSeenTimestamp;
-                      return (
-                        <div key={post.id} className={`bg-gray-50 dark:bg-gray-800/50 border p-4 rounded-xl transition-colors ${isUnread ? 'border-blue-200 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900/30' : 'border-gray-200 dark:border-gray-800'}`}>
-                          <div className="flex justify-between items-start mb-1">
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-extrabold text-gray-900 dark:text-white text-sm">{post.title}</h4>
-                              {isUnread && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] dark:bg-blue-400" />}
-                            </div>
-                            {post.course_code && (
-                              <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800">{post.course_code}</span>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-2">{post.content}</p>
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                            <Calendar size={10} /> {new Date(post.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {feed.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400 text-center">No updates yet.</p>}
-                  </div>
-                </div>
+                <FeedTab 
+                  feed={feed} 
+                  lastSeenTimestamp={lastSeenTimestamp} 
+                />
               )}
 
               {activeTab === 'rep' && isClassRep && (
-                <div className="animate-in fade-in space-y-6">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl transition-colors">
-                    <h3 className="font-bold text-blue-900 dark:text-white text-base mb-2 flex items-center gap-2"><Upload size={18}/> Upload Class List</h3>
-                    <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-3">Help the lecturer by uploading the roster for a course you represent.</p>
-                    
-                    <select aria-label="Course to Upload List" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold mb-3 outline-none">
-                      {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
-                    </select>
-
-                    <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-xl font-bold text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-gray-700 transition-all shadow-sm">
-                      {isUploadingList ? <Clock size={18} className="animate-spin" /> : <FileText size={18} />}
-                      {isUploadingList ? "Uploading..." : "Select CSV / Excel File"}
-                      <input type="file" accept=".csv, .xlsx, .xls" className="hidden" onChange={handleRepUpload} disabled={isUploadingList} />
-                    </label>
-                  </div>
-
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-xl transition-colors">
-                    <h3 className="font-bold text-amber-900 dark:text-white text-base mb-2 flex items-center gap-2"><Zap size={18}/> Log Dead Battery</h3>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 font-medium mb-3">If a student&apos;s phone died, log their matric number here. <strong>Limit: 3 per class.</strong></p>
-                    
-                    <div className="flex gap-2">
-                      <input aria-label="Student Matric Number for Dead Battery" type="text" placeholder="Student's Matric No." value={repBatteryMatric} onChange={(e) => setRepBatteryMatric(e.target.value.toUpperCase())} className="w-full bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold uppercase outline-none" />
-                      <button onClick={handleLogBattery} disabled={isLoggingBattery || !repBatteryMatric} className="bg-amber-500 text-white px-5 py-3 rounded-lg font-bold text-sm hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap">
-                        {isLoggingBattery ? "Logging..." : "Log"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl transition-colors">
-                    <h3 className="font-bold text-red-900 dark:text-white text-base mb-2 flex items-center gap-2"><PlayCircle size={18}/> Backup Anchor</h3>
-                    <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-3">
-                      If the lecturer&apos;s phone is dead or missing, start a session from your phone. Your GPS becomes the anchor for the class.
-                    </p>
-
-                    {activeLiveSession ? (
-                       <div className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 p-3 rounded-lg text-center text-sm font-bold text-red-600 dark:text-red-400">
-                         Session already active: {activeLiveSession.course}
-                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <select aria-label="Course for Backup Session" value={repCourseId} onChange={(e) => setRepCourseId(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold outline-none">
-                          {records?.map(r => <option key={r.course_code} value={r.course_code}>{r.course_code}</option>)}
-                        </select>
-                        <button onClick={handleStartBackupSession} disabled={isStartingRepSession} className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                          {isStartingRepSession ? <Clock size={18} className="animate-spin" /> : <MapPin size={18} />}
-                          {isStartingRepSession ? "Anchoring GPS..." : "Start Backup Session"}
-                        </button>
-                        {repSessionError && <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-2">{repSessionError}</p>}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <RepDeskTab 
+                  records={records}
+                  matricNumber={matricNumber}
+                  activeLiveSession={activeLiveSession}
+                  onRefresh={() => fetchStudentData(matricNumber.toUpperCase().trim())}
+                  addToast={addToast}
+                />
               )}
 
               <button
@@ -1170,61 +774,19 @@ export default function StudentPortal() {
         </div>
       </div>
 
-      {/* NEW: Enrollment Modal */}
-      {showEnrollModal && (
-        <div className="fixed inset-0 bg-gray-900/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-colors">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-800 w-full max-w-md max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-3xl">
-              <div>
-                <h2 className="text-xl font-black text-gray-900 dark:text-white">Enroll in Class</h2>
-                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Link to a lecturer&apos;s roster</p>
-              </div>
-              <button onClick={() => setShowEnrollModal(false)} className="p-2 bg-white dark:bg-gray-800 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white shadow-sm border border-gray-200 dark:border-gray-700 transition-all">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto space-y-4">
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-start gap-2 transition-colors">
-                <AlertTriangle size={16} className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                  <strong>Please note:</strong> Enrolling here only links you to your lecturer&apos;s attendance roster. It does <strong>NOT</strong> replace your official university course registration.
-                </p>
-              </div>
-              
-              {(!studentDept || !studentLevel) ? (
-                <div className="text-center p-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
-                  <p className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Please set your Department and Level in the Dashboard first.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {availableCourses.length === 0 ? (
-                    <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No new courses available for {studentDept} {studentLevel}.</p>
-                  ) : (
-                    availableCourses.map(course => (
-                      <div key={course.id} className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 p-4 rounded-xl flex justify-between items-center transition-colors">
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white text-sm">{course.course_code}</p>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{course.department} • Level {course.level}</p>
-                        </div>
-                        <button 
-                          onClick={() => handleEnroll(course.id, course.course_code)}
-                          disabled={isEnrolling === course.id}
-                          className="bg-[#2563EB] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
-                        >
-                          {isEnrolling === course.id ? 'Joining...' : 'Enroll'}
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <EnrollModal
+        isOpen={showEnrollModal}
+        onClose={() => setShowEnrollModal(false)}
+        matricNumber={matricNumber}
+        studentDept={studentDept}
+        studentLevel={studentLevel}
+        onEnrolled={() => fetchStudentData(matricNumber.toUpperCase().trim())}
+        addToast={addToast}
+      />
 
       <PWAInstaller />
       <ConfirmModal config={confirm.config} onClose={confirm.close} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '../../utils/supabase';
 import { ShieldCheck, Loader2, Mail, Lock, User, Users, KeyRound, AlertTriangle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import ThemeToggle from '@/components/ThemeToggle'; // <-- Imported the toggle
+import ThemeToggle from '@/components/ThemeToggle';
+import { ToastContainer, useToast } from '@/components/Toast';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function LoginPage() {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const { toasts, addToast, removeToast } = useToast();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +54,7 @@ export default function LoginPage() {
           throw new Error(data.error || 'Registration failed');
         }
 
-        alert('Registration successful! You can now log in.');
+        addToast('Registration successful', 'You can now log in with your email and password.', 'success');
         setIsLogin(true);
         setLoading(false);
       }
@@ -141,6 +144,8 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

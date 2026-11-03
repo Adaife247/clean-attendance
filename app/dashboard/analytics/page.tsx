@@ -4,6 +4,8 @@ import {
   BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
+import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
+import { ToastContainer, useToast } from '@/components/Toast';
 
 interface CourseRow {
   id: string;
@@ -45,6 +47,9 @@ export default function AnalyticsPage() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [lockGrades, setLockGrades] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const confirm = useConfirmModal();
+  const { toasts, addToast, removeToast } = useToast();
 
   const getHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -111,18 +116,8 @@ export default function AnalyticsPage() {
     return () => clearTimeout(id);
   }, [selectedCourseCode, fetchReportData]);
 
-  const handleDownload = async (isFullSemester: boolean) => {
+  const executeDownload = async (isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
-    
-    if (lockGrades && !selectedCourse.is_finalized) {
-      if (reportData.totalClasses < reportData.plannedClasses) {
-        const confirm = window.confirm(`⚠️ WARNING: You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}.\n\nIf you lock grades now, the system will calculate final scores based on the ${reportData.totalClasses} actual classes held.\n\nDo you want to proceed?`);
-        if (!confirm) return;
-      } else {
-        const confirm = window.confirm(`Are you sure? This will finalize the semester and lock CA scores. No more sessions can be held for this course.`);
-        if (!confirm) return;
-      }
-    }
 
     setIsDownloading(true);
 
@@ -132,17 +127,17 @@ export default function AnalyticsPage() {
         .from('courses')
         .update({ is_finalized: true })
         .eq('id', selectedCourse.id);
-      
+
       if (error) {
-        alert("Failed to lock grades in the database.");
+        addToast('Lock failed', 'Could not finalize grades in the database.', 'error');
         setIsFinalizing(false);
         setIsDownloading(false);
         return;
       }
-      
+
       setCourses(prev => prev.map(c => c.id === selectedCourse.id ? { ...c, is_finalized: true } : c));
       setSelectedCourse(prev => prev ? { ...prev, is_finalized: true } : null);
-      setLockGrades(false); 
+      setLockGrades(false);
     }
 
     const maxScore = reportData.maxScore || 10;
@@ -186,8 +181,29 @@ export default function AnalyticsPage() {
     link.click();
     document.body.removeChild(link);
 
+    addToast('Report downloaded', `${selectedCourseCode} CSV exported successfully.`, 'success');
+
     setIsFinalizing(false);
     setIsDownloading(false);
+  };
+
+  const handleDownload = (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report || !selectedCourse) return;
+
+    if (lockGrades && !selectedCourse.is_finalized) {
+      const isBelowPlanned = reportData.totalClasses < reportData.plannedClasses;
+      confirm.ask(
+        isBelowPlanned ? 'Finalize with fewer classes held?' : 'Lock final grades?',
+        isBelowPlanned
+          ? `You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}. Final scores will be calculated against the ${reportData.totalClasses} held.`
+          : 'This will finalize the semester and lock CA scores. No more sessions can be held for this course.',
+        () => executeDownload(isFullSemester),
+        { isDangerous: true, confirmLabel: 'Lock & Download' }
+      );
+      return;
+    }
+
+    executeDownload(isFullSemester);
   };
 
   const applyCustomDates = () => { fetchReportData(true); };
@@ -384,6 +400,9 @@ export default function AnalyticsPage() {
         )}
 
       </div>
+
+      <ConfirmModal config={confirm.config} onClose={confirm.close} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
