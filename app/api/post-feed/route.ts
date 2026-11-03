@@ -13,12 +13,12 @@ if (publicVapidKey && privateVapidKey) {
 
 export async function POST(request: Request) {
   try {
-    // NEW: Require lecturer auth
+    // Require lecturer auth
     const auth = await verifyLecturer(request);
     if (auth.error) return auth.error;
 
     const { title, content, author, course_code, link_url, expires_at } = await request.json();
-    
+
     if (!title || !content || !course_code) {
       return NextResponse.json({ error: 'Title, content, and course_code are required' }, { status: 400 });
     }
@@ -36,8 +36,8 @@ export async function POST(request: Request) {
     }
 
     const { error } = await supabase.from('campus_updates').insert([{
-      title, 
-      content, 
+      title,
+      content,
       author: author || 'Lecturer',
       course_code,
       link_url: link_url || null,
@@ -49,10 +49,10 @@ export async function POST(request: Request) {
     // ─── SEND PUSH NOTIFICATIONS ───
     try {
       const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
-      
+
       if (enrollments && enrollments.length > 0) {
         const matrics = enrollments.map(e => e.matric_number);
-        
+
         const { data: subscriptions } = await supabase
           .from('push_subscriptions')
           .select('subscription')
@@ -62,10 +62,10 @@ export async function POST(request: Request) {
           const payload = JSON.stringify({
             title: `📢 ${course_code} Announcement`,
             body: title,
-            url: `/portal` 
+            url: '/student-hub'
           });
 
-          const pushPromises = subscriptions.map(sub => 
+          const pushPromises = subscriptions.map(sub =>
             webpush.sendNotification(sub.subscription, payload).catch(err => {
               if (err.statusCode === 410) {
                 return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         }
       }
     } catch (pushError) {
-      console.error("Broadcast push failed:", pushError);
+      console.error('Broadcast push failed:', pushError);
     }
 
     return NextResponse.json({ success: true });

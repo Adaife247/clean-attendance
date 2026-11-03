@@ -15,12 +15,12 @@ type Step = 'matric' | 'email' | 'passkey' | 'success';
 export default function OnboardPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('matric');
-  
+
   const [matricNumber, setMatricNumber] = useState('');
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [fingerprint, setFingerprint] = useState<string | null>(null);
-const [deviceId, setDeviceId] = useState<string | null>(null);
-  
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+
   const [isChecking, setIsChecking] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
@@ -30,7 +30,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
       try {
         const fp = await generateDeviceFingerprint();
         setFingerprint(fp.hash);
-        setDeviceId(fp.deviceId); // <-- Save the local UUID
+        setDeviceId(fp.deviceId);
       } catch (err) {
         console.warn("Fingerprint generation failed", err);
       }
@@ -41,7 +41,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
   useEffect(() => {
     const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
     if (existingAnchor) {
-      router.push('/portal');
+      router.push('/student-hub');
     }
   }, [router]);
 
@@ -116,7 +116,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
       if (!res.ok) {
         throw new Error(data.error || "Failed to save your email.");
       }
-      
+
       setStep('passkey');
     } catch (err) {
       console.error(err);
@@ -136,7 +136,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
         body: JSON.stringify({ matricNumber })
       });
       const options = await genRes.json();
-      
+
       if (!genRes.ok || options.error) {
         throw new Error(options.message || options.error || "Server rejected registration.");
       }
@@ -166,13 +166,13 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
         throw err;
       }
 
-            const verifyRes = await fetch('/api/webauthn/register/verify', {
+      const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          matricNumber, 
+        body: JSON.stringify({
+          matricNumber,
           authResponse: attResp,
           deviceFingerprint: fingerprint || 'unknown',
-          deviceId: deviceId || 'unknown' // <-- Send the UUID
+          deviceId: deviceId || 'unknown'
         })
       });
       const verifyResult = await verifyRes.json();
@@ -183,7 +183,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
 
       safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
       safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
-      
+
       setStep('success');
     } catch (err) {
       console.error(err);
@@ -195,11 +195,11 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">
-      
+
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
-      
+
       <div className="w-full max-w-md relative z-10">
-        
+
         <div className="flex justify-between items-center mb-6">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
             <ArrowLeft size={16} /> Back to Hub
@@ -217,7 +217,7 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl shadow-gray-300/30 dark:shadow-none border border-gray-100 dark:border-gray-800 p-6 sm:p-8 animate-in fade-in slide-in-from-bottom-6 transition-colors duration-300">
-          
+
           {error && (
             <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800 flex items-start gap-2 animate-in fade-in">
               <AlertTriangle size={16} className="text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
@@ -234,22 +234,22 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
 
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><User size={18} className="text-gray-400 dark:text-gray-500" /></div>
-                <input 
-                  type="text" 
-                  placeholder="Matric Number (e.g., CSC/2021/001)" 
-                  value={matricNumber} 
-                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} 
+                <input
+                  type="text"
+                  placeholder="Matric Number (e.g., CSC/2021/001)"
+                  value={matricNumber}
+                  onChange={(e) => setMatricNumber(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && handleMatricCheck()}
-                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500" 
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all uppercase placeholder:text-sm placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
 
-              <button 
-                onClick={handleMatricCheck} 
-                disabled={isChecking || matricNumber.length < 5} 
+              <button
+                onClick={handleMatricCheck}
+                disabled={isChecking || matricNumber.length < 5}
                 className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70"
               >
-                {isChecking ? <Loader2 size={20} className="animate-spin" /> : <ArrowRight size={20} />} 
+                {isChecking ? <Loader2 size={20} className="animate-spin" /> : <ArrowRight size={20} />}
                 Continue
               </button>
             </div>
@@ -264,22 +264,22 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
 
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail size={18} className="text-gray-400 dark:text-gray-500" /></div>
-                <input 
-                  type="email" 
-                  placeholder="Email Address" 
-                  value={recoveryEmail} 
-                  onChange={(e) => setRecoveryEmail(e.target.value)} 
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={recoveryEmail}
+                  onChange={(e) => setRecoveryEmail(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
-                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500" 
+                  className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-4 pl-12 pr-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all placeholder:font-medium placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
 
-              <button 
-                onClick={handleEmailSubmit} 
-                disabled={isChecking || !recoveryEmail.includes('@')} 
+              <button
+                onClick={handleEmailSubmit}
+                disabled={isChecking || !recoveryEmail.includes('@')}
                 className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70"
               >
-                {isChecking ? <Loader2 size={20} className="animate-spin" /> : <ArrowRight size={20} />} 
+                {isChecking ? <Loader2 size={20} className="animate-spin" /> : <ArrowRight size={20} />}
                 Continue
               </button>
             </div>
@@ -290,11 +290,11 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
               <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-2 border border-blue-100 dark:border-blue-800">
                 <Fingerprint size={32} className="text-[#2563EB] dark:text-blue-400" />
               </div>
-              
+
               <div>
                 <h2 className="text-xl font-extrabold text-gray-900 dark:text-white">Step 3: Secure Your Device</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                  We need to link this phone to <strong>{matricNumber}</strong> to prevent proxy attendance. 
+                  We need to link this phone to <strong>{matricNumber}</strong> to prevent proxy attendance.
                   Your fingerprint never leaves your device.
                 </p>
               </div>
@@ -305,12 +305,12 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
                 <p>🔄 Changing phones later? Use your recovery email.</p>
               </div>
 
-              <button 
-                onClick={handlePasskeySetup} 
-                disabled={isRegistering} 
+              <button
+                onClick={handlePasskeySetup}
+                disabled={isRegistering}
                 className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-70 mt-4"
               >
-                {isRegistering ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />} 
+                {isRegistering ? <Loader2 size={20} className="animate-spin" /> : <Fingerprint size={20} />}
                 {isRegistering ? "Setting up..." : "Scan Biometrics"}
               </button>
             </div>
@@ -323,12 +323,12 @@ const [deviceId, setDeviceId] = useState<string | null>(null);
               <p className="text-sm text-gray-600 dark:text-gray-400 font-medium mb-6">
                 Your account is secure and your device is linked. You can now check in to any class with a single scan.
               </p>
-              
-              <button 
-                onClick={() => router.push('/portal')} 
+
+              <button
+                onClick={() => router.push('/student-hub')}
                 className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-4 rounded-2xl shadow-md hover:bg-gray-800 dark:hover:bg-gray-100 transition-all"
               >
-                Go to Student Portal
+                Go to Student Hub
               </button>
             </div>
           )}

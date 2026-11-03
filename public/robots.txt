@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /hod
-Disallow: /portal
+Disallow: /student-hub
 Disallow: /api/
 
 Sitemap: https://campuscheck-live.vercel.app/sitemap.xml

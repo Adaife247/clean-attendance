@@ -25,10 +25,10 @@ export default function NotFound() {
             <Home size={18} /> Home
           </Link>
           <Link
-            href="/portal"
+            href="/student-hub"
             className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-all"
           >
-            <ArrowLeft size={18} /> Student portal
+            <ArrowLeft size={18} /> Student Hub
           </Link>
         </div>
       </div>

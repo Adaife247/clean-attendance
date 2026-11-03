@@ -1,4 +1,4 @@
-const CACHE_NAME = 'campuscheck-v4';
+const CACHE_NAME = 'campuscheck-v5';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192x192.png',
@@ -48,19 +48,19 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// NEW: Listen for Push Notifications
+// Listen for Push Notifications
 self.addEventListener('push', function(event) {
   if (event.data) {
     try {
       const data = event.data.json();
-      
+
       const options = {
         body: data.body,
         icon: '/icon-192x192.png',
         badge: '/icon-192x192.png',
         vibrate: [100, 50, 100],
         data: {
-          url: data.url || '/portal' // Where to go when clicked
+          url: data.url || '/student-hub' // Where to go when clicked
         }
       };
 
@@ -73,10 +73,10 @@ self.addEventListener('push', function(event) {
   }
 });
 
-// NEW: Handle notification click
+// Handle notification click
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  
+
   const urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
 
   const promiseChain = clients.matchAll({
