@@ -62,13 +62,13 @@ export async function POST(request: Request) {
     }
     if (!Array.isArray(safeTransports)) safeTransports = ['internal'];
 
-    const options = await generateAuthenticationOptions({
+        const options = await generateAuthenticationOptions({
       rpID,
       allowCredentials: [{
         id: String(device.credential_id),
         transports: safeTransports,
       }],
-      userVerification: 'preferred',
+      userVerification: 'required', // Force biometrics on THIS device
     });
 
     const cookieStore = await cookies();
