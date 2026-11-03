@@ -124,42 +124,47 @@ function CheckInWrapper() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Vulnerabilities Card */}
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border border-red-100 dark:border-red-900/30 relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/10 rounded-bl-full pointer-events-none"></div>
-              <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-6 flex items-center gap-2">
-                <XCircle size={24} /> The Vulnerabilities
+              <h3 className="relative z-10 text-xl font-black text-red-600 dark:text-red-400 mb-6 flex items-center gap-2 leading-tight">
+                <XCircle size={24} className="shrink-0" /> The Vulnerabilities
               </h3>
-              <ul className="space-y-4">
+              <ul className="relative z-10 space-y-4">
                 {[
                   "Paper sheets are passed around and signed by friends.",
+                  "Sheets get torn, lost, or destroyed by water spills.",
                   "Students check in remotely using fake GPS apps.",
-                  "Multiple accounts are created on a single device.",
-                  "Lecturers have no forensic evidence of fraud.",
-                  "Zero data for NUC compliance audits."
+                  "Multiple accounts are created on a single phone.",
+                  "Lecturers waste hours manually counting scribbles.",
+                  "Zero forensic evidence of proxy for disciplinary panels."
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
-                    <span className="text-red-400 mt-0.5">✕</span> {item}
+                    <span className="text-red-400 mt-0.5 shrink-0">✕</span> 
+                    <span className="min-w-0 flex-1">{item}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
+            {/* CampusCheck Standard Card */}
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border border-emerald-100 dark:border-emerald-900/30 relative overflow-hidden shadow-lg shadow-emerald-500/5">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 dark:bg-emerald-900/10 rounded-bl-full pointer-events-none"></div>
-              <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400 mb-6 flex items-center gap-2">
-                <CheckCircle size={24} /> The CampusCheck Standard
+              <h3 className="relative z-10 text-xl font-black text-emerald-600 dark:text-emerald-400 mb-6 flex items-center gap-2 leading-tight">
+                <CheckCircle size={24} className="shrink-0" /> The CampusCheck Standard
               </h3>
-              <ul className="space-y-4">
+              <ul className="relative z-10 space-y-4">
                 {[
                   "Hardware-bound biometrics (FaceID/Fingerprint) required.",
                   "Server-side GPS verification with strict geofencing.",
                   "Persistent device binding prevents multiple accounts.",
+                  "Zero manual counting. Attendance is instantly calculated.",
                   "Every check-in attempt is logged with forensic evidence.",
                   "One-click Senate-ready CSV exports for compliance."
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-600 dark:text-gray-400 font-medium text-sm">
                     <span className="text-emerald-400 mt-0.5 shrink-0">✓</span> 
-                    <span className="wrap-break-word min-w-0 flex-1">{item}</span>
+                    <span className="min-w-0 flex-1">{item}</span>
                   </li>
                 ))}
               </ul>
