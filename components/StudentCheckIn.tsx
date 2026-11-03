@@ -14,7 +14,7 @@ import { STORAGE_KEYS } from '@/utils/constants';
 import { getStudentHeaders } from '@/utils/api-client';
 import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
-import { GeoTrustInWeb } from '@geotrustin/web'; // <-- NEW
+import { GeoTrustInWeb } from '@geotrustin/web';
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -79,6 +79,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmWatchIdRef = useRef<number | null>(null);
   const hardwareFingerprintRef = useRef<string | null>(null);
   const deviceIdRef = useRef<string | null>(null);
+  
+  // NEW: Motion Buffer for DeviceMotion cross-check
+  const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -107,6 +110,29 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     return () => clearTimeout(id);
   }, [searchParams]);
+
+  // NEW: Track DeviceMotion
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
+
+    const handleMotion = (event: DeviceMotionEvent) => {
+      const acc = event.accelerationIncludingGravity;
+      if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
+        motionBufferRef.current.push({
+          x: acc.x,
+          y: acc.y,
+          z: acc.z,
+          t: Date.now()
+        });
+        if (motionBufferRef.current.length > 50) {
+          motionBufferRef.current = motionBufferRef.current.slice(-50);
+        }
+      }
+    };
+
+    window.addEventListener('devicemotion', handleMotion);
+    return () => window.removeEventListener('devicemotion', handleMotion);
+  }, []);
 
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -285,7 +311,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       const options = await genRes.json();
       if (!genRes.ok || options.error) throw new Error(options.message || options.error || "Server rejected registration.");
 
-      // ─── THE PRE-CHECK (Blocks Cleared Cache / Incognito) ───
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const authOptions: any = {
@@ -301,7 +326,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
           throw err;
         }
       }
-      // ────────────────────────────────────────────────────────
 
       const hardenedOptions = {
         ...options,
@@ -328,7 +352,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
         throw err;
       }
 
-      // Wait for the fingerprint to be generated
       let fp = hardwareFingerprintRef.current;
       let dId = deviceIdRef.current;
       if (!fp || !dId) {
@@ -389,7 +412,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
           telemetry: gpsTelemetry,
           hardwareFingerprint: hardwareFingerprint || 'unknown',
           verificationMethod,
-          spoofRisk, // <-- NEW
+          spoofRisk,
+          motionTelemetry: motionBufferRef.current, // <-- Send motion data
           userAgent: navigator.userAgent
         })
       });
@@ -441,14 +465,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
     let verificationMethod = 'skipped';
     let spoofRisk = 0;
 
-    // ─── NEW: GEOTRUSTIN SPOOF CHECK ───
     try {
       const loc = await GeoTrustInWeb.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
       spoofRisk = loc.spoofRisk;
     } catch (err) {
       logger.warn('GeoTrustIn check failed', err);
     }
-    // ───────────────────────────────────
 
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {

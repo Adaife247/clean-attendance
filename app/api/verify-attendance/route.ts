@@ -19,6 +19,13 @@ interface Telemetry {
   timestamp: number;
 }
 
+interface MotionSample {
+  x: number;
+  y: number;
+  z: number;
+  t: number;
+}
+
 interface AuditLogPayload {
   session_id: string;
   matric_number: string;
@@ -63,9 +70,25 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
   return anomalousJumps >= 3;
 }
 
+function computeMotionVariance(samples: MotionSample[]): number {
+  if (samples.length < 3) return 1; // default to "moving" if no data
+
+  const xs = samples.map(s => s.x);
+  const ys = samples.map(s => s.y);
+  const zs = samples.map(s => s.z);
+
+  const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const variance = (arr: number[], m: number) => arr.reduce((a, b) => a + Math.pow(b - m, 2), 0) / arr.length;
+
+  const vx = variance(xs, mean(xs));
+  const vy = variance(ys, mean(ys));
+  const vz = variance(zs, mean(zs));
+
+  return (vx + vy + vz) / 3;
+}
+
 export async function POST(request: Request) {
   try {
-    // 1. Auth FIRST
     const auth = verifyStudentToken(request);
     if (auth.error) return auth.error;
     const cleanMatric = auth.matric!;
@@ -73,7 +96,6 @@ export async function POST(request: Request) {
 
     const ip = getClientIp(request);
     
-    // 2. RATE LIMITING
     const ipRateCheck = await checkRateLimit(`verify-att-ip:${ip}`, 100);
     if (!ipRateCheck.allowed) {
       return NextResponse.json(
@@ -91,7 +113,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, spoofRisk, userAgent } = body;
+    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, spoofRisk, motionTelemetry, userAgent } = body;
 
     if (!sessionId || !hardwareFingerprint) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
@@ -265,12 +287,21 @@ export async function POST(request: Request) {
 
     const spoofSuspected = detectLikelySpoof(validPings);
 
+    // DeviceMotion Cross-check
+    const motionSamples = Array.isArray(motionTelemetry) ? motionTelemetry : [];
+    const motionVariance = computeMotionVariance(motionSamples);
+    const motionMismatch = bestDistance <= allowedRadius && motionVariance < 0.01 && motionSamples.length >= 3;
+
     let finalStatus: 'verified' | 'flagged' = 'flagged';
     let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
     let reasonCode = null;
 
     if (bestDistance <= allowedRadius) {
-      if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
+      if (motionMismatch) {
+        finalStatus = 'flagged';
+        reasonCode = 'MOTION_MISMATCH';
+        responseMessage = "Your phone does not seem to be moving as expected. Please hold your own phone while checking in.";
+      } else if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
         finalStatus = 'flagged';
         reasonCode = 'LOCATION_SPOOF_SUSPECTED';
         responseMessage = "You're close enough, but your location signal was unstable. Your lecturer will review this.";
@@ -297,6 +328,7 @@ export async function POST(request: Request) {
       verificationMethod,
       spoofSuspected,
       spoofRisk,
+      motionVariance,
       isIOS,
     });
 
