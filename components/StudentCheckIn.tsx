@@ -881,6 +881,28 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
+                {status === 'failed' && !currentFlagCode && (
+          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+              <AlertTriangle size={32} />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+              Check-In Failed
+            </h3>
+            
+            <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
+              {errorMessage || "An unexpected error occurred. Please try again."}
+            </p>
+
+            <div className="mt-6 space-y-3">
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); setMatricNumber(''); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
+                Start Over
+              </button>
+            </div>
+          </div>
+        )}
+
         {(status === 'failed' || status === 'disqualified') && currentFlagCode && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
