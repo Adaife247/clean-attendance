@@ -828,10 +828,6 @@ export default function LecturerDashboard() {
                   <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{data?.logs.length || 0}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Total Check-ins</p>
-                </div>
                 
                 {/* NEW: Sparkline Chart (Hidden if slow/offline) */}
                 {velocityData.length > 1 && isOnline && !isSlowNetwork && (
