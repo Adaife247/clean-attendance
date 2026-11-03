@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock, BellRing
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { ToastContainer, useToast } from '@/components/Toast';
 import AttendanceCalendar from '@/components/lecturer/AttendanceCalendar';
+import { getLecturerHeaders } from '@/utils/api-client';
 
 interface CourseRow {
   id: string;
@@ -55,19 +56,12 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isNotifying, setIsNotifying] = useState(false);
   const [lockGrades, setLockGrades] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const confirm = useConfirmModal();
   const { toasts, addToast, removeToast } = useToast();
-
-  const getHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token || ''}`
-    };
-  };
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -98,7 +92,7 @@ export default function AnalyticsPage() {
         if (startDate) url += `&startDate=${startDate}`;
         if (endDate) url += `&endDate=${endDate}`;
       }
-      const headers = await getHeaders();
+      const headers = await getLecturerHeaders();
       const response = await fetch(url, { headers });
 
       if (response.status === 404) {
@@ -120,11 +114,10 @@ export default function AnalyticsPage() {
     }
   }, [selectedCourseCode, startDate, endDate]);
 
-  // Fetch Sessions for Calendar
   const fetchSessions = useCallback(async () => {
     if (!selectedCourseCode) return;
     try {
-      const headers = await getHeaders();
+      const headers = await getLecturerHeaders();
       const response = await fetch(`/api/attendance-history?courseCode=${selectedCourseCode}`, { headers });
       if (response.ok) {
         const data = await response.json();
@@ -143,6 +136,42 @@ export default function AnalyticsPage() {
     }, 0);
     return () => clearTimeout(id);
   }, [selectedCourseCode, fetchReportData, fetchSessions]);
+
+  const handleNotifyStudents = async () => {
+    if (!selectedCourseCode) return;
+    
+    confirm.ask(
+      'Send Alerts?',
+      'This will send a push notification to all students currently below 70% attendance. This cannot be undone.',
+      async () => {
+        setIsNotifying(true);
+        try {
+          const headers = await getLecturerHeaders();
+          const res = await fetch('/api/alerts/low-attendance', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ courseCode: selectedCourseCode })
+          });
+          
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Failed to send alerts");
+          
+          if (data.atRiskCount === 0) {
+            addToast('No alerts sent', 'All students are currently above 70%.', 'info');
+          } else if (data.alertsSent === 0) {
+            addToast('Delivery failed', `${data.atRiskCount} students are at risk, but none have push notifications enabled.`, 'error');
+          } else {
+            addToast('Alerts sent', `Successfully warned ${data.alertsSent} students.`, 'success');
+          }
+        } catch (err) {
+          addToast('Error', err instanceof Error ? err.message : "Failed to send alerts", 'error');
+        } finally {
+          setIsNotifying(false);
+        }
+      },
+      { isDangerous: false, confirmLabel: 'Send Alerts' }
+    );
+  };
 
   const executeDownload = async (isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
@@ -264,7 +293,6 @@ export default function AnalyticsPage() {
           </select>
         </div>
 
-        {/* NEW: The Calendar Component */}
         <AttendanceCalendar sessions={sessionsData} />
 
         <div className="bg-white dark:bg-gray-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
@@ -391,33 +419,45 @@ export default function AnalyticsPage() {
               ) : atRiskStudents.length === 0 ? (
                 <div className="text-center p-8 text-green-600 dark:text-green-400 font-bold">No students at risk!</div>
               ) : (
-                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto transition-colors">
-                  <table className="w-full text-left whitespace-nowrap min-w-125">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        <th className="px-6 py-3 font-bold">Matric Number</th>
-                        <th className="px-6 py-3 font-bold text-center">Attendance</th>
-                        <th className="px-6 py-3 font-bold text-right">CA Score</th>
-                        <th className="px-6 py-3 font-bold text-right">Standing</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                      {atRiskStudents.map((student, i) => (
-                        <tr key={i} className="hover:bg-red-50/20 dark:hover:bg-red-900/10 transition-colors">
-                          <td className="px-6 py-3 font-black text-gray-900 dark:text-white">{student.matricNumber}</td>
-                          <td className="px-6 py-3 text-center font-bold text-gray-600 dark:text-gray-300">{student.attended} / {student.totalClasses}</td>
-                          <td className="px-6 py-3 text-right font-bold text-gray-600 dark:text-gray-300">
-                            {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
-                          </td>
-                          <td className="px-6 py-3 text-right">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                              {student.percentage}%
-                            </span>
-                          </td>
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleNotifyStudents}
+                      disabled={isNotifying}
+                      className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      {isNotifying ? <Loader2 size={16} className="animate-spin" /> : <BellRing size={16} />}
+                      {isNotifying ? "Sending Alerts..." : "Notify At-Risk Students"}
+                    </button>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto transition-colors">
+                    <table className="w-full text-left whitespace-nowrap min-w-125">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                          <th className="px-6 py-3 font-bold">Matric Number</th>
+                          <th className="px-6 py-3 font-bold text-center">Attendance</th>
+                          <th className="px-6 py-3 font-bold text-right">CA Score</th>
+                          <th className="px-6 py-3 font-bold text-right">Standing</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                        {atRiskStudents.map((student, i) => (
+                          <tr key={i} className="hover:bg-red-50/20 dark:hover:bg-red-900/10 transition-colors">
+                            <td className="px-6 py-3 font-black text-gray-900 dark:text-white">{student.matricNumber}</td>
+                            <td className="px-6 py-3 text-center font-bold text-gray-600 dark:text-gray-300">{student.attended} / {student.totalClasses}</td>
+                            <td className="px-6 py-3 text-right font-bold text-gray-600 dark:text-gray-300">
+                              {((student.percentage / 100) * maxScore).toFixed(1)} / {maxScore}
+                            </td>
+                            <td className="px-6 py-3 text-right">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                                {student.percentage}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
