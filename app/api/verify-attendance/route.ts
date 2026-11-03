@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, userAgent } = body;
+    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, spoofRisk, userAgent } = body;
 
     if (!sessionId || !hardwareFingerprint) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
@@ -270,7 +270,7 @@ export async function POST(request: Request) {
     let reasonCode = null;
 
     if (bestDistance <= allowedRadius) {
-      if (spoofSuspected) {
+      if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
         finalStatus = 'flagged';
         reasonCode = 'LOCATION_SPOOF_SUSPECTED';
         responseMessage = "You're close enough, but your location signal was unstable. Your lecturer will review this.";
@@ -296,6 +296,7 @@ export async function POST(request: Request) {
       hardwareFingerprint,
       verificationMethod,
       spoofSuspected,
+      spoofRisk,
       isIOS,
     });
 

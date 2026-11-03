@@ -14,6 +14,7 @@ import { STORAGE_KEYS } from '@/utils/constants';
 import { getStudentHeaders } from '@/utils/api-client';
 import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
+import { GeoTrustInWeb } from '@geotrustin/web'; // <-- NEW
 
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; }
 interface Props { sessionId: string; }
@@ -364,7 +365,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   };  
 
-  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string) => {
+  const sendPayloadToVercel = useCallback(async (gpsTelemetry: Telemetry[], verificationMethod: string, spoofRisk: number = 0) => {
     try {
       let hardwareFingerprint = hardwareFingerprintRef.current;
       if (!hardwareFingerprint) {
@@ -388,6 +389,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
           telemetry: gpsTelemetry,
           hardwareFingerprint: hardwareFingerprint || 'unknown',
           verificationMethod,
+          spoofRisk, // <-- NEW
           userAgent: navigator.userAgent
         })
       });
@@ -437,6 +439,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
     checkPermissionFromGesture();
 
     let verificationMethod = 'skipped';
+    let spoofRisk = 0;
+
+    // ─── NEW: GEOTRUSTIN SPOOF CHECK ───
+    try {
+      const loc = await GeoTrustInWeb.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+      spoofRisk = loc.spoofRisk;
+    } catch (err) {
+      logger.warn('GeoTrustIn check failed', err);
+    }
+    // ───────────────────────────────────
 
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
@@ -490,7 +502,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       didFinish = true;
       if (watchId) navigator.geolocation.clearWatch(watchId);
       if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
-        sendPayloadToVercel(finalPings, verificationMethod);
+        sendPayloadToVercel(finalPings, verificationMethod, spoofRisk);
       } else {
         setErrorMessage("Couldn't get any location data. Make sure Location is ON and you're near a window, then try again.");
         setStatus('failed');
@@ -499,7 +511,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
     if (pings.length >= 1) {
       sentAny = true;
-      sendPayloadToVercel([...pings], verificationMethod);
+      sendPayloadToVercel([...pings], verificationMethod, spoofRisk);
     }
 
     const overallTimeoutId = setTimeout(() => {
@@ -529,7 +541,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
           lastSendTs = now;
           sentAny = true;
-          sendPayloadToVercel([...pings], verificationMethod);
+          sendPayloadToVercel([...pings], verificationMethod, spoofRisk);
         }
       },
       (error) => {
@@ -818,26 +830,22 @@ export default function StudentCheckIn({ sessionId }: Props) {
             </p>
 
             <div className="mt-6 space-y-3">
-              {/* Retry Button */}
               {FLAG_REASONS[currentFlagCode].suggestedAction === 'retry' && (
                 <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md">
                   <RefreshCw size={18} /> Try Again
                 </button>
               )}
 
-              {/* Raise Hand Button */}
               {FLAG_REASONS[currentFlagCode].category !== 'proxy' && FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
                 </button>
               )}
 
-              {/* See Lecturer Text */}
               {FLAG_REASONS[currentFlagCode].suggestedAction === 'see_lecturer' && (
                 <p className="text-sm font-bold text-gray-500 mt-2">Show this screen to your lecturer.</p>
               )}
 
-              {/* Start Over Button */}
               {FLAG_REASONS[currentFlagCode].suggestedAction !== 'none' && (
                 <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
                   Start Over
