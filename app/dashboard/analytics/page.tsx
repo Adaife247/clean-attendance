@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/utils/supabase';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { ToastContainer, useToast } from '@/components/Toast';
+import AttendanceCalendar from '@/components/lecturer/AttendanceCalendar';
 
 interface CourseRow {
   id: string;
@@ -31,6 +32,13 @@ interface ReportData {
   report: StudentReportRow[];
 }
 
+interface SessionData {
+  session_id: string;
+  created_at: string;
+  verified_count: number;
+  flagged_count: number;
+}
+
 export default function AnalyticsPage() {
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
@@ -42,6 +50,8 @@ export default function AnalyticsPage() {
   const [showWatchlist, setShowWatchlist] = useState(false);
 
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [sessionsData, setSessionsData] = useState<SessionData[]>([]);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -110,11 +120,29 @@ export default function AnalyticsPage() {
     }
   }, [selectedCourseCode, startDate, endDate]);
 
+  // Fetch Sessions for Calendar
+  const fetchSessions = useCallback(async () => {
+    if (!selectedCourseCode) return;
+    try {
+      const headers = await getHeaders();
+      const response = await fetch(`/api/attendance-history?courseCode=${selectedCourseCode}`, { headers });
+      if (response.ok) {
+        const data = await response.json();
+        setSessionsData(data);
+      }
+    } catch {
+      console.error("Failed to load calendar data");
+    }
+  }, [selectedCourseCode]);
+
   useEffect(() => {
     if (!selectedCourseCode) return;
-    const id = setTimeout(() => { fetchReportData(false); }, 0);
+    const id = setTimeout(() => { 
+      fetchReportData(false); 
+      fetchSessions();
+    }, 0);
     return () => clearTimeout(id);
-  }, [selectedCourseCode, fetchReportData]);
+  }, [selectedCourseCode, fetchReportData, fetchSessions]);
 
   const executeDownload = async (isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
@@ -235,6 +263,9 @@ export default function AnalyticsPage() {
             }
           </select>
         </div>
+
+        {/* NEW: The Calendar Component */}
+        <AttendanceCalendar sessions={sessionsData} />
 
         <div className="bg-white dark:bg-gray-900 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 transition-colors">
           <div className="flex items-center gap-4 mb-8">
