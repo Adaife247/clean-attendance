@@ -21,13 +21,6 @@ interface Telemetry {
   hdg?: number | null;
 }
 
-interface MotionSample {
-  x: number;
-  y: number;
-  z: number;
-  t: number;
-}
-
 interface AuditLogPayload {
   session_id: string;
   matric_number: string;
@@ -52,13 +45,8 @@ function getValidPings(telemetry: Telemetry[]): Telemetry[] {
     if (typeof t.lat !== 'number' || typeof t.lng !== 'number') return false;
     if (!Number.isFinite(t.lat) || !Number.isFinite(t.lng)) return false;
     if (Math.abs(t.lat) < 0.0001 && Math.abs(t.lng) < 0.0001) return false;
-    
-    // Reject zero or negative accuracy (mock GPS signature)
     if (typeof t.acc !== 'number' || t.acc <= 0 || t.acc > 2000) return false;
-
-    // Reject if speed is null/0 but heading is non-zero (contradictory)
     if ((t.spd === null || t.spd === 0) && t.hdg !== null && t.hdg !== 0) return false;
-
     return true;
   });
 }
@@ -75,36 +63,15 @@ function detectLikelySpoof(pings: Telemetry[]): boolean {
     const drift = getDistanceInMeters(accurate[i - 1].lat, accurate[i - 1].lng, accurate[i].lat, accurate[i].lng);
     const dt = Math.abs(accurate[i].timestamp - accurate[i - 1].timestamp) / 1000;
 
-    // Teleportation check (> 200 m/s)
     if (dt > 0 && dt < 2 && drift / dt > 200) anomalousJumps++;
 
-    // Uniform timestamp check (mock apps often inject exactly every 1000ms)
     if (lastDt !== -1 && Math.abs(dt - lastDt) < 0.01) {
       uniformIntervals++;
     }
     lastDt = dt;
   }
 
-  const isUniform = uniformIntervals >= 3;
-
-  return anomalousJumps >= 3 || isUniform;
-}
-
-function computeMotionVariance(samples: MotionSample[]): number {
-  if (samples.length < 3) return 1; // default to "moving" if no data
-
-  const xs = samples.map(s => s.x);
-  const ys = samples.map(s => s.y);
-  const zs = samples.map(s => s.z);
-
-  const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
-  const variance = (arr: number[], m: number) => arr.reduce((a, b) => a + Math.pow(b - m, 2), 0) / arr.length;
-
-  const vx = variance(xs, mean(xs));
-  const vy = variance(ys, mean(ys));
-  const vz = variance(zs, mean(zs));
-
-  return (vx + vy + vz) / 3;
+  return anomalousJumps >= 3 || uniformIntervals >= 3;
 }
 
 export async function POST(request: Request) {
@@ -133,7 +100,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, spoofRisk, motionTelemetry, userAgent } = body;
+    const { sessionId, telemetry, hardwareFingerprint, verificationMethod, spoofRisk, userAgent } = body;
 
     if (!sessionId || !hardwareFingerprint) {
       return NextResponse.json({ status: 'failed', message: "Invalid request. Refresh the page and try again." }, { status: 400 });
@@ -175,7 +142,8 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes, course_id')      .eq('session_id', sessionId)
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes, course_id')
+      .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) {
@@ -210,10 +178,12 @@ export async function POST(request: Request) {
       }
     }
 
-        if (!session.course_id) {
-        return NextResponse.json({ status: 'failed', message: "Legacy session. Ask lecturer to start a new one." }, { status: 500 });
+    if (!session.course_id) {
+      return NextResponse.json({ status: 'failed', message: "Legacy session. Ask lecturer to start a new one." }, { status: 500 });
     }
-    const { data: courseRow } = await supabase.from('courses').select('id').eq('id', session.course_id).maybeSingle();    if (!courseRow) {
+
+    const { data: courseRow } = await supabase.from('courses').select('id').eq('id', session.course_id).maybeSingle();
+    if (!courseRow) {
       return NextResponse.json({ status: 'failed', message: "Course configuration error. Contact your lecturer." }, { status: 500 });
     }
 
@@ -246,7 +216,7 @@ export async function POST(request: Request) {
       auditLogPayload.reason_detail = { registered_fingerprint: registeredDevice.hardware_fingerprint, current_fingerprint: hardwareFingerprint };
     }
 
-    // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP (SAME DEVICE, DIFFERENT STUDENT) ───
+    // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP ───
     const { data: existingSessionLogs } = await supabase
       .from('attendance_logs')
       .select('matric_number, device_info')
@@ -308,21 +278,12 @@ export async function POST(request: Request) {
 
     const spoofSuspected = detectLikelySpoof(validPings);
 
-    // DeviceMotion Cross-check
-    const motionSamples = Array.isArray(motionTelemetry) ? motionTelemetry : [];
-    const motionVariance = computeMotionVariance(motionSamples);
-    const motionMismatch = bestDistance <= allowedRadius && motionVariance < 0.01 && motionSamples.length >= 3;
-
     let finalStatus: 'verified' | 'flagged' = 'flagged';
     let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
     let reasonCode = null;
 
     if (bestDistance <= allowedRadius) {
-      if (motionMismatch) {
-        finalStatus = 'flagged';
-        reasonCode = 'MOTION_MISMATCH';
-        responseMessage = "Your phone does not seem to be moving as expected. Please hold your own phone while checking in.";
-      } else if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
+      if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
         finalStatus = 'flagged';
         reasonCode = 'LOCATION_SPOOF_SUSPECTED';
         responseMessage = "You're close enough, but your location signal was unstable. Your lecturer will review this.";
@@ -349,7 +310,6 @@ export async function POST(request: Request) {
       verificationMethod,
       spoofSuspected,
       spoofRisk,
-      motionVariance,
       isIOS,
     });
 

@@ -65,7 +65,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const prewarmWatchIdRef = useRef<number | null>(null);
   const hardwareFingerprintRef = useRef<string | null>(null);
   const deviceIdRef = useRef<string | null>(null);
-  const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -99,19 +98,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       };
     }).catch(() => setGpsStatus('prompt'));
     return () => { if (permissionStatus) permissionStatus.onchange = null; };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
-    const handleMotion = (event: DeviceMotionEvent) => {
-      const acc = event.accelerationIncludingGravity;
-      if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
-        motionBufferRef.current.push({ x: acc.x, y: acc.y, z: acc.z, t: Date.now() });
-        if (motionBufferRef.current.length > 50) motionBufferRef.current = motionBufferRef.current.slice(-50);
-      }
-    };
-    window.addEventListener('devicemotion', handleMotion);
-    return () => window.removeEventListener('devicemotion', handleMotion);
   }, []);
 
   useEffect(() => {
@@ -340,7 +326,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         method: 'POST', headers,
         body: JSON.stringify({
           sessionId, telemetry: gpsTelemetry, hardwareFingerprint: hardwareFingerprint || 'unknown',
-          verificationMethod, spoofRisk, motionTelemetry: motionBufferRef.current, userAgent: navigator.userAgent
+          verificationMethod, spoofRisk, userAgent: navigator.userAgent
         })
       });
       const result = await response.json();
@@ -373,7 +359,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   }, [sessionId, matricNumber]);
 
-  // HYBRID GPS LOGIC FOR STUDENTS
   const executeFinalCheckIn = async () => {
     setStatus('locating'); setErrorMessage(''); setCurrentFlagCode(null); setLiveAccuracy(null);
     checkPermissionFromGesture();
@@ -385,7 +370,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       spoofRisk = loc.spoofRisk;
     } catch (err) { logger.warn('GeoTrustIn check failed', err); }
 
-    // CATCH FINGERPRINT CANCELLATION
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -514,7 +498,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (err) { logger.warn('Rating submission failed', err); }
     finally {
-      // EXTEND THE STUDENT HUB LOCK TIMER SO IT DOESN'T LOCK IMMEDIATELY
       safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
       setIsSubmittingRating(false);
       router.push('/student-hub');
@@ -532,7 +515,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
-      {/* FIX: h-[550px] ensures the container never changes size, eliminating shaking */}
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative h-137.5 overflow-y-auto transition-all duration-300">
         
         <div className="w-full">
