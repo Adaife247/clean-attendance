@@ -306,7 +306,7 @@ export default function LecturerDashboard() {
       return;
     }
 
-    setSetupError("Getting GPS fix (this takes ~10s)...");
+    setSetupError("Getting stable GPS fix (up to 20s)...");
     const readings: { lat: number; lng: number; acc: number }[] = [];
     let watchId = 0;
     let finished = false;
@@ -319,28 +319,35 @@ export default function LecturerDashboard() {
       cleanup();
       
       if (readings.length > 0) {
-        const best = readings[readings.length - 1];
-        executeSessionCreation(best.lat, best.lng);
+        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
+        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
+        executeSessionCreation(lat, lng);
       } else {
         setSetupError("Could not get any GPS signal. Ensure location is turned on, step outside briefly, and try again.");
         setIsStarting(false);
       }
     };
 
-    const timeoutId = setTimeout(finish, 12000);
+    // Force it to finish after 20 seconds no matter what
+    const timeoutId = setTimeout(finish, 20000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         if (finished) return;
-        readings.push({ 
-          lat: position.coords.latitude, 
-          lng: position.coords.longitude, 
-          acc: position.coords.accuracy 
-        });
+        const acc = position.coords.accuracy;
         
-        setSetupError(`GPS detected (±${Math.round(position.coords.accuracy)}m). Preparing class...`);
+        setSetupError(`GPS stabilizing (±${Math.round(acc)}m)...`);
         
-        if (position.coords.accuracy < 30) {
+        if (acc <= 100) {
+          readings.push({ 
+            lat: position.coords.latitude, 
+            lng: position.coords.longitude, 
+            acc: acc
+          });
+        }
+
+        // If we get 3 highly accurate readings, stop waiting and start immediately
+        if (readings.length >= 3) {
           clearTimeout(timeoutId);
           finish();
         }
@@ -351,10 +358,10 @@ export default function LecturerDashboard() {
         finished = true;
         cleanup();
         if (error.code === 1) setSetupError("Permission Denied: tap 'Allow' for location and try again.");
-        else setSetupError("GPS timed out. Try again.");
+        else setSetupError("GPS signal lost. Ensure you are near a window or outdoors.");
         setIsStarting(false);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
   };
 

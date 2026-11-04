@@ -185,7 +185,7 @@ export default function RepDeskTab({
       'Your phone will become the GPS anchor for this class. Students will be able to check in for the next 60 minutes.',
       () => {
         setIsStartingRepSession(true);
-        setRepSessionError('');
+        setRepSessionError('Getting stable GPS fix (up to 20s)...');
 
         let watchId = 0;
         let finished = false;
@@ -224,27 +224,33 @@ export default function RepDeskTab({
           if (finished) return;
           finished = true;
           cleanup();
-          setRepSessionError('Could not lock onto GPS. Step outside or near a window and try again.');
+          setRepSessionError('Could not lock onto GPS under 100m accuracy. Step outside or near a window and try again.');
           setIsStartingRepSession(false);
-        }, 15000);
+        }, 20000);
 
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             if (finished) return;
-            finished = true;
-            clearTimeout(timeoutId);
-            cleanup();
-            createSession(position.coords.latitude, position.coords.longitude);
+            const acc = position.coords.accuracy;
+            setRepSessionError(`GPS stabilizing (±${Math.round(acc)}m)...`);
+            
+            // Only accept highly accurate readings so the geofence is solid
+            if (acc <= 100) {
+              finished = true;
+              clearTimeout(timeoutId);
+              cleanup();
+              createSession(position.coords.latitude, position.coords.longitude);
+            }
           },
           (error) => {
             clearTimeout(timeoutId);
             if (finished) return;
             finished = true;
             cleanup();
-            setRepSessionError(error.code === 1 ? 'Location permission denied.' : 'GPS signal lost. Try again.');
+            setRepSessionError(error.code === 1 ? 'Location permission denied. Allow location to start a session.' : 'GPS signal lost. Try again.');
             setIsStartingRepSession(false);
           },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 }
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
         );
       },
       { isDangerous: false, confirmLabel: 'Start Session' }
