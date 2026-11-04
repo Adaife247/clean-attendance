@@ -39,13 +39,12 @@ export async function GET(request: Request) {
       .in('lecturer_id', lecturerIds);
 
     const courseIds = allCourses?.map(c => c.id) || [];
-    const courseCodes = allCourses?.map(c => c.course_code) || [];
 
-    // 3. Get ALL sessions for these courses in one query
+    // 3. Get ALL sessions for these courses in one query using course_id
     const { data: allSessions } = await supabase
       .from('lecture_sessions')
-      .select('session_id, course_code')
-      .in('course_code', courseCodes);
+      .select('session_id, course_id')
+      .in('course_id', courseIds);
 
     const sessionIds = allSessions?.map(s => s.session_id) || [];
 
@@ -76,10 +75,10 @@ export async function GET(request: Request) {
     const lecturerStats = lecturers.map(lec => {
       // Filter courses for this lecturer
       const lecCourses = allCourses?.filter(c => c.lecturer_id === lec.id) || [];
-      const lecCourseCodes = lecCourses.map(c => c.course_code);
+      const lecCourseIds = lecCourses.map(c => c.id);
       
-      // Filter sessions for this lecturer's courses
-      const lecSessions = allSessions?.filter(s => lecCourseCodes.includes(s.course_code)) || [];
+      // Filter sessions for this lecturer's courses using course_id
+      const lecSessions = allSessions?.filter(s => lecCourseIds.includes(s.course_id)) || [];
       const lecSessionIds = lecSessions.map(s => s.session_id);
       const lecTotalSessions = lecSessions.length;
 
@@ -95,7 +94,6 @@ export async function GET(request: Request) {
       }
 
       // Calculate NUC compliance for this lecturer's courses
-      const lecCourseIds = lecCourses.map(c => c.id);
       const lecEnrollments = allEnrollments?.filter(e => lecCourseIds.includes(e.course_id)) || [];
       const uniqueMatrics = Array.from(new Set(lecEnrollments.map(e => e.matric_number)));
 

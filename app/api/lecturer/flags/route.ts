@@ -39,13 +39,12 @@ export async function GET(request: Request) {
     }
 
     const courseIds = courses.map(c => c.id);
-    const courseCodes = courses.map(c => c.course_code);
 
-    // 2. Get sessions for these courses
+    // 2. Get sessions for these courses using course_id
     const { data: sessions } = await supabase
       .from('lecture_sessions')
       .select('session_id')
-      .in('course_code', courseCodes);
+      .in('course_id', courseIds);
 
     const sessionIds = sessions?.map(s => s.session_id) || [];
 
