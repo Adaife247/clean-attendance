@@ -38,7 +38,7 @@ interface CourseRecord {
 }
 
 interface LogRow { session_id: string; status: string; }
-interface SessionRow { session_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
+interface SessionRow { session_id: string; course_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
 interface HistoryRow extends SessionRow { status: string; }
 
 const POLL_INTERVAL_MS = 15000;
@@ -59,8 +59,8 @@ export default function StudentPortal() {
   const [studentDept, setStudentDept] = useState('');
   const [studentLevel, setStudentLevel] = useState('');
   
-  const [repCourseCodes, setRepCourseCodes] = useState<string[]>([]);
-  const isClassRep = repCourseCodes.length > 0;
+  const [repCourseIds, setRepCourseIds] = useState<string[]>([]);
+  const isClassRep = repCourseIds.length > 0;
   
   const [unlockState, setUnlockState] = useState<UnlockState>('idle');
   const [unlockError, setUnlockError] = useState('');
@@ -110,7 +110,7 @@ export default function StudentPortal() {
 
     if (!enrollmentRows || enrollmentRows.length === 0) {
       setRecords([]);
-      setRepCourseCodes([]);
+      setRepCourseIds([]);
       setFeed([]);
       return;
     }
@@ -139,8 +139,7 @@ export default function StudentPortal() {
       .eq('matric_number', cleanMatric);
 
     const myRepCourseIds = repRows?.map(r => r.course_id) || [];
-    const myRepCourseCodes = courseRows?.filter(c => myRepCourseIds.includes(c.id)).map(c => c.course_code) || [];
-    setRepCourseCodes(myRepCourseCodes);
+    setRepCourseIds(myRepCourseIds);
 
     const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
@@ -196,11 +195,13 @@ export default function StudentPortal() {
     });
     setHistory(historyData);
 
-    const courseStats = new Map<string, { id: string; total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
+    // Group by UNIQUE course_id
+    const courseStats = new Map<string, { id: string; course_code: string; total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
     
     courseRows?.forEach(c => {
-      courseStats.set(c.course_code, { 
+      courseStats.set(c.id, { 
         id: c.id,
+        course_code: c.course_code,
         total_held: 0, 
         total_planned: c.total_planned_classes || 15, 
         attended: 0, 
@@ -211,18 +212,17 @@ export default function StudentPortal() {
     });
 
     (sessionRows as SessionRow[] || []).forEach(session => {
-      const course = session.course_code;
-      const stats = courseStats.get(course);
+      const stats = courseStats.get(session.course_id);
       if (stats) {
         stats.total_held += 1;
         stats.sessions.push(session);
         if (logStatusMap.get(session.session_id) === 'verified') stats.attended += 1;
-        courseStats.set(course, stats);
+        courseStats.set(session.course_id, stats);
       }
     });
 
     const finalRecords: CourseRecord[] = [];
-    courseStats.forEach((stats, course) => {
+    courseStats.forEach((stats) => {
       const total_held = stats.total_held;
       const attended = stats.attended;
       const denominator = stats.is_finalized 
@@ -247,11 +247,11 @@ export default function StudentPortal() {
       else if (streak >= 1) tier = 'JJC';
 
       const ca_score = stats.is_finalized ? ((attended / denominator) * stats.max_score).toFixed(1) : null;
-      const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
+      const activeSessionId = liveSession?.course_id === stats.id ? liveSession.session_id : null;
 
       finalRecords.push({
         id: stats.id,
-        course_code: course, 
+        course_code: stats.course_code, 
         total_held, 
         total_planned: denominator,
         attended_classes: attended,
@@ -443,7 +443,7 @@ export default function StudentPortal() {
     setRecords(null);
     setHistory(null);
     setActiveLiveSession(null);
-    setRepCourseCodes([]);
+    setRepCourseIds([]);
 
     const cleanMatric = matricNumber.toUpperCase().trim();
     safeStorage.setString(STORAGE_KEYS.studentMatric, cleanMatric);
@@ -624,7 +624,7 @@ export default function StudentPortal() {
   };
 
   const visibleTabs = TABS.filter(t => t.id !== 'rep' || isClassRep);
-  const repRecords = records?.filter(r => repCourseCodes.includes(r.course_code)) || [];
+  const repRecords = records?.filter(r => repCourseIds.includes(r.id)) || [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center p-4 sm:p-6 font-sans relative overflow-hidden transition-colors duration-300">

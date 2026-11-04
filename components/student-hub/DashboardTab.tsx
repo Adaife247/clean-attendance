@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 
 interface CourseRecord {
+  id: string;
   course_code: string;
   total_held: number;
   total_planned: number;
@@ -196,7 +197,7 @@ export default function DashboardTab({
         records.map((record) => {
           const colors = getShieldColor(record.percentage);
           return (
-            <div key={record.course_code} className={`relative overflow-hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border ${colors.border} shadow-sm transition-colors`}>
+            <div key={record.id} className={`relative overflow-hidden bg-white dark:bg-gray-900 p-5 rounded-2xl border ${colors.border} shadow-sm transition-colors`}>
               {record.is_finalized && (
                 <div className="absolute top-0 right-0 bg-gray-900 dark:bg-gray-700 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1">
                   <CheckCircle size={10} /> FINALIZED
