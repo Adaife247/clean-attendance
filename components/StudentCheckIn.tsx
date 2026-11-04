@@ -16,31 +16,13 @@ import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
 import { GeoTrustInWeb } from '@geotrustin/web';
 
-interface Telemetry { 
-  lat: number; 
-  lng: number; 
-  alt: number | null; 
-  acc: number; 
-  timestamp: number;
-  spd?: number | null;
-  hdg?: number | null;
-}
+// --- INTERFACES ---
+interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; spd?: number | null; hdg?: number | null; }
 interface Props { sessionId: string; }
+interface OfflineQueueItem { session: string; matric: string; telemetry: Telemetry[]; hardwareFingerprint: string | null; verificationMethod: string; timestamp: number; }
+type Status = 'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'disqualified' | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
-interface OfflineQueueItem {
-  session: string;
-  matric: string;
-  telemetry: Telemetry[];
-  hardwareFingerprint: string | null;
-  verificationMethod: string;
-  timestamp: number;
-}
-
-type Status =
-  | 'idle' | 'checking' | 'needs_setup' | 'ready'
-  | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'disqualified'
-  | 'offline-queued' | 'syncing' | 'rating' | 'rated';
-
+// --- CONSTANTS ---
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
@@ -49,6 +31,7 @@ const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
+// --- HELPERS ---
 function getMeme(minutesLate: number): { title: string; sub: string; iconType: 'zap' | 'check' | 'clock' | 'alert' | 'flame' } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", iconType: 'zap' };
   if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', iconType: 'check' };
@@ -67,126 +50,85 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // --- STATE ---
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
   const [currentFlagCode, setCurrentFlagCode] = useState<FlagCode | null>(null);
-
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
+  
+  // Rating state
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
+  
+  // GPS & Environment state
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
-  
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('prompt');
-  
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
   const [inAppBrowser, setInAppBrowser] = useState(false);
 
+  // --- REFS ---
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const hardwareFingerprintRef = useRef<string | null>(null);
   const deviceIdRef = useRef<string | null>(null);
-  
   const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
+  // --- EFFECTS ---
+  // 1. Initialize matric number and device type
   useEffect(() => {
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
       const savedMatric = safeStorage.getString(STORAGE_KEYS.studentMatric);
-
-      if (urlMatric) {
-        setMatricNumber(urlMatric.toUpperCase());
-      } else if (savedMatric) {
-        setMatricNumber(savedMatric.toUpperCase());
-      }
+      if (urlMatric) setMatricNumber(urlMatric.toUpperCase());
+      else if (savedMatric) setMatricNumber(savedMatric.toUpperCase());
 
       const ua = navigator.userAgent;
-      if (/iPad|iPhone|iPod/.test(ua)) {
-        setDeviceType('ios');
-      } else if (/android/i.test(ua)) {
-        setDeviceType('android');
-      } else {
-        setDeviceType('other');
-      }
+      if (/iPad|iPhone|iPod/.test(ua)) setDeviceType('ios');
+      else if (/android/i.test(ua)) setDeviceType('android');
+      else setDeviceType('other');
 
-      if (isInAppBrowser()) {
-        setInAppBrowser(true);
-      }
+      if (isInAppBrowser()) setInAppBrowser(true);
     }, 0);
-
     return () => clearTimeout(id);
   }, [searchParams]);
 
+  // 2. Geolocation Permissions Listener
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.permissions) return;
-
     let permissionStatus: PermissionStatus | null = null;
-
     navigator.permissions.query({ name: 'geolocation' }).then((result) => {
       permissionStatus = result;
       if (result.state === 'granted') setGpsStatus('granted');
       if (result.state === 'denied') setGpsStatus('denied');
       if (result.state === 'prompt') setGpsStatus('prompt');
-
       result.onchange = () => {
         if (result.state === 'granted') setGpsStatus('granted');
         if (result.state === 'denied') setGpsStatus('denied');
         if (result.state === 'prompt') setGpsStatus('prompt');
       };
-    }).catch(() => {
-      setGpsStatus('prompt');
-    });
-
-    return () => {
-      if (permissionStatus) permissionStatus.onchange = null;
-    };
+    }).catch(() => setGpsStatus('prompt'));
+    return () => { if (permissionStatus) permissionStatus.onchange = null; };
   }, []);
 
+  // 3. Motion Sensor Listener (Anti-Spoofing)
   useEffect(() => {
     if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
-
     const handleMotion = (event: DeviceMotionEvent) => {
       const acc = event.accelerationIncludingGravity;
       if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
-        motionBufferRef.current.push({
-          x: acc.x,
-          y: acc.y,
-          z: acc.z,
-          t: Date.now()
-        });
-        if (motionBufferRef.current.length > 50) {
-          motionBufferRef.current = motionBufferRef.current.slice(-50);
-        }
+        motionBufferRef.current.push({ x: acc.x, y: acc.y, z: acc.z, t: Date.now() });
+        if (motionBufferRef.current.length > 50) motionBufferRef.current = motionBufferRef.current.slice(-50);
       }
     };
-
     window.addEventListener('devicemotion', handleMotion);
     return () => window.removeEventListener('devicemotion', handleMotion);
   }, []);
 
-  const triggerSuccessVibration = () => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  };
-
-  const checkPermissionFromGesture = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setGpsStatus('denied');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      () => setGpsStatus('granted'),
-      (error) => {
-        if (error.code === 1) setGpsStatus('denied');
-        else setGpsStatus('granted');
-      },
-      { timeout: 8000, maximumAge: 0, enableHighAccuracy: true }
-    );
-  }, []);
-
+  // 4. GPS Pre-warming (Collects pings in background before they click "Submit")
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     if (gpsStatus !== 'granted') return;
@@ -194,42 +136,20 @@ export default function StudentCheckIn({ sessionId }: Props) {
     const id = navigator.geolocation.watchPosition(
       (position) => {
         prewarmBufferRef.current.push({
-          lat: position.coords.latitude, 
-          lng: position.coords.longitude,
-          alt: position.coords.altitude, 
-          acc: position.coords.accuracy, 
-          timestamp: position.timestamp,
-          spd: position.coords.speed,
-          hdg: position.coords.heading
+          lat: position.coords.latitude, lng: position.coords.longitude,
+          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp,
+          spd: position.coords.speed, hdg: position.coords.heading
         });
-        if (prewarmBufferRef.current.length > 30) {
-          prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
-        }
+        if (prewarmBufferRef.current.length > 30) prewarmBufferRef.current = prewarmBufferRef.current.slice(-30);
       },
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
     );
     prewarmWatchIdRef.current = id;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        prewarmBufferRef.current.push({
-          lat: position.coords.latitude, 
-          lng: position.coords.longitude,
-          alt: position.coords.altitude, 
-          acc: position.coords.accuracy, 
-          timestamp: position.timestamp,
-          spd: position.coords.speed,
-          hdg: position.coords.heading
-        });
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-    );
-
     return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, [gpsStatus]);
 
+  // 5. Hardware Fingerprint Generation
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -239,13 +159,12 @@ export default function StudentCheckIn({ sessionId }: Props) {
           hardwareFingerprintRef.current = fp.hardwareFingerprint;
           deviceIdRef.current = fp.deviceId;
         }
-      } catch (err) {
-        logger.warn('Fingerprint generation failed', err);
-      }
+      } catch (err) { logger.warn('Fingerprint generation failed', err); }
     }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
+  // 6. Fetch Session Metadata (for the meme)
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -256,13 +175,25 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data?.createdAt) setSessionCreatedAt(data.createdAt);
-      } catch (err) {
-        logger.warn('Failed to fetch session metadata', err);
-      }
+      } catch (err) { logger.warn('Failed to fetch session metadata', err); }
     };
     const id = setTimeout(() => { fetchMeta(); }, 0);
     return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
+
+  // --- FUNCTIONS ---
+  const triggerSuccessVibration = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  };
+
+  const checkPermissionFromGesture = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) { setGpsStatus('denied'); return; }
+    navigator.geolocation.getCurrentPosition(
+      () => setGpsStatus('granted'),
+      (error) => { if (error.code === 1) setGpsStatus('denied'); else setGpsStatus('granted'); },
+      { timeout: 8000, maximumAge: 0, enableHighAccuracy: true }
+    );
+  }, []);
 
   const syncOfflineQueue = useCallback(async () => {
     const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
@@ -280,17 +211,14 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const res = await fetch('/api/verify-attendance', {
           method: 'POST', headers,
           body: JSON.stringify({
-            sessionId: item.session,
-            telemetry: item.telemetry,
-            hardwareFingerprint: item.hardwareFingerprint,
-            verificationMethod: item.verificationMethod,
+            sessionId: item.session, telemetry: item.telemetry,
+            hardwareFingerprint: item.hardwareFingerprint, verificationMethod: item.verificationMethod,
             userAgent: navigator.userAgent
           })
         });
         
-        if (res.ok || res.status === 409) {
-          successCount++;
-        } else if (res.status === 401) {
+        if (res.ok || res.status === 409) successCount++;
+        else if (res.status === 401) {
           setErrorMessage('Your session expired. Please refresh the page and try again.');
           safeStorage.remove(STORAGE_KEYS.offlineQueue);
           setStatus('idle');
@@ -320,9 +248,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   const checkStudentStatus = async () => {
     if (matricNumber.length < 5) return;
-    setStatus('checking');
-    setErrorMessage('');
-    setCurrentFlagCode(null);
+    setStatus('checking'); setErrorMessage(''); setCurrentFlagCode(null);
     try {
       const res = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -331,19 +257,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (res.status === 404) {
         const data = await res.json().catch(() => ({}));
         if (data?.error === 'NOT_ENROLLED') {
-          setErrorMessage(data.message || "You are not on any class roster yet.");
-          setStatus('failed');
-          return;
+          setErrorMessage(data.message || "You are not on any class roster yet."); setStatus('failed'); return;
         }
         setStatus('needs_setup');
-      } else if (res.ok) {
-        setStatus('ready');
-      } else {
-        throw new Error("Failed to verify ledger.");
-      }
+      } else if (res.ok) setStatus('ready');
+      else throw new Error("Failed to verify ledger.");
     } catch {
-      setErrorMessage("Network error. Could not connect to the database.");
-      setStatus('failed');
+      setErrorMessage("Network error. Could not connect to the database."); setStatus('failed');
     }
   };
 
@@ -351,9 +271,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     try {
       const existingAnchor = safeStorage.getString(STORAGE_KEYS.deviceAnchor);
       if (existingAnchor && existingAnchor !== matricNumber) {
-        setErrorMessage(`This device is already bound to ${existingAnchor}. Ask your lecturer to reset your device if this is a mistake.`);
-        setStatus('failed');
-        return;
+        setErrorMessage(`This device is already bound to ${existingAnchor}.`); setStatus('failed'); return;
       }
       setStatus('locating');
       const genRes = await fetch('/api/webauthn/register/generate', {
@@ -365,28 +283,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const authOptions: any = {
-          challenge: options.challenge,
-          rpId: options.rp.id,
-          allowCredentials: [], 
-          userVerification: 'required',
-        };
+        const authOptions: any = { challenge: options.challenge, rpId: options.rp.id, allowCredentials: [], userVerification: 'required' };
         await startAuthentication(authOptions);
-        throw new Error("This phone is already linked to an account. Ask your lecturer to reset it if this is a mistake.");
+        throw new Error("This phone is already linked to an account.");
       } catch (err) {
-        if (err instanceof Error && err.name !== 'NotAllowedError') {
-          throw err;
-        }
+        if (err instanceof Error && err.name !== 'NotAllowedError') throw err;
       }
 
       const hardenedOptions = {
         ...options,
-        authenticatorSelection: {
-          ...options.authenticatorSelection,
-          authenticatorAttachment: 'platform' as const,
-          userVerification: 'required' as const,
-          residentKey: 'required' as const,
-        },
+        authenticatorSelection: { ...options.authenticatorSelection, authenticatorAttachment: 'platform' as const, userVerification: 'required' as const, residentKey: 'required' as const },
         excludeCredentials: [],
       };
 
@@ -395,12 +301,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
         attResp = await startRegistration(hardenedOptions);
       } catch (err) {
         const name = err instanceof Error ? err.name : '';
-        if (name === 'NotAllowedError') {
-          throw new Error("Passkey setup was cancelled or timed out. Tap the button again and choose 'Allow' when prompted.");
-        }
-        if (name === 'NotSupportedError') {
-          throw new Error("This browser doesn't support passkeys. Open the link in Chrome (Android) or Safari (iPhone).");
-        }
+        if (name === 'NotAllowedError') throw new Error("Passkey setup was cancelled or timed out.");
+        if (name === 'NotSupportedError') throw new Error("This browser doesn't support passkeys.");
         throw err;
       }
 
@@ -410,33 +312,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
         const start = Date.now();
         while ((!fp || !dId) && Date.now() - start < 3000) {
           await new Promise(r => setTimeout(r, 100));
-          fp = hardwareFingerprintRef.current;
-          dId = deviceIdRef.current;
+          fp = hardwareFingerprintRef.current; dId = deviceIdRef.current;
         }
       }
 
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          matricNumber, 
-          authResponse: attResp,
-          hardwareFingerprint: fp || 'unknown',
-          deviceFingerprint: fp || 'unknown',
-          deviceId: dId || 'unknown'
-        })
+        body: JSON.stringify({ matricNumber, authResponse: attResp, hardwareFingerprint: fp || 'unknown', deviceFingerprint: fp || 'unknown', deviceId: dId || 'unknown' })
       });
       const verifyResult = await verifyRes.json();
 
       if (verifyResult.verified) {
         safeStorage.setString(STORAGE_KEYS.deviceAnchor, matricNumber);
         setStatus('ready');
-      } else {
-        throw new Error(verifyResult.error || "Hardware binding failed. Try again.");
-      }
+      } else throw new Error(verifyResult.error || "Hardware binding failed.");
     } catch (error) {
-      const msg = error instanceof Error ? error.message : "Failed to register your biometric device.";
-      setErrorMessage(msg);
-      setStatus('failed');
+      const msg = error instanceof Error ? error.message : "Failed to register device.";
+      setErrorMessage(msg); setStatus('failed');
     }
   };  
 
@@ -453,20 +345,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
       const token = safeStorage.getSessionString(STORAGE_KEYS.studentJwt);
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
+      if (token) headers.Authorization = `Bearer ${token}`;
 
       const response = await fetch('/api/verify-attendance', {
         method: 'POST', headers,
         body: JSON.stringify({
-          sessionId,
-          telemetry: gpsTelemetry,
-          hardwareFingerprint: hardwareFingerprint || 'unknown',
-          verificationMethod,
-          spoofRisk,
-          motionTelemetry: motionBufferRef.current,
-          userAgent: navigator.userAgent
+          sessionId, telemetry: gpsTelemetry, hardwareFingerprint: hardwareFingerprint || 'unknown',
+          verificationMethod, spoofRisk, motionTelemetry: motionBufferRef.current, userAgent: navigator.userAgent
         })
       });
       const result = await response.json();
@@ -476,19 +361,13 @@ export default function StudentCheckIn({ sessionId }: Props) {
         setVerifiedAt(Date.now());
         setStatus('success');
         safeStorage.setString(STORAGE_KEYS.studentMatric, matricNumber);
-
         const currentCount = parseInt(localStorage.getItem(STORAGE_KEYS.checkinCount) || '0', 10);
         localStorage.setItem(STORAGE_KEYS.checkinCount, String(currentCount + 1));
       } else {
         setErrorMessage(result.message || "Verification failed.");
-        if (result.code) {
-          setCurrentFlagCode(result.code as FlagCode);
-        }
-        if (result.status === 'disqualified' || result.status === 'blocked') {
-          setStatus('disqualified');
-        } else {
-          setStatus('failed');
-        }
+        if (result.code) setCurrentFlagCode(result.code as FlagCode);
+        if (result.status === 'disqualified' || result.status === 'blocked') setStatus('disqualified');
+        else setStatus('failed');
       }
     } catch (error) {
       const isNetwork = !navigator.onLine || (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')));
@@ -500,29 +379,21 @@ export default function StudentCheckIn({ sessionId }: Props) {
         }
         setStatus('offline-queued');
       } else {
-        setErrorMessage("Connection lost. Check your internet and try again.");
-        setStatus('failed');
+        setErrorMessage("Connection lost. Check your internet and try again."); setStatus('failed');
       }
     }
   }, [sessionId, matricNumber]);
 
   const executeFinalCheckIn = async () => {
-    setStatus('locating');
-    setErrorMessage('');
-    setCurrentFlagCode(null);
-    setLiveAccuracy(null);
-
+    setStatus('locating'); setErrorMessage(''); setCurrentFlagCode(null); setLiveAccuracy(null);
     checkPermissionFromGesture();
 
     let verificationMethod = 'skipped';
     let spoofRisk = 0;
-
     try {
       const loc = await GeoTrustInWeb.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
       spoofRisk = loc.spoofRisk;
-    } catch (err) {
-      logger.warn('GeoTrustIn check failed', err);
-    }
+    } catch (err) { logger.warn('GeoTrustIn check failed', err); }
 
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
@@ -530,9 +401,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
         body: JSON.stringify({ matricNumber })
       });
       if (genRes.status === 404) {
-        setErrorMessage("You need to set up your device first. Refresh the page to start onboarding.");
-        setStatus('failed');
-        return;
+        setErrorMessage("You need to set up your device first."); setStatus('failed'); return;
       } else {
         const options = await genRes.json();
         if (options.error) throw new Error(options.message || options.error);
@@ -546,21 +415,16 @@ export default function StudentCheckIn({ sessionId }: Props) {
         if (verifyResult.verified && verifyResult.token) {
           safeStorage.setSessionString(STORAGE_KEYS.studentJwt, verifyResult.token);
           verificationMethod = 'biometric';
-        } else {
-          throw new Error("Biometric verification failed.");
-        }
+        } else throw new Error("Biometric verification failed.");
       }
     } catch (error) {
       console.error("Biometric verification failed:", error);
-      setErrorMessage("Biometric verification failed or was cancelled. You must scan your fingerprint/FaceID to check in.");
-      setStatus('failed');
-      return;
+      setErrorMessage("Biometric verification failed or was cancelled.");
+      setStatus('failed'); return;
     }
 
     if (!navigator.geolocation) {
-      setErrorMessage("This browser doesn't support location. Open the link in Chrome or Safari.");
-      setStatus('failed');
-      return;
+      setErrorMessage("This browser doesn't support location."); setStatus('failed'); return;
     }
 
     const pings: Telemetry[] = [...prewarmBufferRef.current];
@@ -575,10 +439,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
       if (didFinish) return;
       didFinish = true;
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) {
-        sendPayloadToVercel(finalPings, verificationMethod, spoofRisk);
-      } else {
-        setErrorMessage("Couldn't get any location data. Make sure Location is ON and you're near a window, then try again.");
+      if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) sendPayloadToVercel(finalPings, verificationMethod, spoofRisk);
+      else {
+        setErrorMessage("Couldn't get location data. Make sure Location is ON and you're near a window.");
         setStatus('failed');
       }
     };
@@ -594,9 +457,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }, GPS_OVERALL_TIMEOUT_MS);
 
     const firstPingWaitId = setTimeout(() => {
-      if (pings.length === 0 && !didFinish) {
-        finishWith(pings);
-      }
+      if (pings.length === 0 && !didFinish) finishWith(pings);
     }, GPS_MIN_WAIT_FOR_FIRST_PING_MS);
 
     let lastSendTs = Date.now();
@@ -605,7 +466,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
       (position) => {
         const acc = position.coords.accuracy;
         if (acc > 0 && acc < bestAcc) bestAcc = acc;
-        if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
+        if (Number.isFinite(bestAcc) && Math.round(bestAcc) !== liveAccuracy) setLiveAccuracy(Math.round(bestAcc));
+        
         pings.push({
           lat: position.coords.latitude, lng: position.coords.longitude,
           alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp,
@@ -614,48 +476,34 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
         const now = Date.now();
         if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
-          lastSendTs = now;
-          sentAny = true;
+          lastSendTs = now; sentAny = true;
           sendPayloadToVercel([...pings], verificationMethod, spoofRisk);
         }
       },
       (error) => {
-        clearTimeout(overallTimeoutId);
-        clearTimeout(firstPingWaitId);
+        clearTimeout(overallTimeoutId); clearTimeout(firstPingWaitId);
         if (watchId) navigator.geolocation.clearWatch(watchId);
         if (didFinish || sentAny) return;
         didFinish = true;
         if (error.code === 1) setStatus('denied');
-        else {
-          setErrorMessage(`GPS error (code ${error.code}). Turn Location off and back on, then try again.`);
-          setStatus('failed');
-        }
+        else { setErrorMessage(`GPS error. Turn Location off and back on.`); setStatus('failed'); }
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
     );
   };
 
   const requestAppeal = async () => {
-    setIsAppealing(true);
-    setErrorMessage('');
+    setIsAppealing(true); setErrorMessage('');
     try {
       const headers = getStudentHeaders();
-      const response = await fetch('/api/request-override', {
-        method: 'POST', headers,
-        body: JSON.stringify({ sessionId })
-      });
+      const response = await fetch('/api/request-override', { method: 'POST', headers, body: JSON.stringify({ sessionId }) });
       if (response.ok) {
-        setErrorMessage("Appeal sent. Show this screen to your lecturer for visual confirmation.");
-        setStatus('idle');
+        setErrorMessage("Appeal sent. Show this screen to your lecturer."); setStatus('idle');
       } else {
         const data = await response.json().catch(() => ({}));
-        setErrorMessage(data.message || data.error || "Failed to send appeal. Check your connection and try again.");
+        setErrorMessage(data.message || data.error || "Failed to send appeal.");
       }
-    } catch {
-      setErrorMessage("Network error. Check your connection and try again.");
-    } finally {
-      setIsAppealing(false);
-    }
+    } catch { setErrorMessage("Network error."); } finally { setIsAppealing(false); }
   };
 
   const toggleTag = (tag: string) => {
@@ -672,10 +520,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
           body: JSON.stringify({ sessionId, rating: ratingStars, tags: ratingTags })
         });
       }
-    } catch (err) { 
-      logger.warn('Rating submission failed', err);
-    }
+    } catch (err) { logger.warn('Rating submission failed', err); }
     finally {
+      // EXTEND THE STUDENT HUB LOCK TIMER SO IT DOESN'T LOCK IMMEDIATELY
+      safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
       setIsSubmittingRating(false);
       router.push('/student-hub');
     }
@@ -716,7 +564,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
                 <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 mb-3">
                   Your browser is blocking location access. Follow these steps:
                 </p>
-
                 <div className="text-xs text-red-800 dark:text-red-200 space-y-1.5 bg-white/60 dark:bg-gray-900/50 p-3 rounded-lg border border-red-100 dark:border-red-800/50">
                   {deviceType === 'ios' ? (
                     <>
@@ -743,12 +590,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
                     </>
                   )}
                 </div>
-
                 <button
-                  onClick={() => {
-                    setGpsStatus('prompt');
-                    checkPermissionFromGesture();
-                  }}
+                  onClick={() => { setGpsStatus('prompt'); checkPermissionFromGesture(); }}
                   className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
                 >
                   I turned it on — check again
@@ -782,7 +625,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Hardware Setup</h3>
             <p className="text-gray-600 dark:text-gray-400 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900 dark:text-white">{matricNumber}</span> to prevent proxy attendance.</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Don&apos;t have a screen lock? Your phone will ask you to set a PIN or pattern first. This is a one-time security step.</p>
-            
             <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
             <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Cancel</button>
           </div>
@@ -822,7 +664,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
               <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
                 Rate this Lecture
               </button>
-              <button onClick={() => router.push('/student-hub')} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+              <button onClick={() => {
+                safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
+                router.push('/student-hub');
+              }} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
                 Return to Student Hub
               </button>
             </div>
@@ -890,24 +735,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
           </div>
         )}
 
-                {status === 'failed' && !currentFlagCode && (
+        {status === 'failed' && !currentFlagCode && (
           <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
               <AlertTriangle size={32} />
             </div>
-            
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Check-In Failed
-            </h3>
-            
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Check-In Failed</h3>
             <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
-              {errorMessage || "An unexpected error occurred. Please try again."}
+              {errorMessage || "An unexpected error occurred."}
             </p>
-
             <div className="mt-6 space-y-3">
-              <button onClick={() => { setStatus('idle'); setErrorMessage(''); setMatricNumber(''); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
-                Start Over
-              </button>
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); setMatricNumber(''); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Start Over</button>
             </div>
           </div>
         )}
@@ -917,37 +755,23 @@ export default function StudentCheckIn({ sessionId }: Props) {
             <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
               <AlertTriangle size={32} />
             </div>
-            
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
               {(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
             </h3>
-            
             <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
-              {FLAG_REASONS[currentFlagCode]?.messageStudent || "An unknown error occurred. Please try again."}
+              {FLAG_REASONS[currentFlagCode]?.messageStudent || "An unknown error occurred."}
             </p>
-
             <div className="mt-6 space-y-3">
               {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'retry' && (
-                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md">
-                  <RefreshCw size={18} /> Try Again
-                </button>
+                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
               )}
-
-                            {/* Raise Hand is ONLY for manual/technical edge cases, NOT GPS/Motion failures */}
               {(FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' || FLAG_REASONS[currentFlagCode]?.suggestedAction === 'ask_rep') && (
                 <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
                   {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
                 </button>
               )}
-
-              {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' && (
-                <p className="text-sm font-bold text-gray-500 mt-2">Show this screen to your lecturer.</p>
-              )}
-
               {FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
-                <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
-                  Start Over
-                </button>
+                <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">Start Over</button>
               )}
             </div>
           </div>
