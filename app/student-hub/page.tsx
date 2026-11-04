@@ -101,13 +101,6 @@ export default function StudentPortal() {
     if (profile?.department) setStudentDept(profile.department);
     if (profile?.level) setStudentLevel(profile.level);
 
-    const { data: feedData } = await supabase
-      .from('campus_updates')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    if (feedData) setFeed(feedData);
-
     const { data: enrollmentRows, error: enrollError } = await supabase
       .from('enrollments')
       .select('course_id')
@@ -118,10 +111,20 @@ export default function StudentPortal() {
     if (!enrollmentRows || enrollmentRows.length === 0) {
       setRecords([]);
       setRepCourseCodes([]);
+      setFeed([]);
       return;
     }
 
     const courseIds = enrollmentRows.map(e => e.course_id);
+
+    // Fetch feed filtered by course_id
+    const { data: feedData } = await supabase
+      .from('campus_updates')
+      .select('*')
+      .in('course_id', courseIds)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (feedData) setFeed(feedData);
 
     const { data: courseRows, error: courseError } = await supabase
       .from('courses')

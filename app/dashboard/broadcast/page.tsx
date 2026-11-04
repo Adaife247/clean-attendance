@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
 import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
 import { ToastContainer, useToast } from '@/components/Toast';
@@ -20,6 +20,7 @@ export default function BroadcastPage() {
   
   const [feedTitle, setFeedTitle] = useState('');
   const [feedContent, setFeedContent] = useState('');
+  const [feedCourseId, setFeedCourseId] = useState('');
   const [feedCourseCode, setFeedCourseCode] = useState('');
   const [feedLink, setFeedLink] = useState('');
   const [feedExpiry, setFeedExpiry] = useState('');
@@ -28,10 +29,9 @@ export default function BroadcastPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<BroadcastPost[]>([]);
 
-  // NEW: Use the custom Toast system
   const { toasts, addToast, removeToast } = useToast();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
@@ -47,18 +47,20 @@ export default function BroadcastPage() {
       .select('id, course_code')
       .eq('lecturer_id', session.user.id)
       .order('created_at', { ascending: false });
-    if (courseData) {
+      
+    if (courseData && courseData.length > 0) {
       setCourses(courseData);
-      if (courseData.length > 0) setFeedCourseCode(courseData[0].course_code);
+      setFeedCourseId(prev => prev || courseData[0].id);
+      setFeedCourseCode(prev => prev || courseData[0].course_code);
     }
 
-    if (profileData) {
-      const courseCodes = courseData?.map(c => c.course_code) || [];
-      if (courseCodes.length > 0) {
+    if (profileData && courseData) {
+      const courseIds = courseData.map(c => c.id);
+      if (courseIds.length > 0) {
         const { data: posts } = await supabase
           .from('campus_updates')
           .select('id, title, content, course_code, created_at')
-          .in('course_code', courseCodes)
+          .in('course_id', courseIds)
           .order('created_at', { ascending: false })
           .limit(5);
         if (posts) setHistory(posts);
@@ -66,15 +68,15 @@ export default function BroadcastPage() {
     }
     
     setIsLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => { fetchData(); }, 0);
     return () => clearTimeout(id);
-  }, []);
+  }, [fetchData]);
 
   const handlePostFeed = async () => {
-    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseCode) {
+    if (!feedTitle.trim() || !feedContent.trim() || !feedCourseId) {
       addToast('Missing Fields', 'Please fill all fields and select a course.', 'error');
       return;
     }
@@ -87,7 +89,7 @@ export default function BroadcastPage() {
           title: feedTitle,
           content: feedContent,
           author: profile?.full_name || 'Lecturer',
-          course_code: feedCourseCode,
+          courseId: feedCourseId,
           link_url: feedLink.trim() || null,
           expires_at: feedExpiry || null
         })
@@ -124,12 +126,15 @@ export default function BroadcastPage() {
           <div>
             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Target Class</label>
             <select 
-              value={feedCourseCode} 
-              onChange={e => setFeedCourseCode(e.target.value)} 
+              value={feedCourseId} 
+              onChange={e => {
+                setFeedCourseId(e.target.value);
+                setFeedCourseCode(courses.find(c => c.id === e.target.value)?.course_code || '');
+              }} 
               className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl outline-none font-bold text-gray-900 dark:text-white focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
             >
               <option value="">-- Select a Course --</option>
-              {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+              {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
             </select>
           </div>
 
@@ -182,7 +187,7 @@ export default function BroadcastPage() {
 
           <button 
             onClick={handlePostFeed} 
-            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseCode} 
+            disabled={isPosting || !feedTitle.trim() || !feedContent.trim() || !feedCourseId} 
             className="w-full bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 disabled:opacity-50 transition-all flex justify-center items-center gap-2 mt-4"
           >
             {isPosting ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Publish Broadcast
