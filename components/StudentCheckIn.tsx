@@ -287,8 +287,17 @@ export default function StudentCheckIn({ sessionId }: Props) {
             userAgent: navigator.userAgent
           })
         });
-        if (res.ok || res.status === 409) successCount++;
-        else remainingQueue.push(item);
+        
+        if (res.ok || res.status === 409) {
+          successCount++;
+        } else if (res.status === 401) {
+          setErrorMessage('Your session expired. Please refresh the page and try again.');
+          safeStorage.remove(STORAGE_KEYS.offlineQueue);
+          setStatus('idle');
+          return;
+        } else {
+          remainingQueue.push(item);
+        }
       } catch (err) { 
         logger.warn('Offline sync failed for item', err);
         remainingQueue.push(item); 

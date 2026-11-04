@@ -4,7 +4,6 @@ import * as XLSX from 'xlsx';
 import { Upload, Clock, FileText, Zap, PlayCircle, MapPin, Loader2 } from 'lucide-react';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { getStudentHeaders } from '@/utils/api-client';
-import { supabase } from '@/utils/supabase';
 
 const MATRIC_REGEX = /[\/\-]/;
 
@@ -143,22 +142,23 @@ export default function RepDeskTab({
           return;
         }
 
-        const rows = uniqueMatrics.map((matric) => ({
-          course_id: repCourseId,
-          matric_number: matric,
-        }));
+        const headers = getStudentHeaders();
+        const res = await fetch('/api/rep/upload-roster', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ courseId: repCourseId, matrics: uniqueMatrics })
+        });
 
-        const { error } = await supabase
-          .from('enrollments')
-          .upsert(rows, { onConflict: 'course_id,matric_number', ignoreDuplicates: true });
+        const responseData = await res.json();
 
-        if (!error) {
+        if (res.ok) {
           addToast('Roster synced', `${uniqueMatrics.length} students synced.`, 'success');
           onRefresh();
         } else {
-          addToast('Upload failed', error.message, 'error');
+          addToast('Upload failed', responseData.error || 'Failed to sync roster.', 'error');
         }
-      } catch {
+      } catch (err) {
+        console.error(err);
         addToast('File read error', 'Failed to read file. Make sure it is a valid CSV, Excel, Word, or Text-based PDF.', 'error');
       } finally {
         setIsUploadingList(false);
@@ -187,7 +187,6 @@ export default function RepDeskTab({
         setIsStartingRepSession(true);
         setRepSessionError('');
 
-        // More forgiving GPS logic (takes up to 15s, accepts whatever it gets)
         let watchId = 0;
         let finished = false;
 
