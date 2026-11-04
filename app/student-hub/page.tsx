@@ -41,6 +41,7 @@ interface LogRow { session_id: string; status: string; }
 interface SessionRow { session_id: string; course_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
 interface HistoryRow extends SessionRow { status: string; }
 
+const POLL_INTERVAL_MS = 10000; // 10 seconds fallback
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
@@ -319,10 +320,31 @@ export default function StudentPortal() {
     return () => clearTimeout(id);
   }, []);
 
-  // Realtime Listener for Session Status
+  // REALTIME + POLLING FALLBACK FOR LIVE SESSION
   useEffect(() => {
     if (!activeLiveSession) return;
 
+    const checkSessionStatus = async () => {
+      const { data } = await supabase
+        .from('lecture_sessions')
+        .select('is_active, expires_at')
+        .eq('session_id', activeLiveSession.sessionId)
+        .maybeSingle();
+
+      if (!data) {
+        setActiveLiveSession(null);
+        return;
+      }
+
+      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
+      if (!data.is_active || isExpired) {
+        setActiveLiveSession(null);
+        setLiveSessionCheckedIn(false);
+        if (matricNumber) fetchStudentData(matricNumber.toUpperCase().trim());
+      }
+    };
+
+    // 1. Realtime Listener (Instant)
     const channel = supabase
       .channel(`live_session_${activeLiveSession.sessionId}`)
       .on(
@@ -331,14 +353,19 @@ export default function StudentPortal() {
         (payload) => {
           if (payload.new.is_active === false) {
             setActiveLiveSession(null);
+            setLiveSessionCheckedIn(false);
             if (matricNumber) fetchStudentData(matricNumber.toUpperCase().trim());
           }
         }
       )
       .subscribe();
 
+    // 2. Polling Fallback (Every 10s)
+    const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(intervalId);
     };
   }, [activeLiveSession, matricNumber, fetchStudentData]);
 
@@ -689,7 +716,6 @@ export default function StudentPortal() {
           )
         )}
 
-        {/* NEW: Added min-h-[600px] to prevent layout shift when locking/unlocking */}
         <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 min-h-150 transition-all duration-300">
           
           {!records && renderUnlockForm()}
