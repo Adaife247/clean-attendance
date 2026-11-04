@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/utils/supabase';
-import { Megaphone, Send, Link as LinkIcon, Loader2, Clock } from 'lucide-react';
+import { Megaphone, Send, Link as LinkIcon, Loader2, Clock, PenTool } from 'lucide-react';
 import { ToastContainer, useToast } from '@/components/Toast';
 
 interface Course { id: string; course_code: string; }
@@ -10,7 +10,8 @@ interface BroadcastPost {
   id: string;
   title: string;
   content: string;
-  course_code: string;
+  course_code: string | null;
+  author: string;
   created_at: string;
 }
 
@@ -22,6 +23,7 @@ export default function BroadcastPage() {
   const [feedContent, setFeedContent] = useState('');
   const [feedCourseId, setFeedCourseId] = useState('');
   const [feedCourseCode, setFeedCourseCode] = useState('');
+  const [feedAuthor, setFeedAuthor] = useState('');
   const [feedLink, setFeedLink] = useState('');
   const [feedExpiry, setFeedExpiry] = useState('');
   
@@ -40,7 +42,11 @@ export default function BroadcastPage() {
       .select('full_name')
       .eq('id', session.user.id)
       .single();
-    if (profileData) setProfile(profileData);
+      
+    if (profileData) {
+      setProfile(profileData);
+      setFeedAuthor(prev => prev || profileData.full_name);
+    }
 
     const { data: courseData } = await supabase
       .from('courses')
@@ -59,8 +65,8 @@ export default function BroadcastPage() {
       if (courseIds.length > 0) {
         const { data: posts } = await supabase
           .from('campus_updates')
-          .select('id, title, content, course_code, created_at')
-          .in('course_id', courseIds)
+          .select('id, title, content, course_code, author, created_at')
+          .or(`course_id.in.(${courseIds.join(',')}),course_id.is.null`)
           .order('created_at', { ascending: false })
           .limit(5);
         if (posts) setHistory(posts);
@@ -77,7 +83,7 @@ export default function BroadcastPage() {
 
   const handlePostFeed = async () => {
     if (!feedTitle.trim() || !feedContent.trim() || !feedCourseId) {
-      addToast('Missing Fields', 'Please fill all fields and select a course.', 'error');
+      addToast('Missing Fields', 'Please fill all fields and select an audience.', 'error');
       return;
     }
     setIsPosting(true);
@@ -88,14 +94,14 @@ export default function BroadcastPage() {
         body: JSON.stringify({
           title: feedTitle,
           content: feedContent,
-          author: profile?.full_name || 'Lecturer',
+          author: feedAuthor.trim() || profile?.full_name || 'Lecturer',
           courseId: feedCourseId,
           link_url: feedLink.trim() || null,
           expires_at: feedExpiry || null
         })
       });
       if (response.ok) {
-        addToast('Success', `Announcement posted to ${feedCourseCode} students!`, 'success');
+        addToast('Success', `Announcement posted to ${feedCourseId === 'GLOBAL' ? 'All Students' : feedCourseCode} successfully!`, 'success');
         setFeedTitle('');
         setFeedContent('');
         setFeedLink('');
@@ -119,12 +125,13 @@ export default function BroadcastPage() {
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 transition-colors">
         <div className="bg-[#2563EB] p-6 text-white">
           <h1 className="text-2xl font-extrabold flex items-center gap-2"><Megaphone size={24} /> Campus Broadcast</h1>
-          <p className="text-blue-100 font-medium mt-1">Send announcements and updates to your students.</p>
+          <p className="text-blue-100 font-medium mt-1">Send announcements to a specific class or the entire school.</p>
         </div>
         
         <div className="p-6 md:p-8 space-y-5">
+          
           <div>
-            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Target Class</label>
+            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Target Audience</label>
             <select 
               value={feedCourseId} 
               onChange={e => {
@@ -133,9 +140,25 @@ export default function BroadcastPage() {
               }} 
               className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl outline-none font-bold text-gray-900 dark:text-white focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all cursor-pointer"
             >
-              <option value="">-- Select a Course --</option>
+              <option value="GLOBAL">🌍 Global (All Students)</option>
+              <option value="" disabled>--- Specific Courses ---</option>
               {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
             </select>
+          </div>
+
+          <div>
+            {/* FIXED: Removed 'block' and kept 'flex' */}
+            <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <PenTool size={12} /> Signed By (Name & Title)
+            </label>
+            <input 
+              type="text" 
+              value={feedAuthor} 
+              onChange={e => setFeedAuthor(e.target.value)} 
+              placeholder="e.g., Dr. Adebayo, HOD of Computer Science" 
+              className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl outline-none font-bold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB] transition-all" 
+            />
+            <p className="text-[10px] text-gray-400 mt-1 ml-1">Students will see this on the announcement.</p>
           </div>
 
           <div>
@@ -215,12 +238,18 @@ export default function BroadcastPage() {
               <div key={post.id} className="p-5 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
                 <div className="flex justify-between items-start mb-1">
                   <h4 className="font-extrabold text-gray-900 dark:text-white">{post.title}</h4>
-                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded border border-blue-100 dark:border-blue-800 uppercase">{post.course_code}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                    post.course_code 
+                      ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-800' 
+                      : 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 border-purple-100 dark:border-purple-800'
+                  }`}>
+                    {post.course_code || '🌍 Global'}
+                  </span>
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-2">{post.content}</p>
-                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  Sent {new Date(post.created_at).toLocaleString()}
-                </p>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-3 border-t border-gray-100 dark:border-gray-800 pt-2">
+                  <PenTool size={10} /> Signed by: {post.author} • {new Date(post.created_at).toLocaleString()}
+                </div>
               </div>
             ))
           )}
