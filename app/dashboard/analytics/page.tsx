@@ -87,7 +87,7 @@ export default function AnalyticsPage() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      let url = `/api/master-export?courseCode=${selectedCourseCode}`;
+      let url = `/api/master-export?courseId=${selectedCourse?.id}`; // Instead of selectedCourseCode
       if (useFilters) {
         if (startDate) url += `&startDate=${startDate}`;
         if (endDate) url += `&endDate=${endDate}`;
@@ -112,21 +112,20 @@ export default function AnalyticsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCourseCode, startDate, endDate]);
+    }, [selectedCourseCode, selectedCourse, startDate, endDate]);
 
   const fetchSessions = useCallback(async () => {
     if (!selectedCourseCode) return;
     try {
       const headers = await getLecturerHeaders();
-      const response = await fetch(`/api/attendance-history?courseCode=${selectedCourseCode}`, { headers });
-      if (response.ok) {
+      const response = await fetch(`/api/attendance-history?courseId=${selectedCourse?.id}`, { headers });      if (response.ok) {
         const data = await response.json();
         setSessionsData(data);
       }
     } catch {
       console.error("Failed to load calendar data");
     }
-  }, [selectedCourseCode]);
+    }, [selectedCourseCode, selectedCourse]);
 
   useEffect(() => {
     if (!selectedCourseCode) return;
