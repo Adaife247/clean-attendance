@@ -23,11 +23,6 @@ interface OfflineQueueItem { session: string; matric: string; telemetry: Telemet
 type Status = 'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'disqualified' | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
-const GPS_BROWSER_TIMEOUT_MS = 20000;
-const GPS_OVERALL_TIMEOUT_MS = 25000;
-const GPS_MIN_WAIT_FOR_FIRST_PING_MS = 8000;
-const GPS_MIN_PINGS_TO_SEND = 1;
-const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
 function getMeme(minutesLate: number): { title: string; sub: string; iconType: 'zap' | 'check' | 'clock' | 'alert' | 'flame' } {
@@ -378,6 +373,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
   }, [sessionId, matricNumber]);
 
+  // HYBRID GPS LOGIC FOR STUDENTS
   const executeFinalCheckIn = async () => {
     setStatus('locating'); setErrorMessage(''); setCurrentFlagCode(null); setLiveAccuracy(null);
     checkPermissionFromGesture();
@@ -389,6 +385,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       spoofRisk = loc.spoofRisk;
     } catch (err) { logger.warn('GeoTrustIn check failed', err); }
 
+    // CATCH FINGERPRINT CANCELLATION
     try {
       const genRes = await fetch('/api/webauthn/auth/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -399,7 +396,19 @@ export default function StudentCheckIn({ sessionId }: Props) {
       } else {
         const options = await genRes.json();
         if (options.error) throw new Error(options.message || options.error);
-        const asseResp = await startAuthentication(options);
+        
+        let asseResp;
+        try {
+          asseResp = await startAuthentication(options);
+        } catch (authErr) {
+          if (authErr instanceof Error && authErr.name === 'NotAllowedError') {
+            setErrorMessage("Biometric scan cancelled. You must scan your fingerprint/Face ID to check in.");
+            setStatus('failed');
+            return;
+          }
+          throw authErr;
+        }
+
         const verifyRes = await fetch('/api/webauthn/auth/verify', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ matricNumber, authResponse: asseResp })
@@ -422,67 +431,56 @@ export default function StudentCheckIn({ sessionId }: Props) {
     }
 
     const pings: Telemetry[] = [...prewarmBufferRef.current];
-    let bestAcc = pings.reduce((min, p) => (p.acc > 0 ? Math.min(min, p.acc) : min), Infinity);
-    if (Number.isFinite(bestAcc)) setLiveAccuracy(Math.round(bestAcc));
+    
+    setErrorMessage("Getting the best GPS signal (up to 15s)...");
 
+    let bestPos: GeolocationPosition | null = null;
+    let bestAcc = Infinity;
     let watchId = 0;
-    let didFinish = false;
-    let sentAny = false;
+    let finished = false;
 
-    const finishWith = (finalPings: Telemetry[]) => {
-      if (didFinish) return;
-      didFinish = true;
-      if (watchId) navigator.geolocation.clearWatch(watchId);
-      if (finalPings.length >= GPS_MIN_PINGS_TO_SEND) sendPayloadToVercel(finalPings, verificationMethod, spoofRisk);
-      else {
+    const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+
+      if (!bestPos) {
         setErrorMessage("Couldn't get location data. Make sure Location is ON and you're near a window.");
         setStatus('failed');
+        return;
       }
+
+      pings.push({
+        lat: bestPos.coords.latitude, lng: bestPos.coords.longitude,
+        alt: bestPos.coords.altitude, acc: bestPos.coords.accuracy, timestamp: bestPos.timestamp,
+        spd: bestPos.coords.speed, hdg: bestPos.coords.heading
+      });
+
+      sendPayloadToVercel(pings, verificationMethod, spoofRisk);
     };
 
-    if (pings.length >= 1) {
-      sentAny = true;
-      sendPayloadToVercel([...pings], verificationMethod, spoofRisk);
-    }
-
-    const overallTimeoutId = setTimeout(() => {
-      if (!sentAny && pings.length === 0) finishWith(pings);
-      else { didFinish = true; if (watchId) navigator.geolocation.clearWatch(watchId); }
-    }, GPS_OVERALL_TIMEOUT_MS);
-
-    const firstPingWaitId = setTimeout(() => {
-      if (pings.length === 0 && !didFinish) finishWith(pings);
-    }, GPS_MIN_WAIT_FOR_FIRST_PING_MS);
-
-    let lastSendTs = Date.now();
+    const timeoutId = setTimeout(finish, 15000);
 
     watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const acc = position.coords.accuracy;
-        if (acc > 0 && acc < bestAcc) bestAcc = acc;
-        if (Number.isFinite(bestAcc) && Math.round(bestAcc) !== liveAccuracy) setLiveAccuracy(Math.round(bestAcc));
+      (pos) => {
+        if (finished) return;
+        const acc = pos.coords.accuracy;
         
-        pings.push({
-          lat: position.coords.latitude, lng: position.coords.longitude,
-          alt: position.coords.altitude, acc: position.coords.accuracy, timestamp: position.timestamp,
-          spd: position.coords.speed, hdg: position.coords.heading
-        });
+        if (acc < bestAcc) {
+          bestAcc = acc;
+          bestPos = pos;
+          setLiveAccuracy(Math.round(acc));
+        }
 
-        const now = Date.now();
-        if (now - lastSendTs >= SEND_INTERVAL_MS && !didFinish) {
-          lastSendTs = now; sentAny = true;
-          sendPayloadToVercel([...pings], verificationMethod, spoofRisk);
+        if (acc <= 30) {
+          clearTimeout(timeoutId);
+          finish();
         }
       },
-      (error) => {
-        clearTimeout(overallTimeoutId); clearTimeout(firstPingWaitId);
-        if (watchId) navigator.geolocation.clearWatch(watchId);
-        if (didFinish || sentAny) return;
-        didFinish = true;
-        if (error.code === 1) setStatus('denied');
-        else { setErrorMessage(`GPS error. Turn Location off and back on.`); setStatus('failed'); }
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_BROWSER_TIMEOUT_MS }
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   };
 
@@ -516,6 +514,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (err) { logger.warn('Rating submission failed', err); }
     finally {
+      // EXTEND THE STUDENT HUB LOCK TIMER SO IT DOESN'T LOCK IMMEDIATELY
       safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
       setIsSubmittingRating(false);
       router.push('/student-hub');
@@ -533,8 +532,8 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
-      {/* NEW: Added min-h-[450px] and flex centering to stop the page from jumping between states */}
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh] min-h-112.5 flex flex-col justify-center transition-all duration-300">
+      {/* FIX: h-[550px] ensures the container never changes size, eliminating shaking */}
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative h-137.5 overflow-y-auto transition-all duration-300">
         
         <div className="w-full">
           {inAppBrowser && (

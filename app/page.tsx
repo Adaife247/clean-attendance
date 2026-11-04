@@ -213,7 +213,6 @@ function CheckInWrapper() {
                     </div>
                   </div>
                   <div className="relative pl-10">
-                    {/* THIS IS THE LINE THAT CHANGED: emerald -> blue */}
                     <div className="absolute -left-5 top-0 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-950 border-2 border-blue-100 dark:border-blue-900 text-[#2563EB] dark:text-blue-400 shadow-sm z-10">
                       <CheckCircle size={18} />
                     </div>
@@ -365,7 +364,10 @@ function CheckInWrapper() {
           <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-sm">Secure Student Check-In</p>
         </div>
 
-        <StudentCheckInComponent sessionId={sessionId} />
+        {/* NEW: Fixed height wrapper to stop page from shaking */}
+        <div className="h-137.5 w-full">
+          <StudentCheckInComponent sessionId={sessionId} />
+        </div>
 
       </div>
     </div>
