@@ -22,9 +22,11 @@ export interface Enrollment {
 
 export interface LectureSession {
   session_id: string;
+  course_id: string;
   course_code: string;
   anchor_latitude: number;
   anchor_longitude: number;
+  anchor_ip?: string | null;
   is_active: boolean;
   expires_at: string | null;
   created_at: string;
