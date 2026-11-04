@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+
 interface Session {
   session_id: string;
   created_at: string;
@@ -19,18 +20,25 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
-  // Calendar math
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const prevMonth = () => {
+    setCurrentDate(new Date(year, month - 1, 1));
+    setSelectedDay(null);
+  };
+  
+  const nextMonth = () => {
+    setCurrentDate(new Date(year, month + 1, 1));
+    setSelectedDay(null);
+  };
 
-  // Group sessions by YYYY-MM-DD
   const sessionsByDate = useMemo(() => {
     const map = new Map<string, Session[]>();
     sessions.forEach(session => {
-      const dateStr = new Date(session.created_at).toLocaleDateString('en-CA'); // YYYY-MM-DD
+      // Force local timezone string to prevent UTC shifting
+      const localDate = new Date(session.created_at);
+      const dateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
       if (!map.has(dateStr)) map.set(dateStr, []);
       map.get(dateStr)!.push(session);
     });
@@ -40,9 +48,8 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
   const monthName = currentDate.toLocaleString('default', { month: 'long' });
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Handle Day Click
   const handleDayClick = (day: number) => {
-    const dateStr = new Date(year, month, day).toLocaleDateString('en-CA');
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     if (sessionsByDate.has(dateStr)) {
       setSelectedDay(dateStr === selectedDay ? null : dateStr);
     }
@@ -76,7 +83,6 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
       </div>
 
       <div className="p-6">
-        {/* Days of Week */}
         <div className="grid grid-cols-7 gap-2 mb-2 text-center">
           {daysOfWeek.map(day => (
             <div key={day} className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider py-2">
@@ -85,7 +91,6 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
           ))}
         </div>
 
-        {/* Calendar Grid */}
         <div className="grid grid-cols-7 gap-2">
           {Array.from({ length: firstDayOfMonth }).map((_, i) => (
             <div key={`empty-${i}`} className="h-16 rounded-xl bg-gray-50/50 dark:bg-gray-800/20 border border-transparent" />
@@ -93,7 +98,7 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
           
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const dateStr = new Date(year, month, day).toLocaleDateString('en-CA');
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const daySessions = sessionsByDate.get(dateStr);
             const hasSessions = !!daySessions;
             const isSelected = selectedDay === dateStr;
@@ -123,7 +128,6 @@ export default function AttendanceCalendar({ sessions }: AttendanceCalendarProps
         </div>
       </div>
 
-      {/* Selected Day Details */}
       {selectedDay && selectedSessions.length > 0 && (
         <div className="p-6 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-800 animate-in slide-in-from-top-2">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">

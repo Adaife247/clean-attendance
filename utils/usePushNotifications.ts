@@ -15,7 +15,6 @@ export function usePushNotifications(matricNumber: string) {
   };
 
   useEffect(() => {
-    // Wrap in setTimeout to prevent React "setState in effect" warning
     const id = setTimeout(() => {
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
         setIsSupported(true);
@@ -39,14 +38,18 @@ export function usePushNotifications(matricNumber: string) {
       }
 
       const registration = await navigator.serviceWorker.ready;
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       
-      // 1. Subscribe to push
+      if (!vapidKey) {
+        console.error("Push notifications disabled: VAPID public key missing in env.");
+        return; // Fail gracefully
+      }
+      
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!)
+        applicationServerKey: urlBase64ToUint8Array(vapidKey)
       });
 
-      // 2. Save to Database
       const { error } = await supabase.from('push_subscriptions').upsert({
         matric_number: matricNumber.toUpperCase().trim(),
         subscription: subscription,
@@ -74,7 +77,6 @@ export function usePushNotifications(matricNumber: string) {
   return { isSupported, permission, isSubscribed, subscribe, unsubscribe };
 }
 
-// Helper function for VAPID key
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');

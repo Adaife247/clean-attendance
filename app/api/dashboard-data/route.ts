@@ -20,45 +20,45 @@ export async function GET(request: Request) {
 
     if (!sessionId) return NextResponse.json({ error: 'No sessionId' }, { status: 400 });
 
-    // NEW: Try Lecturer Auth first, then Student Auth
-       let isStudent = false;
-
+    let isStudent = false;
     const lecturerAuth = await verifyLecturer(request);
-    if (!lecturerAuth.error) {
-      // isLecturer = true (removed to fix eslint warning)
-    } else {
+    
+    if (lecturerAuth.error) {
       const studentAuth = verifyStudentToken(request);
       if (!studentAuth.error) {
         isStudent = true;
       } else {
-        // Neither auth passed
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
     }
 
     const { data: session } = await supabase
       .from('lecture_sessions')
-      .select('is_active, course_code, created_at')
+      .select('is_active, course_code, created_at, course_id')
       .eq('session_id', sessionId)
-      .single();
+      .maybeSingle();
 
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    // If student, only allow them to see the basic metadata (not the full logs)
     if (isStudent) {
       return NextResponse.json({
         course: session.course_code,
         isActive: session.is_active,
         createdAt: session.created_at,
-        logs: [] // Students don't get the full roster
+        logs: [] 
       });
     }
 
-    // Below this line is Lecturer-only logic (seeing all logs)
-    const { data: course } = await supabase.from('courses').select('id').eq('course_code', session.course_code).eq('lecturer_id', lecturerAuth.user!.id).single();
+    // Verify ownership (Fallback for legacy sessions missing course_id)
+    let courseQuery = supabase.from('courses').select('id').eq('lecturer_id', lecturerAuth.user!.id);
+    if (session.course_id) {
+      courseQuery = courseQuery.eq('id', session.course_id);
+    } else {
+      courseQuery = courseQuery.eq('course_code', session.course_code).limit(1);
+    }
+    
+    const { data: course } = await courseQuery.maybeSingle();
     if (!course) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
-    const courseName = session?.course_code || "Unknown Course";
 
     const { data: logs } = await supabase
       .from('attendance_logs')
@@ -79,9 +79,9 @@ export async function GET(request: Request) {
     (profiles || []).forEach(p => nicknameMap.set(p.matric_number, p.nickname));
 
     return NextResponse.json({
-      course: courseName,
-      isActive: session?.is_active === true,
-      createdAt: session?.created_at || null,
+      course: session.course_code,
+      isActive: session.is_active === true,
+      createdAt: session.created_at || null,
       hiddenDisqualifiedCount: disqualifiedCount,
       logs: visibleLogs.map((l) => {
         let reason = null;
@@ -93,7 +93,6 @@ export async function GET(request: Request) {
             if (info.method === "Digital Hand Raise") reason = "Raised hand (GPS blocked)";
             else if (info.verificationMethod === 'skipped') {
               reason = "Biometric skipped (No hardware lock)";
-              isBiometric = false;
             } else if (info.verificationMethod === 'biometric') {
               isBiometric = true;
             } else if (info.reason) {
