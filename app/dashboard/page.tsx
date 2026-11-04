@@ -29,7 +29,7 @@ interface DashboardData {
   hiddenDisqualifiedCount?: number;
 }
 interface LecturerProfile { full_name: string; department: string; }
-interface Course { id: string; course_code: string; }
+interface Course { id: string; course_code: string; department?: string; level?: string; }
 interface PastSession { session_id: string; created_at: string; course_code: string; verified_count: number; flagged_count: number; }
 
 const ANCHOR_CACHE_KEY = 'campuscheck_anchor_cache';
@@ -139,8 +139,8 @@ export default function LecturerDashboard() {
       const { data: profileData } = await supabase.from('lecturers').select('full_name, department').eq('id', session.user.id).single();
       if (profileData) setProfile({ full_name: profileData.full_name, department: profileData.department });
 
-      const { data: courseData } = await supabase.from('courses').select('id, course_code').eq('lecturer_id', session.user.id).order('created_at', { ascending: false });
-      if (courseData) {
+      const { data: courseData } = await supabase.from('courses').select('id, course_code, department, level').eq('lecturer_id', session.user.id).order('created_at', { ascending: false });
+            if (courseData) {
         setCourses(courseData);
         if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
       }
@@ -270,8 +270,7 @@ export default function LecturerDashboard() {
         const response = await fetch('/api/create-session', {
           method: 'POST', 
           headers,
-          body: JSON.stringify({ courseId: selectedCourseId, courseCode: courses.find(c => c.id === selectedCourseId)?.course_code, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })
-        });
+                  body: JSON.stringify({ courseId: selectedCourseId, courseCode: courses.find(c => c.id === selectedCourseId)?.course_code, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })        });
         if (response.ok) {
           const result = await response.json();
           localStorage.setItem(ACTIVE_SESSION_KEY, result.sessionId);
@@ -672,8 +671,12 @@ export default function LecturerDashboard() {
               ) : (
                 <div className="relative mb-4 mt-6">
                   <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer">
-                    {courses.map(course => <option key={course.id} value={course.id}>{course.course_code}</option>)}
-                  </select>
+  {courses.map(course => (
+    <option key={course.id} value={course.id}>
+      {course.course_code} {course.department ? `(${course.department})` : ''}
+    </option>
+  ))}
+</select>
                   <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-500 dark:text-gray-400"><ChevronDown size={24} strokeWidth={2.5} /></div>
                 </div>
               )}

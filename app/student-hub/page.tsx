@@ -128,7 +128,6 @@ export default function StudentPortal() {
       .in('id', courseIds);
 
     if (courseError) throw courseError;
-    const courseCodes = courseRows?.map(c => c.course_code) || [];
 
     const { data: repRows } = await supabase
       .from('course_reps')
@@ -139,10 +138,10 @@ export default function StudentPortal() {
     const myRepCourseCodes = courseRows?.filter(c => myRepCourseIds.includes(c.id)).map(c => c.course_code) || [];
     setRepCourseCodes(myRepCourseCodes);
 
-    const { data: sessionRows, error: sessionError } = await supabase
+        const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('session_id, course_code, created_at, is_active, expires_at')
-      .in('course_code', courseCodes)
+      .select('session_id, course_id, course_code, created_at, is_active, expires_at')
+      .in('course_id', courseIds)
       .order('created_at', { ascending: false });
 
     if (sessionError) throw sessionError;

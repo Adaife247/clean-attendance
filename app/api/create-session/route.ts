@@ -17,7 +17,7 @@ if (publicVapidKey && privateVapidKey) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const courseCodeToSave = body.courseCode || body.course_code;
+    const courseIdToSave = body.courseId;
     const isRepStarting = body.startedBy === 'Class Rep';
     
     const headersList = await headers();
@@ -27,23 +27,22 @@ export async function POST(request: Request) {
     let authUserId = null;
     let finalStartedBy = 'lecturer';
 
-    if (!courseCodeToSave) {
-      return NextResponse.json({ error: "Missing course code." }, { status: 400 });
+    if (!courseIdToSave) {
+      return NextResponse.json({ error: "Missing course ID." }, { status: 400 });
     }
 
-    // Fetch course first so we can verify rep status against the specific course
-    const { data: course } = await supabase
+    // Fetch course strictly by unique ID
+    const { data: course, error: courseError } = await supabase
       .from('courses')
-      .select('id')
-      .eq('course_code', courseCodeToSave)
+      .select('id, course_code')
+      .eq('id', courseIdToSave)
       .maybeSingle();
 
-    if (!course) {
-      return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+    if (courseError || !course) {
+      return NextResponse.json({ error: 'Course not found. It may have been deleted.' }, { status: 404 });
     }
 
     if (isRepStarting) {
-      // NEW: Check course_reps table instead of student_profiles
       const { data: rep } = await supabase
         .from('course_reps')
         .select('id')
@@ -60,7 +59,6 @@ export async function POST(request: Request) {
       if (auth.error) return auth.error;
       authUserId = auth.user.id;
 
-      // Verify the lecturer owns this course
       const { data: ownedCourse } = await supabase
         .from('courses')
         .select('id')
@@ -78,10 +76,12 @@ export async function POST(request: Request) {
 
     const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
 
+    // Save BOTH course_id and course_code to the session
     const { data, error } = await supabase
       .from('lecture_sessions')
       .insert([{
-        course_code: courseCodeToSave,
+        course_id: course.id,
+        course_code: course.course_code,
         anchor_latitude: body.latitude || body.lat,
         anchor_longitude: body.longitude || body.lng,
         anchor_ip: lecturerIp, 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("Database Insert Error:", error);
-      return NextResponse.json({ error: error.message || "Database error" }, { status: 500 });
+      return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 });
     }
 
     // ─── SEND PUSH NOTIFICATIONS ───
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
 
         if (subscriptions && subscriptions.length > 0) {
           const payload = JSON.stringify({
-            title: `Class is Live: ${courseCodeToSave}`,
+            title: `Class is Live: ${course.course_code}`,
             body: `The lecturer has started attendance. Tap to check in now!`,
             url: `/?sessionId=${data.session_id}`
           });
