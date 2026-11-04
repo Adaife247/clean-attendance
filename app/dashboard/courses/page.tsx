@@ -195,7 +195,7 @@ export default function CourseManagement() {
       const res = await fetch('/api/set-rep', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ courseCode: repCourseCode, matricNumber: cleanMatric })
+        body: JSON.stringify({ courseId: courses.find(c => c.course_code === repCourseCode)?.id, matricNumber: cleanMatric })
       });
 
       const data = await res.json();

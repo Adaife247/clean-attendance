@@ -22,6 +22,7 @@ import RepDeskTab from '@/components/student-hub/RepDeskTab';
 import EnrollModal from '@/components/student-hub/EnrollModal';
 
 interface CourseRecord {
+  id: string;
   course_code: string;
   total_held: number;
   total_planned: number;
@@ -138,7 +139,7 @@ export default function StudentPortal() {
     const myRepCourseCodes = courseRows?.filter(c => myRepCourseIds.includes(c.id)).map(c => c.course_code) || [];
     setRepCourseCodes(myRepCourseCodes);
 
-        const { data: sessionRows, error: sessionError } = await supabase
+    const { data: sessionRows, error: sessionError } = await supabase
       .from('lecture_sessions')
       .select('session_id, course_id, course_code, created_at, is_active, expires_at')
       .in('course_id', courseIds)
@@ -192,10 +193,11 @@ export default function StudentPortal() {
     });
     setHistory(historyData);
 
-    const courseStats = new Map<string, { total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
+    const courseStats = new Map<string, { id: string; total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
     
     courseRows?.forEach(c => {
       courseStats.set(c.course_code, { 
+        id: c.id,
         total_held: 0, 
         total_planned: c.total_planned_classes || 15, 
         attended: 0, 
@@ -245,6 +247,7 @@ export default function StudentPortal() {
       const activeSessionId = liveSession?.course_code === course ? liveSession.session_id : null;
 
       finalRecords.push({
+        id: stats.id,
         course_code: course, 
         total_held, 
         total_planned: denominator,

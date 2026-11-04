@@ -4,11 +4,12 @@ import * as XLSX from 'xlsx';
 import { Upload, Clock, FileText, Zap, PlayCircle, MapPin, Loader2 } from 'lucide-react';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { getStudentHeaders } from '@/utils/api-client';
+import { supabase } from '@/utils/supabase';
 
 const MATRIC_REGEX = /[\/\-]/;
 
 interface RepDeskTabProps {
-  records: { course_code: string }[];
+  records: { id: string; course_code: string }[];
   matricNumber: string;
   activeLiveSession: { course: string; sessionId: string } | null;
   onRefresh: () => void;
@@ -34,7 +35,7 @@ export default function RepDeskTab({
   // Sync the default selected course if records load after mount
   useEffect(() => {
     if (records.length > 0 && !repCourseId) {
-      const id = setTimeout(() => setRepCourseId(records[0].course_code), 0);
+      const id = setTimeout(() => setRepCourseId(records[0].id), 0);
       return () => clearTimeout(id);
     }
   }, [records, repCourseId]);
@@ -117,24 +118,8 @@ export default function RepDeskTab({
           return;
         }
 
-        // Look up the course ID for the selected course code
-        // We assume the parent passed records that have course_code, but we need the actual course_id
-        // In the original, this was passed as repCourseId, so we need to fetch the correct ID here.
-        // Wait, the original `repCourseId` WAS the course.id, but the select was binding to course_code.
-        // Let me fix that mapping here by querying the DB or passing the IDs.
-        // Actually, Supabase allows inserting enrollments if we know the course_id.
-        // Let's just query the course to get its ID.
-        const { supabase } = await import('@/utils/supabase'); // dynamic import to avoid top-level if not needed
-        const { data: courseRow } = await supabase
-          .from('courses')
-          .select('id')
-          .eq('course_code', repCourseId)
-          .single();
-
-        if (!courseRow) throw new Error("Course not found");
-
         const rows = uniqueMatrics.map((matric) => ({
-          course_id: courseRow.id,
+          course_id: repCourseId,
           matric_number: matric,
         }));
 
@@ -148,7 +133,7 @@ export default function RepDeskTab({
         } else {
           addToast('Upload failed', error.message, 'error');
         }
-            } catch {
+      } catch {
         addToast('File read error', 'Failed to read file. Ensure it is a valid CSV or Excel file.', 'error');
       } finally {
         setIsUploadingList(false);
@@ -171,7 +156,7 @@ export default function RepDeskTab({
     }
 
     confirm.ask(
-      `Start a backup session for ${repCourseId}?`,
+      `Start a backup session?`,
       'Your phone will become the GPS anchor for this class. Students will be able to check in for the next 60 minutes.',
       () => {
         setIsStartingRepSession(true);
@@ -184,7 +169,7 @@ export default function RepDeskTab({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  courseCode: repCourseId,
+                  courseId: repCourseId,
                   latitude: position.coords.latitude,
                   longitude: position.coords.longitude,
                   duration: 60,
@@ -233,7 +218,7 @@ export default function RepDeskTab({
           className="w-full bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold mb-3 outline-none"
         >
           {records?.map((r) => (
-            <option key={r.course_code} value={r.course_code}>
+            <option key={r.id} value={r.id}>
               {r.course_code}
             </option>
           ))}
@@ -300,7 +285,7 @@ export default function RepDeskTab({
               className="w-full bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700 text-gray-900 dark:text-white p-3 rounded-lg text-sm font-bold outline-none"
             >
               {records?.map((r) => (
-                <option key={r.course_code} value={r.course_code}>
+                <option key={r.id} value={r.id}>
                   {r.course_code}
                 </option>
               ))}

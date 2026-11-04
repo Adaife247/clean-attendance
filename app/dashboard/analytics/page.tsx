@@ -42,7 +42,7 @@ interface SessionData {
 
 export default function AnalyticsPage() {
   const [courses, setCourses] = useState<CourseRow[]>([]);
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
 
   const [startDate, setStartDate] = useState('');
@@ -68,7 +68,7 @@ export default function AnalyticsPage() {
       const { data } = await supabase.from('courses').select('id, course_code, max_attendance_score, is_finalized');
       if (data && data.length > 0) {
         setCourses(data);
-        setSelectedCourseCode(data[0].course_code);
+        setSelectedCourseId(data[0].id);
         setSelectedCourse(data[0]);
       }
     };
@@ -76,18 +76,18 @@ export default function AnalyticsPage() {
   }, []);
 
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const code = e.target.value;
-    setSelectedCourseCode(code);
-    const course = courses.find(c => c.course_code === code);
+    const id = e.target.value;
+    setSelectedCourseId(id);
+    const course = courses.find(c => c.id === id);
     if (course) setSelectedCourse(course);
   };
 
   const fetchReportData = useCallback(async (useFilters: boolean = false) => {
-    if (!selectedCourseCode) return;
+    if (!selectedCourseId) return;
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      let url = `/api/master-export?courseId=${selectedCourse?.id}`; // Instead of selectedCourseCode
+      let url = `/api/master-export?courseId=${selectedCourseId}`;
       if (useFilters) {
         if (startDate) url += `&startDate=${startDate}`;
         if (endDate) url += `&endDate=${endDate}`;
@@ -112,32 +112,33 @@ export default function AnalyticsPage() {
     } finally {
       setIsLoading(false);
     }
-    }, [selectedCourseCode, selectedCourse, startDate, endDate]);
+  }, [selectedCourseId, startDate, endDate]);
 
   const fetchSessions = useCallback(async () => {
-    if (!selectedCourseCode) return;
+    if (!selectedCourseId) return;
     try {
       const headers = await getLecturerHeaders();
-      const response = await fetch(`/api/attendance-history?courseId=${selectedCourse?.id}`, { headers });      if (response.ok) {
+      const response = await fetch(`/api/attendance-history?courseId=${selectedCourseId}`, { headers });
+      if (response.ok) {
         const data = await response.json();
         setSessionsData(data);
       }
     } catch {
       console.error("Failed to load calendar data");
     }
-    }, [selectedCourseCode, selectedCourse]);
+  }, [selectedCourseId]);
 
   useEffect(() => {
-    if (!selectedCourseCode) return;
+    if (!selectedCourseId) return;
     const id = setTimeout(() => { 
       fetchReportData(false); 
       fetchSessions();
     }, 0);
     return () => clearTimeout(id);
-  }, [selectedCourseCode, fetchReportData, fetchSessions]);
+  }, [selectedCourseId, fetchReportData, fetchSessions]);
 
   const handleNotifyStudents = async () => {
-    if (!selectedCourseCode) return;
+    if (!selectedCourseId) return;
     
     confirm.ask(
       'Send Alerts?',
@@ -149,7 +150,7 @@ export default function AnalyticsPage() {
           const res = await fetch('/api/alerts/low-attendance', {
             method: 'POST',
             headers,
-            body: JSON.stringify({ courseCode: selectedCourseCode })
+            body: JSON.stringify({ courseId: selectedCourseId })
           });
           
           const data = await res.json();
@@ -203,7 +204,7 @@ export default function AnalyticsPage() {
 
     const header = [
       [`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`],
-      [`Course Code:`, selectedCourseCode],
+      [`Course Code:`, selectedCourse.course_code],
       [`Reporting Period:`, timeLabel],
       [`Total Classes Held:`, reportData.totalClasses],
       [`Date Generated:`, datePrinted],
@@ -231,13 +232,13 @@ export default function AnalyticsPage() {
 
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `${selectedCourseCode}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
+    link.setAttribute("download", `${selectedCourse.course_code}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.csv`);
 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    addToast('Report downloaded', `${selectedCourseCode} CSV exported successfully.`, 'success');
+    addToast('Report downloaded', `${selectedCourse.course_code} CSV exported successfully.`, 'success');
 
     setIsFinalizing(false);
     setIsDownloading(false);
@@ -280,14 +281,14 @@ export default function AnalyticsPage() {
           </div>
           <select
             aria-label="Select Course for Analytics"
-            value={selectedCourseCode}
+            value={selectedCourseId}
             onChange={handleCourseChange}
             disabled={courses.length === 0}
             className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold py-3 px-4 rounded-xl outline-none focus:ring-2 focus:ring-[#2563EB] shadow-sm min-w-50 cursor-pointer transition-colors"
           >
             {courses.length === 0
               ? <option>No Courses Found</option>
-              : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)
+              : courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)
             }
           </select>
         </div>
