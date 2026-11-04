@@ -1,13 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock, BellRing
+  BarChart3, AlertTriangle, Calendar, Download, Loader2, FileSpreadsheet, CheckCircle, ChevronDown, ChevronUp, Lock, BellRing, FileText
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { ToastContainer, useToast } from '@/components/Toast';
 import AttendanceCalendar from '@/components/lecturer/AttendanceCalendar';
 import { getLecturerHeaders } from '@/utils/api-client';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface CourseRow {
   id: string;
@@ -173,12 +175,8 @@ export default function AnalyticsPage() {
     );
   };
 
-  const executeDownload = async (isFullSemester: boolean) => {
-    if (!reportData || !reportData.report || !selectedCourse) return;
-
-    setIsDownloading(true);
-
-    if (lockGrades && !selectedCourse.is_finalized) {
+  const finalizeGradesIfNeeded = async (): Promise<boolean> => {
+    if (lockGrades && selectedCourse && !selectedCourse.is_finalized) {
       setIsFinalizing(true);
       const { error } = await supabase
         .from('courses')
@@ -189,13 +187,22 @@ export default function AnalyticsPage() {
         addToast('Lock failed', 'Could not finalize grades in the database.', 'error');
         setIsFinalizing(false);
         setIsDownloading(false);
-        return;
+        return false;
       }
 
       setCourses(prev => prev.map(c => c.id === selectedCourse.id ? { ...c, is_finalized: true } : c));
       setSelectedCourse(prev => prev ? { ...prev, is_finalized: true } : null);
       setLockGrades(false);
     }
+    return true;
+  };
+
+  const executeDownloadCSV = async (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report || !selectedCourse) return;
+    setIsDownloading(true);
+
+    const proceed = await finalizeGradesIfNeeded();
+    if (!proceed) return;
 
     const maxScore = reportData.maxScore || 10;
     const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
@@ -239,12 +246,76 @@ export default function AnalyticsPage() {
     document.body.removeChild(link);
 
     addToast('Report downloaded', `${selectedCourse.course_code} CSV exported successfully.`, 'success');
-
     setIsFinalizing(false);
     setIsDownloading(false);
   };
 
-  const handleDownload = (isFullSemester: boolean) => {
+  const executeDownloadPDF = async (isFullSemester: boolean) => {
+    if (!reportData || !reportData.report || !selectedCourse) return;
+    setIsDownloading(true);
+
+    const proceed = await finalizeGradesIfNeeded();
+    if (!proceed) return;
+
+    const maxScore = reportData.maxScore || 10;
+    const timeLabel = isFullSemester ? "FULL SEMESTER LEDGER" : `CUSTOM RANGE: ${startDate || 'Start'} to ${endDate || 'End'}`;
+    const datePrinted = new Date().toLocaleDateString();
+    const finalStatus = (selectedCourse.is_finalized || lockGrades) ? "FINALIZED" : "LIVE (UNFINALIZED)";
+
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`OFFICIAL ATTENDANCE REPORT - ${finalStatus}`, 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Course Code: ${selectedCourse.course_code}`, 14, 32);
+    doc.text(`Reporting Period: ${timeLabel}`, 14, 38);
+    doc.text(`Total Classes Held: ${reportData.totalClasses}`, 14, 44);
+    doc.text(`Date Generated: ${datePrinted}`, 14, 50);
+
+    const sortedReport = [...reportData.report].sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
+    
+    const tableBody = sortedReport.map((s, index) => {
+      const caScore = ((s.percentage / 100) * maxScore).toFixed(1);
+      return [
+        index + 1,
+        s.matricNumber,
+        s.totalClasses,
+        s.attended,
+        `${s.percentage}%`,
+        `${caScore} / ${maxScore}`,
+        s.eligible === 'YES' ? "CLEARED" : "NOT ELIGIBLE"
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 60,
+      head: [['S/N', 'MATRICULATION NUMBER', 'TOTAL CLASSES', 'ATTENDED', 'PERCENTAGE', 'CA SCORE', 'REMARK']],
+      body: tableBody,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: {
+        0: { halign: 'center' },
+        2: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'center' },
+        5: { halign: 'center' },
+        6: { halign: 'right' }
+      }
+    });
+
+    doc.save(`${selectedCourse.course_code}_Senate_Report_${isFullSemester ? 'Full' : 'Custom'}.pdf`);
+    
+    addToast('PDF downloaded', `${selectedCourse.course_code} PDF exported successfully.`, 'success');
+    setIsFinalizing(false);
+    setIsDownloading(false);
+  };
+
+  const handleDownload = (format: 'csv' | 'pdf', isFullSemester: boolean) => {
     if (!reportData || !reportData.report || !selectedCourse) return;
 
     if (lockGrades && !selectedCourse.is_finalized) {
@@ -254,13 +325,17 @@ export default function AnalyticsPage() {
         isBelowPlanned
           ? `You planned ${reportData.plannedClasses} classes but only held ${reportData.totalClasses}. Final scores will be calculated against the ${reportData.totalClasses} held.`
           : 'This will finalize the semester and lock CA scores. No more sessions can be held for this course.',
-        () => executeDownload(isFullSemester),
+        () => {
+          if (format === 'csv') executeDownloadCSV(isFullSemester);
+          else executeDownloadPDF(isFullSemester);
+        },
         { isDangerous: true, confirmLabel: 'Lock & Download' }
       );
       return;
     }
 
-    executeDownload(isFullSemester);
+    if (format === 'csv') executeDownloadCSV(isFullSemester);
+    else executeDownloadPDF(isFullSemester);
   };
 
   const applyCustomDates = () => { fetchReportData(true); };
@@ -328,14 +403,24 @@ export default function AnalyticsPage() {
             </label>
           </div>
 
-          <button
-            onClick={() => handleDownload(true)}
-            disabled={isDownloading || isFinalizing || !reportData}
-            className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg mb-6"
-          >
-            {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
-            Download Full Semester CSV
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+            <button
+              onClick={() => handleDownload('csv', true)}
+              disabled={isDownloading || isFinalizing || !reportData}
+              className="w-full flex justify-center items-center gap-2 bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg"
+            >
+              {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <Download size={24} />}
+              Download CSV
+            </button>
+            <button
+              onClick={() => handleDownload('pdf', true)}
+              disabled={isDownloading || isFinalizing || !reportData}
+              className="w-full flex justify-center items-center gap-2 bg-red-600 text-white font-bold py-4 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all shadow-md active:scale-[0.98] text-lg"
+            >
+              {isDownloading || isFinalizing ? <Loader2 size={24} className="animate-spin" /> : <FileText size={24} />}
+              Download PDF
+            </button>
+          </div>
 
           <div className="border-t border-gray-100 dark:border-gray-800 pt-6">
             <button
@@ -374,13 +459,22 @@ export default function AnalyticsPage() {
                   >
                     Apply Filters
                   </button>
-                  <button
-                    onClick={() => handleDownload(false)}
-                    disabled={isDownloading || isFinalizing || !reportData}
-                    className="flex justify-center items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all shadow-sm text-sm"
-                  >
-                    <Download size={16} /> Export Range
-                  </button>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      onClick={() => handleDownload('csv', false)}
+                      disabled={isDownloading || isFinalizing || !reportData}
+                      className="flex-1 flex justify-center items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all shadow-sm text-sm"
+                    >
+                      <Download size={16} /> Range CSV
+                    </button>
+                    <button
+                      onClick={() => handleDownload('pdf', false)}
+                      disabled={isDownloading || isFinalizing || !reportData}
+                      className="flex-1 flex justify-center items-center gap-2 bg-gray-900 dark:bg-gray-700 text-white font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-600 disabled:opacity-50 transition-all shadow-sm text-sm"
+                    >
+                      <FileText size={16} /> Range PDF
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
