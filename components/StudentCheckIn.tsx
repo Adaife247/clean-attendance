@@ -15,17 +15,13 @@ import { getStudentHeaders } from '@/utils/api-client';
 import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
 import { GeoTrustInWeb } from '@geotrustin/web';
-
-// NEW: Import Toast components
 import { ToastContainer, useToast } from '@/components/Toast';
 
-// --- INTERFACES ---
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; spd?: number | null; hdg?: number | null; }
 interface Props { sessionId: string; }
 interface OfflineQueueItem { session: string; matric: string; telemetry: Telemetry[]; hardwareFingerprint: string | null; verificationMethod: string; timestamp: number; }
 type Status = 'idle' | 'checking' | 'needs_setup' | 'ready' | 'locating' | 'verifying' | 'success' | 'denied' | 'failed' | 'disqualified' | 'offline-queued' | 'syncing' | 'rating' | 'rated';
 
-// --- CONSTANTS ---
 const RATING_TAGS = ['Clear Audio', 'Well Explained', 'Too Fast', 'Too Slow', 'Great Examples', 'Confusing'];
 const GPS_BROWSER_TIMEOUT_MS = 20000;
 const GPS_OVERALL_TIMEOUT_MS = 25000;
@@ -34,7 +30,6 @@ const GPS_MIN_PINGS_TO_SEND = 1;
 const SEND_INTERVAL_MS = 4000;
 const FINGERPRINT_WAIT_MS = 6000;
 
-// --- HELPERS ---
 function getMeme(minutesLate: number): { title: string; sub: string; iconType: 'zap' | 'check' | 'clock' | 'alert' | 'flame' } {
   if (minutesLate <= 2) return { title: 'Early Bird', sub: "Lecturer hasn't even opened their slides.", iconType: 'zap' };
   if (minutesLate <= 10) return { title: 'On Time', sub: 'Solid. Very solid.', iconType: 'check' };
@@ -52,38 +47,31 @@ function isInAppBrowser(): boolean {
 export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  // NEW: Toast hook
   const { toasts, addToast, removeToast } = useToast();
 
-  // --- STATE ---
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [matricNumber, setMatricNumber] = useState('');
   const [isAppealing, setIsAppealing] = useState(false);
   const [currentFlagCode, setCurrentFlagCode] = useState<FlagCode | null>(null);
+
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string | null>(null);
-  
-  // Rating state
   const [ratingStars, setRatingStars] = useState(0);
   const [ratingTags, setRatingTags] = useState<string[]>([]);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [verifiedAt, setVerifiedAt] = useState<number | null>(null);
-  
-  // GPS & Environment state
   const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
+  
   const [gpsStatus, setGpsStatus] = useState<'checking' | 'granted' | 'denied' | 'prompt'>('prompt');
   const [deviceType, setDeviceType] = useState<'ios' | 'android' | 'other'>('other');
   const [inAppBrowser, setInAppBrowser] = useState(false);
 
-  // --- REFS ---
   const prewarmBufferRef = useRef<Telemetry[]>([]);
   const prewarmWatchIdRef = useRef<number | null>(null);
   const hardwareFingerprintRef = useRef<string | null>(null);
   const deviceIdRef = useRef<string | null>(null);
   const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
-  // --- EFFECTS ---
   useEffect(() => {
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
@@ -181,7 +169,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { cancelled = true; clearTimeout(id); };
   }, [sessionId]);
 
-  // --- FUNCTIONS ---
   const triggerSuccessVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   };
@@ -529,7 +516,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
       }
     } catch (err) { logger.warn('Rating submission failed', err); }
     finally {
-      // EXTEND THE STUDENT HUB LOCK TIMER SO IT DOESN'T LOCK IMMEDIATELY
       safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
       setIsSubmittingRating(false);
       router.push('/student-hub');
@@ -545,257 +531,259 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="w-full">
-      {/* NEW: The Toast Container is rendered here, so toasts slide in on this page */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh] transition-colors duration-300">
-
-        {inAppBrowser && (
-          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
-              <div>
-                <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Open this link in your browser</h4>
-                <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 leading-relaxed">
-                  You opened this link inside another app. Passkey setup does not work in in-app browsers.
-                  Tap the menu (⋮) and choose <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {gpsStatus === 'denied' && (
-          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
-            <div className="flex items-start gap-3">
-              <MapPin className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
-              <div>
-                <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Location is blocked</h4>
-                <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 mb-3">
-                  Your browser is blocking location access. Follow these steps:
-                </p>
-                <div className="text-xs text-red-800 dark:text-red-200 space-y-1.5 bg-white/60 dark:bg-gray-900/50 p-3 rounded-lg border border-red-100 dark:border-red-800/50">
-                  {deviceType === 'ios' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On iPhone / Safari:</p>
-                      <p>1. Open iPhone <strong>Settings</strong>.</p>
-                      <p>2. Scroll down and tap <strong>Safari</strong>.</p>
-                      <p>3. Tap <strong>Location</strong> → <strong>Allow</strong>.</p>
-                      <p>4. Return here and tap the button below.</p>
-                    </>
-                  ) : deviceType === 'android' ? (
-                    <>
-                      <p className="font-bold text-[13px]">On Android / Chrome:</p>
-                      <p>1. Tap the <strong>lock icon</strong> next to the address.</p>
-                      <p>2. Tap <strong>Permissions</strong>.</p>
-                      <p>3. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
-                      <p>4. Refresh this page.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-bold text-[13px]">On your browser:</p>
-                      <p>1. Click the <strong>lock icon</strong> next to the address.</p>
-                      <p>2. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
-                      <p>3. Refresh this page.</p>
-                    </>
-                  )}
+      {/* NEW: Added min-h-[450px] and flex centering to stop the page from jumping between states */}
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh] min-h-112.5 flex flex-col justify-center transition-all duration-300">
+        
+        <div className="w-full">
+          {inAppBrowser && (
+            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
+                <div>
+                  <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Open this link in your browser</h4>
+                  <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 leading-relaxed">
+                    You opened this link inside another app. Passkey setup does not work in in-app browsers.
+                    Tap the menu (⋮) and choose <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>.
+                  </p>
                 </div>
-                <button
-                  onClick={() => { setGpsStatus('prompt'); checkPermissionFromGesture(); }}
-                  className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
-                >
-                  I turned it on — check again
-                </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {status === 'idle' && (
-          <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {errorMessage && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 flex items-start gap-2 animate-in fade-in">
-                <CheckCircle size={16} className="text-[#2563EB] dark:text-blue-400 shrink-0 mt-0.5" />
-                <p className="text-blue-800 dark:text-blue-300 font-bold text-sm">{errorMessage}</p>
-              </div>
-            )}
-            <div className="flex items-center bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white dark:focus-within:bg-gray-800 transition-all overflow-hidden">
-              <div className="pl-4 pr-3 flex items-center justify-center text-gray-400 dark:text-gray-500"><User size={18} /></div>
-              <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 dark:text-white font-bold py-4 pr-4 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-sm uppercase" />
-            </div>
-            <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
-              Continue <ArrowRight size={20} className="text-white/70" />
-            </button>
-          </div>
-        )}
-
-        {status === 'needs_setup' && (
-          <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-800"><ShieldCheck size={32} className="text-[#2563EB] dark:text-blue-400" /></div>
-            <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Hardware Setup</h3>
-            <p className="text-gray-600 dark:text-gray-400 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900 dark:text-white">{matricNumber}</span> to prevent proxy attendance.</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Don&apos;t have a screen lock? Your phone will ask you to set a PIN or pattern first. This is a one-time security step.</p>
-            <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
-            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Cancel</button>
-          </div>
-        )}
-
-        {status === 'ready' && (
-          <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="w-16 h-16 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100 dark:border-green-800"><CheckCircle size={32} className="text-green-600 dark:text-green-500" /></div>
-            <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Identity Confirmed</h3>
-            <p className="text-gray-900 dark:text-white font-black text-xl mt-1">{matricNumber}</p>
-            <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
-            <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
-            <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Not you? Switch account</button>
-          </div>
-        )}
-
-        {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
-          <div className="py-8 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-[#2563EB] dark:text-blue-400 animate-spin mb-4" />
-            <p className="text-gray-700 dark:text-gray-300 font-bold text-center">
-              {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Getting your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
-            </p>
-            {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
-              <div className="flex items-center gap-2 mt-3 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800"><Signal size={14} className="text-[#2563EB] dark:text-blue-400" /><span className="text-xs font-bold text-[#2563EB] dark:text-blue-400">±{liveAccuracy}m accuracy</span></div>
-            )}
-          </div>
-        )}
-
-        {status === 'success' && (
-          <div className="py-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <CheckCircle className="w-20 h-20 text-green-500 dark:text-green-400 mx-auto mb-4" />
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Verified!</h3>
-            <p className="text-green-700 dark:text-green-400 font-bold mt-2 bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100 dark:border-green-800">{matricNumber}</p>
-            <p className="text-gray-500 dark:text-gray-400 mt-4 text-sm font-medium">Attendance recorded.</p>
-
-            <div className="mt-8 space-y-3">
-              <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
-                Rate this Lecture
-              </button>
-              <button onClick={() => {
-                safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
-                router.push('/student-hub');
-              }} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
-                Return to Student Hub
-              </button>
-            </div>
-          </div>
-        )}
-
-        {status === 'rating' && (
-          <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors flex flex-col items-center">
-              <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-800">
-                {memeData.meme.iconType === 'zap' && <Zap size={32} className="text-amber-500" />}
-                {memeData.meme.iconType === 'check' && <CheckCircle size={32} className="text-emerald-500" />}
-                {memeData.meme.iconType === 'clock' && <Clock size={32} className="text-blue-500" />}
-                {memeData.meme.iconType === 'alert' && <AlertTriangle size={32} className="text-orange-500" />}
-                {memeData.meme.iconType === 'flame' && <Flame size={32} className="text-red-500" />}
-              </div>
-              <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>
-              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
-              {sessionCreatedAt && (
-                <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
-              )}
-            </div>
-
-            <div className="text-center">
-              <h4 className="font-extrabold text-gray-900 dark:text-white text-lg">How was this lecture?</h4>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
-
-              <div className="flex justify-center gap-2 mt-5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button key={star} onClick={() => setRatingStars(star)} className="transition-transform active:scale-90" aria-label={`Rate ${star} stars`}>
-                    <Star size={36} className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 dark:text-gray-600'} strokeWidth={1.5} />
+          {gpsStatus === 'denied' && (
+            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl animate-in slide-in-from-top-4 transition-colors">
+              <div className="flex items-start gap-3">
+                <MapPin className="text-red-600 dark:text-red-500 shrink-0 mt-0.5" size={20} />
+                <div>
+                  <h4 className="font-bold text-red-900 dark:text-red-400 text-sm">Location is blocked</h4>
+                  <p className="text-xs text-red-700 dark:text-red-300 font-medium mt-1 mb-3">
+                    Your browser is blocking location access. Follow these steps:
+                  </p>
+                  <div className="text-xs text-red-800 dark:text-red-200 space-y-1.5 bg-white/60 dark:bg-gray-900/50 p-3 rounded-lg border border-red-100 dark:border-red-800/50">
+                    {deviceType === 'ios' ? (
+                      <>
+                        <p className="font-bold text-[13px]">On iPhone / Safari:</p>
+                        <p>1. Open iPhone <strong>Settings</strong>.</p>
+                        <p>2. Scroll down and tap <strong>Safari</strong>.</p>
+                        <p>3. Tap <strong>Location</strong> → <strong>Allow</strong>.</p>
+                        <p>4. Return here and tap the button below.</p>
+                      </>
+                    ) : deviceType === 'android' ? (
+                      <>
+                        <p className="font-bold text-[13px]">On Android / Chrome:</p>
+                        <p>1. Tap the <strong>lock icon</strong> next to the address.</p>
+                        <p>2. Tap <strong>Permissions</strong>.</p>
+                        <p>3. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                        <p>4. Refresh this page.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-bold text-[13px]">On your browser:</p>
+                        <p>1. Click the <strong>lock icon</strong> next to the address.</p>
+                        <p>2. Set <strong>Location</strong> to <strong>Allow</strong>.</p>
+                        <p>3. Refresh this page.</p>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setGpsStatus('prompt'); checkPermissionFromGesture(); }}
+                    className="mt-3 w-full bg-red-600 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                  >
+                    I turned it on — check again
                   </button>
-                ))}
+                </div>
               </div>
+            </div>
+          )}
 
-              {ratingStars > 0 && (
-                <div className="flex flex-wrap justify-center gap-2 mt-5 animate-in fade-in duration-300">
-                  {RATING_TAGS.map((tag) => {
-                    const active = ratingTags.includes(tag);
-                    return (
-                      <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}>{tag}</button>
-                    );
-                  })}
+          {status === 'idle' && (
+            <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {errorMessage && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 flex items-start gap-2 animate-in fade-in">
+                  <CheckCircle size={16} className="text-[#2563EB] dark:text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-blue-800 dark:text-blue-300 font-bold text-sm">{errorMessage}</p>
                 </div>
               )}
+              <div className="flex items-center bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-[#2563EB] focus-within:bg-white dark:focus-within:bg-gray-800 transition-all overflow-hidden">
+                <div className="pl-4 pr-3 flex items-center justify-center text-gray-400 dark:text-gray-500"><User size={18} /></div>
+                <input type="text" placeholder="Matric Number (e.g., CSC/2021/001)" value={matricNumber} onChange={(e) => setMatricNumber(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && checkStudentStatus()} className="w-full bg-transparent text-gray-900 dark:text-white font-bold py-4 pr-4 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 text-sm uppercase" />
+              </div>
+              <button onClick={checkStudentStatus} disabled={matricNumber.length < 5} className="w-full flex items-center justify-center gap-2 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50">
+                Continue <ArrowRight size={20} className="text-white/70" />
+              </button>
+            </div>
+          )}
 
-              <div className="flex gap-2 mt-6">
-                <button onClick={() => submitRating(true)} disabled={isSubmittingRating} className="flex-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm disabled:opacity-50">Skip</button>
-                <button onClick={() => submitRating(false)} disabled={isSubmittingRating || ratingStars === 0} className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
+          {status === 'needs_setup' && (
+            <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-800"><ShieldCheck size={32} className="text-[#2563EB] dark:text-blue-400" /></div>
+              <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Hardware Setup</h3>
+              <p className="text-gray-600 dark:text-gray-400 mt-3 text-sm font-medium leading-relaxed">We need to link this phone to <span className="font-bold text-gray-900 dark:text-white">{matricNumber}</span> to prevent proxy attendance.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Don&apos;t have a screen lock? Your phone will ask you to set a PIN or pattern first. This is a one-time security step.</p>
+              <button onClick={registerDevice} className="w-full mt-4 bg-[#2563EB] text-white font-bold text-lg py-4 rounded-xl shadow-md hover:bg-blue-700 active:scale-[0.98] transition-all flex justify-center items-center gap-2">Scan Biometrics</button>
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Cancel</button>
+            </div>
+          )}
+
+          {status === 'ready' && (
+            <div className="space-y-4 text-center animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="w-16 h-16 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100 dark:border-green-800"><CheckCircle size={32} className="text-green-600 dark:text-green-500" /></div>
+              <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight">Identity Confirmed</h3>
+              <p className="text-gray-900 dark:text-white font-black text-xl mt-1">{matricNumber}</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm font-medium leading-relaxed">Your device is linked. Make sure you are inside the lecture hall.</p>
+              <button onClick={executeFinalCheckIn} className="w-full mt-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-lg py-4 rounded-xl shadow-md hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all flex justify-center items-center gap-2"><Navigation size={20} /> Submit Attendance</button>
+              <button onClick={() => { setStatus('idle'); setErrorMessage(''); }} className="w-full text-gray-500 dark:text-gray-400 font-bold py-3 hover:text-gray-800 dark:hover:text-white transition-all text-sm">Not you? Switch account</button>
+            </div>
+          )}
+
+          {(status === 'checking' || status === 'locating' || status === 'verifying' || status === 'syncing') && (
+            <div className="py-8 flex flex-col items-center">
+              <Loader2 className="w-10 h-10 text-[#2563EB] dark:text-blue-400 animate-spin mb-4" />
+              <p className="text-gray-700 dark:text-gray-300 font-bold text-center">
+                {status === 'checking' ? "Verifying ledger..." : status === 'locating' ? "Getting your location..." : status === 'syncing' ? "Syncing offline data..." : "Verifying coordinates..."}
+              </p>
+              {liveAccuracy !== null && (status === 'locating' || status === 'verifying') && (
+                <div className="flex items-center gap-2 mt-3 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800"><Signal size={14} className="text-[#2563EB] dark:text-blue-400" /><span className="text-xs font-bold text-[#2563EB] dark:text-blue-400">±{liveAccuracy}m accuracy</span></div>
+              )}
+            </div>
+          )}
+
+          {status === 'success' && (
+            <div className="py-6 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <CheckCircle className="w-20 h-20 text-green-500 dark:text-green-400 mx-auto mb-4" />
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Verified!</h3>
+              <p className="text-green-700 dark:text-green-400 font-bold mt-2 bg-green-50 dark:bg-green-900/30 px-4 py-2 rounded-xl inline-block uppercase tracking-wider text-sm border border-green-100 dark:border-green-800">{matricNumber}</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-4 text-sm font-medium">Attendance recorded.</p>
+
+              <div className="mt-8 space-y-3">
+                <button onClick={() => setStatus('rating')} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">
+                  Rate this Lecture
+                </button>
+                <button onClick={() => {
+                  safeStorage.setString('campuscheck_portal_unlocked_at', String(Date.now()));
+                  router.push('/student-hub');
+                }} className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold py-3.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
+                  Return to Student Hub
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {status === 'offline-queued' && (
-          <div className="py-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 px-4 text-center transition-colors">
-            <WifiOff className="w-16 h-16 text-[#2563EB] dark:text-blue-400 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-blue-900 dark:text-white">Saved Offline</h3>
-            <p className="text-blue-700 dark:text-blue-300 mt-2 text-sm font-medium leading-relaxed">
-              Your biometric signature was saved. Network dropped, so we couldn&apos;t reach the server. 
-              Keep this tab open — it will auto-submit when the internet returns.
-            </p>
-          </div>
-        )}
+          {status === 'rating' && (
+            <div className="py-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-linear-to-br from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 text-center mb-6 transition-colors flex flex-col items-center">
+                <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-800">
+                  {memeData.meme.iconType === 'zap' && <Zap size={32} className="text-amber-500" />}
+                  {memeData.meme.iconType === 'check' && <CheckCircle size={32} className="text-emerald-500" />}
+                  {memeData.meme.iconType === 'clock' && <Clock size={32} className="text-blue-500" />}
+                  {memeData.meme.iconType === 'alert' && <AlertTriangle size={32} className="text-orange-500" />}
+                  {memeData.meme.iconType === 'flame' && <Flame size={32} className="text-red-500" />}
+                </div>
+                <h3 className="text-xl font-extrabold text-blue-900 dark:text-white">{memeData.meme.title}</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-300 font-medium mt-1">{memeData.meme.sub}</p>
+                {sessionCreatedAt && (
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-3">{memeData.minutesLate === 0 ? "Right on time" : `${memeData.minutesLate} min after start`}</p>
+                )}
+              </div>
 
-        {status === 'failed' && !currentFlagCode && (
-          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Check-In Failed</h3>
-            <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
-              {errorMessage || "An unexpected error occurred."}
-            </p>
-            <div className="mt-6 space-y-3">
-              <button onClick={() => { setStatus('idle'); setErrorMessage(''); setMatricNumber(''); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Start Over</button>
-            </div>
-          </div>
-        )}
+              <div className="text-center">
+                <h4 className="font-extrabold text-gray-900 dark:text-white text-lg">How was this lecture?</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-1">Anonymous • 5 seconds • Helps faculty improve</p>
 
-        {(status === 'failed' || status === 'disqualified') && currentFlagCode && (
-          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
-              <AlertTriangle size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              {(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
-            </h3>
-            <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
-              {FLAG_REASONS[currentFlagCode]?.messageStudent || "An unknown error occurred."}
-            </p>
-            <div className="mt-6 space-y-3">
-              {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'retry' && (
-                <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
-              )}
-              {(FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' || FLAG_REASONS[currentFlagCode]?.suggestedAction === 'ask_rep') && (
-                <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
-                  {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
-                </button>
-              )}
-              {FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
-                <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">Start Over</button>
-              )}
-            </div>
-          </div>
-        )}
+                <div className="flex justify-center gap-2 mt-5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button key={star} onClick={() => setRatingStars(star)} className="transition-transform active:scale-90" aria-label={`Rate ${star} stars`}>
+                      <Star size={36} className={star <= ratingStars ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300 dark:text-gray-600'} strokeWidth={1.5} />
+                    </button>
+                  ))}
+                </div>
 
-        {status === 'denied' && (
-          <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Location Blocked</h3>
-            <p className="text-red-600 dark:text-red-400 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
-            <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all">I turned it on — try again</button>
-            <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Go Back</button>
-          </div>
-        )}
+                {ratingStars > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 mt-5 animate-in fade-in duration-300">
+                    {RATING_TAGS.map((tag) => {
+                      const active = ratingTags.includes(tag);
+                      return (
+                        <button key={tag} onClick={() => toggleTag(tag)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${active ? 'bg-[#2563EB] text-white border-[#2563EB]' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}>{tag}</button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-6">
+                  <button onClick={() => submitRating(true)} disabled={isSubmittingRating} className="flex-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all text-sm disabled:opacity-50">Skip</button>
+                  <button onClick={() => submitRating(false)} disabled={isSubmittingRating || ratingStars === 0} className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                    {isSubmittingRating ? <Loader2 size={16} className="animate-spin" /> : 'Submit & View Shield'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {status === 'offline-queued' && (
+            <div className="py-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 px-4 text-center transition-colors">
+              <WifiOff className="w-16 h-16 text-[#2563EB] dark:text-blue-400 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-blue-900 dark:text-white">Saved Offline</h3>
+              <p className="text-blue-700 dark:text-blue-300 mt-2 text-sm font-medium leading-relaxed">
+                Your biometric signature was saved. Network dropped, so we couldn&apos;t reach the server. 
+                Keep this tab open — it will auto-submit when the internet returns.
+              </p>
+            </div>
+          )}
+
+          {status === 'failed' && !currentFlagCode && (
+            <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Check-In Failed</h3>
+              <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
+                {errorMessage || "An unexpected error occurred."}
+              </p>
+              <div className="mt-6 space-y-3">
+                <button onClick={() => { setStatus('idle'); setErrorMessage(''); setMatricNumber(''); }} className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-md">Start Over</button>
+              </div>
+            </div>
+          )}
+
+          {(status === 'failed' || status === 'disqualified') && currentFlagCode && (
+            <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'}`}>
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                {(FLAG_REASONS[currentFlagCode]?.severity || 'error') === 'error' ? 'Attempt Blocked' : 'Verification Failed'}
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 mt-2 text-sm font-bold bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 transition-colors">
+                {FLAG_REASONS[currentFlagCode]?.messageStudent || "An unknown error occurred."}
+              </p>
+              <div className="mt-6 space-y-3">
+                {FLAG_REASONS[currentFlagCode]?.suggestedAction === 'retry' && (
+                  <button onClick={executeFinalCheckIn} className="w-full flex justify-center items-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 active:scale-[0.98] transition-all shadow-md"><RefreshCw size={18} /> Try Again</button>
+                )}
+                {(FLAG_REASONS[currentFlagCode]?.suggestedAction === 'see_lecturer' || FLAG_REASONS[currentFlagCode]?.suggestedAction === 'ask_rep') && (
+                  <button onClick={requestAppeal} disabled={isAppealing} className="w-full flex justify-center items-center gap-2 bg-orange-50 dark:bg-orange-900/20 text-orange-800 dark:text-orange-300 font-bold py-3.5 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/40 disabled:opacity-50 transition-all border border-orange-100 dark:border-orange-800">
+                    {isAppealing ? <Loader2 size={18} className="animate-spin" /> : <Hand size={18} />} Raise Hand (I am in the hall)
+                  </button>
+                )}
+                {FLAG_REASONS[currentFlagCode]?.suggestedAction !== 'none' && (
+                  <button onClick={() => { setStatus('idle'); setErrorMessage(''); setCurrentFlagCode(null); }} className="w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">Start Over</button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {status === 'denied' && (
+            <div className="py-4 text-center animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Location Blocked</h3>
+              <p className="text-red-600 dark:text-red-400 mt-2 text-sm font-medium">Allow location access for this site, then try again.</p>
+              <button onClick={() => { checkPermissionFromGesture(); setStatus('idle'); }} className="mt-6 w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl hover:bg-gray-800 dark:hover:bg-gray-100 transition-all">I turned it on — try again</button>
+              <button onClick={() => setStatus('idle')} className="mt-3 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Go Back</button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 text-center space-y-4">

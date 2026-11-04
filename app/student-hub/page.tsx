@@ -41,7 +41,6 @@ interface LogRow { session_id: string; status: string; }
 interface SessionRow { session_id: string; course_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
 interface HistoryRow extends SessionRow { status: string; }
 
-const POLL_INTERVAL_MS = 15000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
@@ -117,7 +116,6 @@ export default function StudentPortal() {
 
     const courseIds = enrollmentRows.map(e => e.course_id);
 
-    // Fetch feed filtered by course_id
     const { data: feedData } = await supabase
       .from('campus_updates')
       .select('*')
@@ -195,7 +193,6 @@ export default function StudentPortal() {
     });
     setHistory(historyData);
 
-    // Group by UNIQUE course_id
     const courseStats = new Map<string, { id: string; course_code: string; total_held: number; total_planned: number; attended: number; sessions: SessionRow[]; is_finalized: boolean; max_score: number }>();
     
     courseRows?.forEach(c => {
@@ -322,32 +319,27 @@ export default function StudentPortal() {
     return () => clearTimeout(id);
   }, []);
 
+  // Realtime Listener for Session Status
   useEffect(() => {
     if (!activeLiveSession) return;
 
-    const checkSessionStatus = async () => {
-      const { data, error } = await supabase
-        .from('lecture_sessions')
-        .select('is_active, expires_at')
-        .eq('session_id', activeLiveSession.sessionId)
-        .single();
-
-      if (error || !data) {
-        setActiveLiveSession(null);
-        return;
-      }
-
-      const isExpired = data.expires_at && new Date(data.expires_at).getTime() < Date.now();
-      if (!data.is_active || isExpired) {
-        setActiveLiveSession(null);
-        if (matricNumber) {
-          fetchStudentData(matricNumber.toUpperCase().trim());
+    const channel = supabase
+      .channel(`live_session_${activeLiveSession.sessionId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'lecture_sessions', filter: `session_id=eq.${activeLiveSession.sessionId}` },
+        (payload) => {
+          if (payload.new.is_active === false) {
+            setActiveLiveSession(null);
+            if (matricNumber) fetchStudentData(matricNumber.toUpperCase().trim());
+          }
         }
-      }
-    };
+      )
+      .subscribe();
 
-    const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [activeLiveSession, matricNumber, fetchStudentData]);
 
   useEffect(() => {
@@ -697,7 +689,8 @@ export default function StudentPortal() {
           )
         )}
 
-        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 animate-in fade-in slide-in-from-bottom-6 transition-colors duration-300">
+        {/* NEW: Added min-h-[600px] to prevent layout shift when locking/unlocking */}
+        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 min-h-150 transition-all duration-300">
           
           {!records && renderUnlockForm()}
 
@@ -796,7 +789,7 @@ export default function StudentPortal() {
 
         <div className="mt-8 text-center animate-in fade-in pb-8 space-y-3">
           <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <ArrowLeft size={16} /> Back to Home
+            <ArrowLeft size={16} /> Back to Hub
           </Link>
           <div className="flex justify-center items-center gap-3 text-xs font-bold text-gray-400 dark:text-gray-500">
             <Link href="/guide" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">User Guide</Link>
