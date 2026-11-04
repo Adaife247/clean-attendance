@@ -125,11 +125,11 @@ function CheckInWrapper() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Vulnerabilities Card */}
+            {/* The Old Way Card */}
             <div className="bg-white dark:bg-gray-900 p-8 rounded-3xl border border-red-100 dark:border-red-900/30 relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/10 rounded-bl-full pointer-events-none"></div>
               <h3 className="relative z-10 text-xl font-black text-red-600 dark:text-red-400 mb-6 flex items-center gap-2 leading-tight">
-                <XCircle size={24} className="shrink-0" /> The Vulnerabilities
+                <XCircle size={24} className="shrink-0" /> The Old Way
               </h3>
               <ul className="relative z-10 space-y-4">
                 {[
@@ -364,10 +364,7 @@ function CheckInWrapper() {
           <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium text-sm">Secure Student Check-In</p>
         </div>
 
-        {/* NEW: Fixed height wrapper to stop page from shaking */}
-        <div className="h-137.5 w-full">
-          <StudentCheckInComponent sessionId={sessionId} />
-        </div>
+        <StudentCheckInComponent sessionId={sessionId} />
 
       </div>
     </div>
