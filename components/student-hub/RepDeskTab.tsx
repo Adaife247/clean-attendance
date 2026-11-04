@@ -32,7 +32,6 @@ export default function RepDeskTab({
 
   const confirm = useConfirmModal();
 
-  // Sync the default selected course if records load after mount
   useEffect(() => {
     if (records.length > 0 && !repCourseId) {
       const id = setTimeout(() => setRepCourseId(records[0].id), 0);
@@ -83,6 +82,8 @@ export default function RepDeskTab({
     setIsUploadingList(true);
 
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isWord = file.name.endsWith('.docx');
+    const isPdf = file.name.endsWith('.pdf');
     const reader = new FileReader();
 
     reader.onload = async (event) => {
@@ -102,6 +103,30 @@ export default function RepDeskTab({
               }
             });
           });
+        } else if (isWord) {
+          const mammoth = await import('mammoth');
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          const words = result.value.split(/[\s,]+/);
+          rawMatrics = words.map(w => w.trim().toUpperCase()).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
+        } else if (isPdf) {
+          const pdfjs = await import('pdfjs-dist');
+          pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+          
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+          let fullText = '';
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            fullText += pageText + '\n';
+          }
+          
+          const words = fullText.split(/[\s,]+/);
+          rawMatrics = words.map(w => w.trim().toUpperCase()).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
         } else {
           const csvText = event.target?.result as string;
           rawMatrics = csvText
@@ -112,7 +137,7 @@ export default function RepDeskTab({
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
         if (uniqueMatrics.length === 0) {
-          addToast('Invalid file', 'No valid matric numbers found.', 'error');
+          addToast('Invalid file', 'No valid matric numbers found. If this is a scanned PDF, please use an Excel or CSV file.', 'error');
           setIsUploadingList(false);
           e.target.value = '';
           return;
@@ -134,14 +159,14 @@ export default function RepDeskTab({
           addToast('Upload failed', error.message, 'error');
         }
       } catch {
-        addToast('File read error', 'Failed to read file. Ensure it is a valid CSV or Excel file.', 'error');
+        addToast('File read error', 'Failed to read file. Make sure it is a valid CSV, Excel, Word, or Text-based PDF.', 'error');
       } finally {
         setIsUploadingList(false);
         e.target.value = '';
       }
     };
 
-    if (isExcel) reader.readAsArrayBuffer(file);
+    if (isExcel || isWord || isPdf) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
   };
 
@@ -162,39 +187,65 @@ export default function RepDeskTab({
         setIsStartingRepSession(true);
         setRepSessionError('');
 
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            try {
-              const res = await fetch('/api/create-session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  courseId: repCourseId,
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude,
-                  duration: 60,
-                  checkinOpensAfter: 0,
-                  startedBy: 'Class Rep',
-                  repMatric: matricNumber,
-                }),
-              });
+        // More forgiving GPS logic (takes up to 15s, accepts whatever it gets)
+        let watchId = 0;
+        let finished = false;
 
-              const data = await res.json();
-              if (!res.ok) throw new Error(data.error || 'Failed to start session');
+        const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
 
-              addToast('Backup session started', 'Students can now check in.', 'success');
-              onRefresh();
-            } catch (err) {
-              setRepSessionError(err instanceof Error ? err.message : 'Failed to start session.');
-            } finally {
-              setIsStartingRepSession(false);
-            }
+        const createSession = async (lat: number, lng: number) => {
+          try {
+            const res = await fetch('/api/create-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                courseId: repCourseId,
+                latitude: lat,
+                longitude: lng,
+                duration: 60,
+                checkinOpensAfter: 0,
+                startedBy: 'Class Rep',
+                repMatric: matricNumber,
+              }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to start session');
+
+            addToast('Backup session started', 'Students can now check in.', 'success');
+            onRefresh();
+          } catch (err) {
+            setRepSessionError(err instanceof Error ? err.message : 'Failed to start session.');
+          } finally {
+            setIsStartingRepSession(false);
+          }
+        };
+
+        const timeoutId = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          setRepSessionError('Could not lock onto GPS. Step outside or near a window and try again.');
+          setIsStartingRepSession(false);
+        }, 15000);
+
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeoutId);
+            cleanup();
+            createSession(position.coords.latitude, position.coords.longitude);
           },
-          () => {
-            setRepSessionError('Could not get GPS. Ensure location is on.');
+          (error) => {
+            clearTimeout(timeoutId);
+            if (finished) return;
+            finished = true;
+            cleanup();
+            setRepSessionError(error.code === 1 ? 'Location permission denied.' : 'GPS signal lost. Try again.');
             setIsStartingRepSession(false);
           },
-          { enableHighAccuracy: true, timeout: 15000 }
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 }
         );
       },
       { isDangerous: false, confirmLabel: 'Start Session' }
@@ -226,10 +277,10 @@ export default function RepDeskTab({
 
         <label className="cursor-pointer flex items-center justify-center gap-2 w-full py-3 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-700 rounded-xl font-bold text-sm text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-gray-700 transition-all shadow-sm">
           {isUploadingList ? <Clock size={18} className="animate-spin" /> : <FileText size={18} />}
-          {isUploadingList ? 'Uploading...' : 'Select CSV / Excel File'}
+          {isUploadingList ? 'Uploading...' : 'Select CSV / Excel / Word / PDF'}
           <input
             type="file"
-            accept=".csv, .xlsx, .xls"
+            accept=".csv, .xlsx, .xls, .docx, .pdf"
             className="hidden"
             onChange={handleRepUpload}
             disabled={isUploadingList}

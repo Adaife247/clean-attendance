@@ -43,11 +43,14 @@ export async function POST(request: Request) {
     }
 
     if (isRepStarting) {
+      // CLEAN the matric number before checking
+      const cleanRepMatric = String(body.repMatric || '').toUpperCase().trim();
+      
       const { data: rep } = await supabase
         .from('course_reps')
         .select('id')
         .eq('course_id', course.id)
-        .eq('matric_number', body.repMatric)
+        .eq('matric_number', cleanRepMatric)
         .maybeSingle();
 
       if (!rep) {
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
     const parsedDuration = parseInt(body.duration);
     const durationMinutes = Number.isFinite(parsedDuration) ? Math.min(Math.max(parsedDuration, 5), 120) : 60;
     const parsedWait = parseInt(body.checkinOpensAfter);
-    const checkinOpensAfterMinutes = Number.isFinite(parsedWait) ? Math.min(Math.max(parsedWait, 0), 60) : 10;
+    const checkinOpensAfterMinutes = Number.isFinite(parsedWait) ? Math.min(Math.max(parsedWait, 0), 60) : 0;
 
     const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
 
