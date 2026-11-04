@@ -16,6 +16,9 @@ import { logger } from '@/utils/logger';
 import { FLAG_REASONS, type FlagCode } from '@/utils/flag-reasons';
 import { GeoTrustInWeb } from '@geotrustin/web';
 
+// NEW: Import Toast components
+import { ToastContainer, useToast } from '@/components/Toast';
+
 // --- INTERFACES ---
 interface Telemetry { lat: number; lng: number; alt: number | null; acc: number; timestamp: number; spd?: number | null; hdg?: number | null; }
 interface Props { sessionId: string; }
@@ -50,6 +53,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // NEW: Toast hook
+  const { toasts, addToast, removeToast } = useToast();
+
   // --- STATE ---
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -78,7 +84,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const motionBufferRef = useRef<{ x: number; y: number; z: number; t: number }[]>([]);
 
   // --- EFFECTS ---
-  // 1. Initialize matric number and device type
   useEffect(() => {
     const id = setTimeout(() => {
       const urlMatric = searchParams.get('matric');
@@ -96,7 +101,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => clearTimeout(id);
   }, [searchParams]);
 
-  // 2. Geolocation Permissions Listener
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.permissions) return;
     let permissionStatus: PermissionStatus | null = null;
@@ -114,7 +118,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { if (permissionStatus) permissionStatus.onchange = null; };
   }, []);
 
-  // 3. Motion Sensor Listener (Anti-Spoofing)
   useEffect(() => {
     if (typeof window === 'undefined' || !window.DeviceMotionEvent) return;
     const handleMotion = (event: DeviceMotionEvent) => {
@@ -128,7 +131,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => window.removeEventListener('devicemotion', handleMotion);
   }, []);
 
-  // 4. GPS Pre-warming (Collects pings in background before they click "Submit")
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     if (gpsStatus !== 'granted') return;
@@ -149,7 +151,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { if (prewarmWatchIdRef.current !== null) navigator.geolocation.clearWatch(prewarmWatchIdRef.current); };
   }, [gpsStatus]);
 
-  // 5. Hardware Fingerprint Generation
   useEffect(() => {
     let cancelled = false;
     const id = setTimeout(async () => {
@@ -164,7 +165,6 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => { cancelled = true; clearTimeout(id); };
   }, []);
 
-  // 6. Fetch Session Metadata (for the meme)
   useEffect(() => {
     let cancelled = false;
     const fetchMeta = async () => {
@@ -198,7 +198,10 @@ export default function StudentCheckIn({ sessionId }: Props) {
   const syncOfflineQueue = useCallback(async () => {
     const queue = safeStorage.getJSON<OfflineQueueItem[]>(STORAGE_KEYS.offlineQueue) || [];
     if (queue.length === 0) return;
+    
     setStatus('syncing');
+    addToast('Connection Restored', 'Syncing your saved offline check-in...', 'info');
+
     const remainingQueue: OfflineQueueItem[] = [];
     let successCount = 0;
 
@@ -231,14 +234,18 @@ export default function StudentCheckIn({ sessionId }: Props) {
         remainingQueue.push(item); 
       }
     }
+    
     safeStorage.setJSON(STORAGE_KEYS.offlineQueue, remainingQueue);
+    
     if (successCount > 0 && remainingQueue.length === 0) {
       triggerSuccessVibration();
       setStatus('success');
+      addToast('Sync Complete', 'Your offline attendance has been verified!', 'success');
     } else if (remainingQueue.length > 0) {
       setStatus('offline-queued');
+      addToast('Sync Delayed', 'Network still unstable. Check-in remains saved.', 'error');
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     window.addEventListener('online', syncOfflineQueue);
@@ -538,6 +545,9 @@ export default function StudentCheckIn({ sessionId }: Props) {
 
   return (
     <div className="w-full">
+      {/* NEW: The Toast Container is rendered here, so toasts slide in on this page */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
       <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative overflow-y-auto max-h-[85vh] transition-colors duration-300">
 
         {inAppBrowser && (
