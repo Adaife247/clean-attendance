@@ -4,30 +4,27 @@ import { verifyLecturer } from '@/utils/api-auth';
 
 export async function GET(request: Request) {
   try {
-    // NEW: Require auth
     const auth = await verifyLecturer(request);
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
-    const courseCode = searchParams.get('courseCode');
+    const courseId = searchParams.get('courseId');
 
-    if (!courseCode) return NextResponse.json({ message: "Missing course code" }, { status: 400 });
+    if (!courseId) return NextResponse.json({ message: "Missing course ID" }, { status: 400 });
 
-    // NEW: Verify the lecturer owns this course
     const { data: course } = await supabase
       .from('courses')
       .select('id')
-      .eq('course_code', courseCode)
+      .eq('id', courseId)
       .eq('lecturer_id', auth.user.id)
-      .single();
+      .maybeSingle();
 
     if (!course) return NextResponse.json({ message: "Course not found or unauthorized" }, { status: 403 });
 
-    // 1. Get all past sessions for this course
     const { data: sessions, error } = await supabase
       .from('lecture_sessions')
       .select('session_id, created_at, course_code')
-      .eq('course_code', courseCode)
+      .eq('course_id', course.id)
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ message: "Database error" }, { status: 500 });
@@ -35,13 +32,11 @@ export async function GET(request: Request) {
 
     const sessionIds = sessions.map(s => s.session_id);
 
-    // 2. Get all attendance logs for these sessions to count them
     const { data: logs } = await supabase
       .from('attendance_logs')
       .select('session_id, status')
       .in('session_id', sessionIds);
 
-    // 3. Calculate counts per session
     const historyData = sessions.map(session => {
       const sessionLogs = logs?.filter(l => l.session_id === session.session_id) || [];
       const verified = sessionLogs.filter(l => l.status === 'verified').length;

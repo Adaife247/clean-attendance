@@ -53,7 +53,6 @@ export default function LecturerDashboard() {
   const [sessionDuration, setSessionDuration] = useState<number>(60);
   const [checkinOpensAfter, setCheckinOpensAfter] = useState<number>(10);
   
-  // NEW: Countdown timer state
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   const [manualMatric, setManualMatric] = useState('');
@@ -69,7 +68,6 @@ export default function LecturerDashboard() {
   const [pastSessionLogs, setPastSessionLogs] = useState<Log[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Network monitoring state
   const [isOnline, setIsOnline] = useState(true);
   const [isSlowNetwork, setIsSlowNetwork] = useState(false);
 
@@ -87,7 +85,6 @@ export default function LecturerDashboard() {
     };
   };
 
-  // Monitor network status and latency
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -140,7 +137,7 @@ export default function LecturerDashboard() {
       if (profileData) setProfile({ full_name: profileData.full_name, department: profileData.department });
 
       const { data: courseData } = await supabase.from('courses').select('id, course_code, department, level').eq('lecturer_id', session.user.id).order('created_at', { ascending: false });
-            if (courseData) {
+      if (courseData) {
         setCourses(courseData);
         if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
       }
@@ -196,8 +193,6 @@ export default function LecturerDashboard() {
     return () => clearInterval(intervalId);
   }, [activeSessionId, clearStaleSession]);
 
-  // NEW: Live countdown timer for the active session
-    // NEW: Live countdown timer for the active session
   useEffect(() => {
     if (!activeSessionId) {
       const id = setTimeout(() => setTimeLeft(null), 0);
@@ -219,13 +214,14 @@ export default function LecturerDashboard() {
     };
 
     const initialFetchId = setTimeout(() => { fetchExpiry(); }, 0);
-    const interval = setInterval(fetchExpiry, 10000); // Update every 10 seconds
+    const interval = setInterval(fetchExpiry, 10000);
     
     return () => {
       clearTimeout(initialFetchId);
       clearInterval(interval);
     };
   }, [activeSessionId]);
+
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) return;
     const id = navigator.geolocation.watchPosition(
@@ -242,7 +238,7 @@ export default function LecturerDashboard() {
     if (!course) return;
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/attendance-history?courseCode=${course.course_code}`, { headers });
+      const response = await fetch(`/api/attendance-history?courseId=${course.id}`, { headers });
       if (response.ok) setPastSessions(await response.json());
       else if (response.status === 401) router.push('/login');
     } catch { 
@@ -270,7 +266,8 @@ export default function LecturerDashboard() {
         const response = await fetch('/api/create-session', {
           method: 'POST', 
           headers,
-                  body: JSON.stringify({ courseId: selectedCourseId, courseCode: courses.find(c => c.id === selectedCourseId)?.course_code, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })        });
+          body: JSON.stringify({ courseId: selectedCourseId, latitude: lat, longitude: lng, duration: sessionDuration, checkinOpensAfter, startedBy: 'lecturer' })
+        });
         if (response.ok) {
           const result = await response.json();
           localStorage.setItem(ACTIVE_SESSION_KEY, result.sessionId);
@@ -280,7 +277,8 @@ export default function LecturerDashboard() {
         } else if (response.status === 401) {
           router.push('/login');
         } else { 
-          setSetupError("Failed to create session on server."); 
+          const errData = await response.json().catch(() => ({}));
+          setSetupError(errData.error || "Failed to create session on server."); 
         }
       } catch { 
         setSetupError("Network error. Please try again."); 
@@ -308,73 +306,55 @@ export default function LecturerDashboard() {
       return;
     }
 
-    setSetupError("Getting a stable GPS fix...");
+    setSetupError("Getting GPS fix (this takes ~10s)...");
     const readings: { lat: number; lng: number; acc: number }[] = [];
     let watchId = 0;
     let finished = false;
 
     const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
 
-    const finish = (lat: number, lng: number) => {
+    const finish = () => {
       if (finished) return;
       finished = true;
       cleanup();
-      executeSessionCreation(lat, lng);
-    };
-
-    const fail = (msg: string) => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      setSetupError(msg);
-      setIsStarting(false);
-    };
-
-    const timeoutId = setTimeout(() => {
-      if (finished) return;
-      if (readings.length >= 3) {
-        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
-        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
-        finish(lat, lng);
+      
+      if (readings.length > 0) {
+        const best = readings[readings.length - 1];
+        executeSessionCreation(best.lat, best.lng);
       } else {
-        fail("Couldn't get a stable GPS fix. Move near a window or outdoors, then try again.");
+        setSetupError("Could not get any GPS signal. Ensure location is turned on, step outside briefly, and try again.");
+        setIsStarting(false);
       }
-    }, 25000);
+    };
+
+    const timeoutId = setTimeout(finish, 12000);
 
     watchId = navigator.geolocation.watchPosition(
       (position) => {
         if (finished) return;
-        const acc = position.coords.accuracy;
-        if (acc > 50) {
-          setSetupError(`GPS accuracy is ±${Math.round(acc)}m — too weak. Move near a window.`);
-          return;
-        }
-        readings.push({ lat: position.coords.latitude, lng: position.coords.longitude, acc });
-
-        if (readings.length >= 3) {
-          const latSpread = Math.max(...readings.map(r => r.lat)) - Math.min(...readings.map(r => r.lat));
-          const lngSpread = Math.max(...readings.map(r => r.lng)) - Math.min(...readings.map(r => r.lng));
-          if (latSpread < 0.0003 && lngSpread < 0.0003) {
-            clearTimeout(timeoutId);
-            const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
-            const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
-            finish(lat, lng);
-            return;
-          }
-          readings.shift();
-          setSetupError(`GPS is still settling (±${Math.round(acc)}m)...`);
-        } else {
-          setSetupError(`Stabilizing GPS fix (${readings.length}/3, ±${Math.round(acc)}m)...`);
+        readings.push({ 
+          lat: position.coords.latitude, 
+          lng: position.coords.longitude, 
+          acc: position.coords.accuracy 
+        });
+        
+        setSetupError(`GPS detected (±${Math.round(position.coords.accuracy)}m). Preparing class...`);
+        
+        if (position.coords.accuracy < 30) {
+          clearTimeout(timeoutId);
+          finish();
         }
       },
       (error) => {
         clearTimeout(timeoutId);
-        if (error.code === 1) fail("Permission Denied: tap 'Allow' for location and try again.");
-        else if (error.code === 2) fail("Signal lost. Turn your phone's GPS/Location off and back on, then retry.");
-        else if (error.code === 3) fail("GPS timed out. Move near a window and try again.");
-        else fail("Could not access GPS.");
+        if (finished) return;
+        finished = true;
+        cleanup();
+        if (error.code === 1) setSetupError("Permission Denied: tap 'Allow' for location and try again.");
+        else setSetupError("GPS timed out. Try again.");
+        setIsStarting(false);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   };
 
@@ -671,12 +651,12 @@ export default function LecturerDashboard() {
               ) : (
                 <div className="relative mb-4 mt-6">
                   <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold text-xl py-4 pl-4 pr-10 rounded-2xl outline-none focus:ring-2 focus:ring-[#2563EB] transition-all appearance-none cursor-pointer">
-  {courses.map(course => (
-    <option key={course.id} value={course.id}>
-      {course.course_code} {course.department ? `(${course.department})` : ''}
-    </option>
-  ))}
-</select>
+                    {courses.map(course => (
+                      <option key={course.id} value={course.id}>
+                        {course.course_code} {course.department ? `(${course.department})` : ''}
+                      </option>
+                    ))}
+                  </select>
                   <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-500 dark:text-gray-400"><ChevronDown size={24} strokeWidth={2.5} /></div>
                 </div>
               )}
@@ -820,14 +800,12 @@ export default function LecturerDashboard() {
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Live Attendance</h1>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {/* NEW: Live Ripple Animation */}
                 <span className="relative flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
                 <span className="text-gray-500 dark:text-gray-400 font-bold text-lg">{data?.course || 'Loading...'}</span>
 
-                {/* NEW: Countdown Timer */}
                 {timeLeft && (
                   <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md border ml-2 ${timeLeft === 'Expired' ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'}`}>
                     <Clock size={12} /> {timeLeft === 'Expired' ? 'Session Ended' : `Ends in ${timeLeft}`}

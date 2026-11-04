@@ -1,6 +1,4 @@
 // ─── types/db.ts ───
-// Hand-written Supabase schema types.
-
 export interface Course {
   id: string;
   lecturer_id: string;
@@ -83,6 +81,7 @@ export interface CampusUpdate {
   title: string;
   content: string;
   author: string;
+  course_id: string; // ADDED
   course_code: string | null;
   link_url: string | null;
   expires_at: string | null;

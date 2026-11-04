@@ -175,8 +175,7 @@ export async function POST(request: Request) {
 
     const { data: session, error: sessionError } = await supabase
       .from('lecture_sessions')
-      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes')
-      .eq('session_id', sessionId)
+      .select('anchor_latitude, anchor_longitude, is_active, course_code, expires_at, created_at, checkin_opens_after_minutes, course_id')      .eq('session_id', sessionId)
       .single();
 
     if (sessionError || !session) {
@@ -211,8 +210,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: courseRow } = await supabase.from('courses').select('id').eq('course_code', session.course_code).limit(1).maybeSingle();
-    if (!courseRow) {
+        if (!session.course_id) {
+        return NextResponse.json({ status: 'failed', message: "Legacy session. Ask lecturer to start a new one." }, { status: 500 });
+    }
+    const { data: courseRow } = await supabase.from('courses').select('id').eq('id', session.course_id).maybeSingle();    if (!courseRow) {
       return NextResponse.json({ status: 'failed', message: "Course configuration error. Contact your lecturer." }, { status: 500 });
     }
 

@@ -13,23 +13,21 @@ if (publicVapidKey && privateVapidKey) {
 
 export async function POST(request: Request) {
   try {
-    // Require lecturer auth
     const auth = await verifyLecturer(request);
     if (auth.error) return auth.error;
 
-    const { title, content, author, course_code, link_url, expires_at } = await request.json();
+    const { title, content, author, courseId, link_url, expires_at } = await request.json();
 
-    if (!title || !content || !course_code) {
-      return NextResponse.json({ error: 'Title, content, and course_code are required' }, { status: 400 });
+    if (!title || !content || !courseId) {
+      return NextResponse.json({ error: 'Title, content, and courseId are required' }, { status: 400 });
     }
 
-    // Verify the lecturer owns this course
     const { data: course } = await supabase
       .from('courses')
-      .select('id')
-      .eq('course_code', course_code)
+      .select('id, course_code')
+      .eq('id', courseId)
       .eq('lecturer_id', auth.user.id)
-      .single();
+      .maybeSingle();
 
     if (!course) {
       return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
@@ -39,7 +37,8 @@ export async function POST(request: Request) {
       title,
       content,
       author: author || 'Lecturer',
-      course_code,
+      course_id: course.id, // ADDED
+      course_code: course.course_code,
       link_url: link_url || null,
       expires_at: expires_at || null
     }]);
@@ -52,15 +51,11 @@ export async function POST(request: Request) {
 
       if (enrollments && enrollments.length > 0) {
         const matrics = enrollments.map(e => e.matric_number);
-
-        const { data: subscriptions } = await supabase
-          .from('push_subscriptions')
-          .select('subscription')
-          .in('matric_number', matrics);
+        const { data: subscriptions } = await supabase.from('push_subscriptions').select('subscription').in('matric_number', matrics);
 
         if (subscriptions && subscriptions.length > 0) {
           const payload = JSON.stringify({
-            title: `📢 ${course_code} Announcement`,
+            title: `📢 ${course.course_code} Announcement`,
             body: title,
             url: '/student-hub'
           });
@@ -72,7 +67,6 @@ export async function POST(request: Request) {
               }
             })
           );
-
           await Promise.all(pushPromises);
         }
       }

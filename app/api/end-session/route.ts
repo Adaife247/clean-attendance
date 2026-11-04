@@ -10,21 +10,21 @@ export async function POST(request: Request) {
     const { sessionId } = await request.json();
     if (!sessionId) return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
 
-    // Verify ownership
+    // Verify ownership using course_id directly from the session
     const { data: session } = await supabase
       .from('lecture_sessions')
-      .select('course_code')
+      .select('course_id')
       .eq('session_id', sessionId)
-      .single();
+      .maybeSingle();
 
-    if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    if (!session || !session.course_id) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
     const { data: course } = await supabase
       .from('courses')
       .select('id')
-      .eq('course_code', session.course_code)
+      .eq('id', session.course_id)
       .eq('lecturer_id', auth.user.id)
-      .single();
+      .maybeSingle();
 
     if (!course) return NextResponse.json({ error: 'Unauthorized to end this session' }, { status: 403 });
 

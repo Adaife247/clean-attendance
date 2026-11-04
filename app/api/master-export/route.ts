@@ -4,9 +4,7 @@ import { verifyLecturer } from '@/utils/api-auth';
 
 function sanitizeCSV(val: string | number) {
   const str = String(val);
-  if (/^[=+\-@]/.test(str)) {
-    return `'${str}`;
-  }
+  if (/^[=+\-@]/.test(str)) return `'${str}`;
   return str;
 }
 
@@ -16,28 +14,28 @@ export async function GET(request: Request) {
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(request.url);
-    const courseCode = searchParams.get('courseCode');
+    const courseId = searchParams.get('courseId'); // CHANGED from courseCode
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    if (!courseCode) return NextResponse.json({ error: "Missing course code" }, { status: 400 });
+    if (!courseId) return NextResponse.json({ error: "Missing course ID" }, { status: 400 });
 
     const { data: courseData } = await supabase
       .from('courses')
-      .select('id, total_planned_classes, max_attendance_score, is_finalized')
-      .eq('course_code', courseCode)
+      .select('id, course_code, total_planned_classes, max_attendance_score, is_finalized')
+      .eq('id', courseId)
       .eq('lecturer_id', auth.user.id)
-      .single();
+      .maybeSingle();
 
     if (!courseData) {
       return NextResponse.json({ error: "Course not found or unauthorized" }, { status: 404 });
     }
 
-    // 1. Get sessions in range
+    // 1. Get sessions in range by COURSE ID
     let sessionQuery = supabase
       .from('lecture_sessions')
       .select('session_id')
-      .eq('course_code', courseCode);
+      .eq('course_id', courseId);
 
     if (startDate) sessionQuery = sessionQuery.gte('created_at', new Date(startDate).toISOString());
     if (endDate) {
@@ -54,21 +52,17 @@ export async function GET(request: Request) {
     const sessionIds = sessions.map(s => s.session_id);
     const totalClassesHeld = sessions.length;
 
-    // 2. Get the roster (small — one row per student)
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('matric_number')
       .eq('course_id', courseData.id);
     const roster = enrollments?.map(e => e.matric_number) || [];
 
-    // 3. NEW: Get pre-aggregated counts from the SQL view
-    // Instead of fetching 40,000 log rows, we fetch at most 2,000 rows
     const { data: counts } = await supabase
       .from('session_attendance_counts')
       .select('matric_number, verified_count')
       .in('session_id', sessionIds);
 
-    // 4. Sum per-student totals
     const attendanceMap = new Map<string, number>();
     roster.forEach(matric => attendanceMap.set(matric, 0));
 
@@ -91,7 +85,7 @@ export async function GET(request: Request) {
     report.sort((a, b) => a.matricNumber.localeCompare(b.matricNumber));
 
     return NextResponse.json({
-      course: courseCode,
+      course: courseData.course_code,
       totalClasses: totalClassesHeld,
       plannedClasses: courseData.total_planned_classes || 15,
       maxScore: courseData.max_attendance_score || 10,

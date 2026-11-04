@@ -11,10 +11,7 @@ export async function POST(request: Request) {
     const rateCheck = await checkRateLimit(`rep-action:${ip}`, limit);
 
     if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { error: "Too many attempts. Please wait a minute." },
-        { status: 429, headers: rateLimitHeaders(rateCheck) }
-      );
+      return NextResponse.json({ error: "Too many attempts. Please wait a minute." }, { status: 429, headers: rateLimitHeaders(rateCheck) });
     }
 
     const auth = verifyStudentToken(request);
@@ -24,31 +21,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { action, sessionId, matricNumber } = body;
 
-    if (!sessionId) {
-      return NextResponse.json({ error: "Missing session" }, { status: 400 });
-    }
+    if (!sessionId) return NextResponse.json({ error: "Missing session" }, { status: 400 });
 
     const { data: session } = await supabase
       .from('lecture_sessions')
-      .select('course_code, created_at')
+      .select('course_id, created_at')
       .eq('session_id', sessionId)
-      .single();
-    if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-    const { data: course } = await supabase
-      .from('courses')
-      .select('id, created_at')
-      .eq('course_code', session.course_code)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      .maybeSingle();
+      
+    if (!session || !session.course_id) return NextResponse.json({ error: "Session not found or missing course link" }, { status: 404 });
 
     const { data: repAssignment } = await supabase
       .from('course_reps')
       .select('id')
-      .eq('course_id', course.id)
+      .eq('course_id', session.course_id)
       .eq('matric_number', repMatric)
       .maybeSingle();
 
@@ -56,34 +42,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized. You are not the designated rep for this course." }, { status: 403 });
     }
 
-    const { data: repEnrollment } = await supabase
-      .from('enrollments')
-      .select('id')
-      .eq('course_id', course.id)
-      .eq('matric_number', repMatric)
-      .maybeSingle();
-
-    if (!repEnrollment) {
-      return NextResponse.json({ error: "Unauthorized. Rep must be enrolled in this course." }, { status: 403 });
-    }
-
     if (action === 'log_dead_battery') {
-      if (!matricNumber) {
-        return NextResponse.json({ error: "Missing matric" }, { status: 400 });
-      }
-
+      if (!matricNumber) return NextResponse.json({ error: "Missing matric" }, { status: 400 });
       const cleanMatric = matricNumber.toUpperCase().trim();
 
       const { data: targetEnrollment } = await supabase
         .from('enrollments')
         .select('id')
-        .eq('course_id', course.id)
+        .eq('course_id', session.course_id)
         .eq('matric_number', cleanMatric)
         .maybeSingle();
 
-      if (!targetEnrollment) {
-        return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
-      }
+      if (!targetEnrollment) return NextResponse.json({ error: "This student is not enrolled in this course." }, { status: 403 });
 
       const { data: existingClaims } = await supabase
         .from('attendance_logs')
@@ -92,7 +62,6 @@ export async function POST(request: Request) {
         .eq('device_hash', 'rep-battery-log');
 
       const distinctStudents = new Set(existingClaims?.map(c => c.matric_number) || []);
-
       if (distinctStudents.size >= 3 && !distinctStudents.has(cleanMatric)) {
         return NextResponse.json({ error: "Limit reached. Only 3 students can claim battery dead per class." }, { status: 403 });
       }
@@ -116,16 +85,10 @@ export async function POST(request: Request) {
           status: 'pending_override',
           device_info: JSON.stringify({ method: "Class Rep - Battery Dead" }),
           device_hash: 'rep-battery-log'
-        }, { 
-          onConflict: 'session_id,matric_number',
-          ignoreDuplicates: false 
-        });
+        }, { onConflict: 'session_id,matric_number', ignoreDuplicates: false });
 
-      if (upsertError) {
-         return NextResponse.json({ error: "Database error" }, { status: 500 });
-      }
+      if (upsertError) return NextResponse.json({ error: "Database error" }, { status: 500 });
 
-      // NEW: Write to audit log
       await supabase.from('checkin_attempts').insert({
         session_id: sessionId,
         matric_number: cleanMatric,
