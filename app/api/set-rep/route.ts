@@ -7,18 +7,24 @@ export async function POST(request: Request) {
     const auth = await verifyLecturer(request);
     if (auth.error) return auth.error;
 
-    const { courseCode, matricNumber } = await request.json();
-    if (!courseCode || !matricNumber) return NextResponse.json({ error: "Missing data" }, { status: 400 });
+    const body = await request.json();
+    const courseId = body.courseId;
+    const matricNumber = body.matricNumber;
+
+    // Check exactly what is missing
+    if (!courseId || !matricNumber) {
+      return NextResponse.json({ error: "Missing data. Make sure a course is selected and a matric number is entered." }, { status: 400 });
+    }
 
     const cleanMatric = String(matricNumber).toUpperCase().trim();
 
-    // 1. Verify course belongs to this lecturer
+    // 1. Verify course belongs to this lecturer using the unique courseId
     const { data: course } = await supabase
       .from('courses')
       .select('id')
-      .eq('course_code', courseCode)
+      .eq('id', courseId)
       .eq('lecturer_id', auth.user.id)
-      .single();
+      .maybeSingle();
 
     if (!course) return NextResponse.json({ error: "Course not found or unauthorized" }, { status: 403 });
 
@@ -28,14 +34,11 @@ export async function POST(request: Request) {
       .select('id')
       .eq('course_id', course.id)
       .eq('matric_number', cleanMatric)
-      .single();
+      .maybeSingle();
 
     if (!enrollment) return NextResponse.json({ error: "Student is not enrolled in this course" }, { status: 403 });
 
-    // 3. Set the new rep. 
-    // Because we added UNIQUE(course_id) in the SQL migration, 
-    // this upsert automatically replaces the previous rep for this course
-    // without us having to manually unset them first.
+    // 3. Set the new rep.
     const { error: upsertError } = await supabase
       .from('course_reps')
       .upsert({

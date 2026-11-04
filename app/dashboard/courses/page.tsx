@@ -74,7 +74,7 @@ export default function CourseManagement() {
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
   // QUICK DESIGNATE REP STATE
-  const [repCourseCode, setRepCourseCode] = useState('');
+  const [repCourseId, setRepCourseId] = useState('');
   const [repMatricInput, setRepMatricInput] = useState('');
   const [isSettingRep, setIsSettingRep] = useState(false);
 
@@ -85,7 +85,7 @@ export default function CourseManagement() {
 
   // The Microscope (Audit & Waivers)
   const [auditMatric, setAuditMatric] = useState('');
-  const [auditCourseCode, setAuditCourseCode] = useState('');
+  const [auditCourseId, setAuditCourseId] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[] | null>(null);
 
@@ -142,9 +142,9 @@ export default function CourseManagement() {
     if (data) {
       setCourses(data);
       if (data.length > 0) {
-        setTargetCourseId(data[0].id);
-        setRepCourseCode(data[0].course_code);
-        setAuditCourseCode(data[0].course_code);
+        setTargetCourseId(prev => prev || data[0].id);
+        setRepCourseId(prev => prev || data[0].id);
+        setAuditCourseId(prev => prev || data[0].id);
         await fetchEnrollmentCounts(data.map(c => c.id));
       }
     }
@@ -186,7 +186,15 @@ export default function CourseManagement() {
 
   const handleQuickSetRep = async () => {
     const cleanMatric = repMatricInput.trim().toUpperCase();
-    if (!cleanMatric || !repCourseCode) return;
+    
+    if (!cleanMatric) {
+      confirm.ask('Missing Matric', 'Please enter the student matric number.', () => {}, { isDangerous: false });
+      return;
+    }
+    if (!repCourseId) {
+      confirm.ask('No Course Selected', 'Please select a course first.', () => {}, { isDangerous: false });
+      return;
+    }
 
     setIsSettingRep(true);
 
@@ -195,13 +203,13 @@ export default function CourseManagement() {
       const res = await fetch('/api/set-rep', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ courseId: courses.find(c => c.course_code === repCourseCode)?.id, matricNumber: cleanMatric })
+        body: JSON.stringify({ courseId: repCourseId, matricNumber: cleanMatric })
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to set rep.");
 
-      confirm.ask('Success', `✅ Success! ${cleanMatric} is now the Class Rep for ${repCourseCode}.`, () => {}, { isDangerous: false });
+      confirm.ask('Success', `✅ Success! ${cleanMatric} is now the Class Rep for this course.`, () => {}, { isDangerous: false });
       setRepMatricInput('');
       
     } catch (err) {
@@ -421,7 +429,7 @@ export default function CourseManagement() {
 
   const handleStudentAudit = useCallback(async () => {
     const cleanMatric = auditMatric.trim().toUpperCase();
-    if (!cleanMatric || !auditCourseCode) return;
+    if (!cleanMatric || !auditCourseId) return;
     setIsAuditing(true);
     setAuditRecords(null);
 
@@ -429,7 +437,7 @@ export default function CourseManagement() {
       const { data: sessions } = await supabase
         .from('lecture_sessions')
         .select('session_id, created_at')
-        .ilike('course_code', auditCourseCode)
+        .eq('course_id', auditCourseId)
         .order('created_at', { ascending: false });
 
       if (!sessions || sessions.length === 0) throw new Error("No classes held yet.");
@@ -463,7 +471,7 @@ export default function CourseManagement() {
       confirm.ask('Audit Failed', msg, () => {}, { isDangerous: false });
     }
     setIsAuditing(false);
-  }, [auditMatric, auditCourseCode, confirm]);
+  }, [auditMatric, auditCourseId, confirm]);
 
   const grantMedicalWaiver = async (record: AuditRecord) => {
     const cleanMatric = auditMatric.trim().toUpperCase();
@@ -690,11 +698,11 @@ export default function CourseManagement() {
                 <div className="relative">
                   <select
                     aria-label="Course for Designating Rep"
-                    value={repCourseCode}
-                    onChange={(e) => setRepCourseCode(e.target.value)}
+                    value={repCourseId}
+                    onChange={(e) => setRepCourseId(e.target.value)}
                     className="w-full bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700 p-3 rounded-xl outline-none font-bold text-amber-900 dark:text-amber-100 appearance-none cursor-pointer focus:ring-2 focus:ring-amber-500 transition-all"
                   >
-                    {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+                    {courses.length === 0 ? <option>No Courses</option> : courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
                   </select>
                   <ChevronDown size={16} className="absolute right-3 top-3.5 text-amber-600 dark:text-amber-400 pointer-events-none" />
                 </div>
@@ -881,11 +889,11 @@ export default function CourseManagement() {
         <div className="flex flex-col md:flex-row gap-3 mb-6">
           <select
             aria-label="Select Course for Diagnostics"
-            value={auditCourseCode}
-            onChange={(e) => setAuditCourseCode(e.target.value)}
+            value={auditCourseId}
+            onChange={(e) => setAuditCourseId(e.target.value)}
             className="md:w-48 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-xl outline-none font-bold text-gray-900 dark:text-white cursor-pointer transition-colors"
           >
-            {courses.map(c => <option key={c.id} value={c.course_code}>{c.course_code}</option>)}
+            {courses.map(c => <option key={c.id} value={c.id}>{c.course_code}</option>)}
           </select>
           <div className="flex-1 flex gap-2">
             <input
@@ -911,7 +919,7 @@ export default function CourseManagement() {
           <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-in fade-in slide-in-from-bottom-4 transition-colors">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10 shadow-sm">
               <h3 className="font-extrabold text-gray-900 dark:text-white text-lg">Audit Trail: {auditMatric}</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">{auditCourseCode} Semester History</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-bold">Semester History</p>
             </div>
             <div className="max-h-80 overflow-y-auto p-4 space-y-2">
               {auditRecords.map((record, i) => (
