@@ -216,21 +216,18 @@ export async function POST(request: Request) {
       auditLogPayload.reason_detail = { registered_fingerprint: registeredDevice.hardware_fingerprint, current_fingerprint: hardwareFingerprint };
     }
 
-    // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP ───
+    // ─── PROXY PREVENTION 2: THE CHECK-IN TRAP (PASSKEY ONLY) ───
     const { data: existingSessionLogs } = await supabase
       .from('attendance_logs')
-      .select('matric_number, device_info')
+      .select('matric_number, device_hash')
       .eq('session_id', sessionId);
 
     if (existingSessionLogs && existingSessionLogs.length > 0) {
       const proxyAttempt = existingSessionLogs.find(log => {
         if (log.matric_number === cleanMatric) return false;
-        try {
-          const info = JSON.parse(log.device_info || '{}');
-          return info.hardwareFingerprint === hardwareFingerprint;
-        } catch {
-          return false;
-        }
+        // ONLY check the passkey. If they have different phones of the same model, 
+        // they will have different passkeys, so they are allowed in.
+        return log.device_hash === credentialId;
       });
 
       if (proxyAttempt) {
@@ -280,7 +277,7 @@ export async function POST(request: Request) {
 
     let finalStatus: 'verified' | 'flagged' = 'flagged';
     let responseMessage = `You are ${Math.round(bestDistance)}m from the class anchor (allowed: ${allowedRadius}m).`;
-    let reasonCode = null;
+    let reasonCode = auditLogPayload.reason_code || null;
 
     if (bestDistance <= allowedRadius) {
       if (spoofSuspected || (spoofRisk && spoofRisk > 60)) {
@@ -332,7 +329,7 @@ export async function POST(request: Request) {
     }
 
     auditLogPayload.outcome = finalStatus;
-    auditLogPayload.reason_code = reasonCode || auditLogPayload.reason_code;
+    auditLogPayload.reason_code = reasonCode;
     auditLogPayload.reason_detail = auditLogPayload.reason_detail || { distance: Math.round(bestDistance), accuracy: bestAccuracy };
     await supabase.from('checkin_attempts').insert(auditLogPayload);
 

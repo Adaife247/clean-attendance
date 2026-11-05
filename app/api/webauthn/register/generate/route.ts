@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Generate registration options
+    // 3. Generate registration options (RELAXED FOR MAX COMPATIBILITY)
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
@@ -75,12 +75,10 @@ export async function POST(request: Request) {
       userName: cleanMatric,
       attestationType: 'none',
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', // Force local (fingerprint/PIN), no cloud
-        residentKey: 'required',             // Force device-bound (not synced)
-        userVerification: 'required',        // Force biometric/PIN
+        residentKey: 'preferred', // Relaxed from 'required'
+        userVerification: 'required', // This forces FaceID/Fingerprint
       },
-      // NEW: Tell the phone "if you have a credential for THIS RP, don't create a new one"
-      excludeCredentials: [], // We don't know which credential exists on their phone. The server-side check will handle duplicates.
+      excludeCredentials: [],
     });
 
     const cookieStore = await cookies();
