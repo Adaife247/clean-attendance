@@ -83,21 +83,29 @@ export default function StudentCheckIn({ sessionId }: Props) {
     return () => clearTimeout(id);
   }, [searchParams]);
 
+  // FIX: Re-check permission when the user returns to the app
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.permissions) return;
-    let permissionStatus: PermissionStatus | null = null;
-    navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-      permissionStatus = result;
-      if (result.state === 'granted') setGpsStatus('granted');
-      if (result.state === 'denied') setGpsStatus('denied');
-      if (result.state === 'prompt') setGpsStatus('prompt');
-      result.onchange = () => {
+    
+    const checkPermission = () => {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
         if (result.state === 'granted') setGpsStatus('granted');
         if (result.state === 'denied') setGpsStatus('denied');
         if (result.state === 'prompt') setGpsStatus('prompt');
-      };
-    }).catch(() => setGpsStatus('prompt'));
-    return () => { if (permissionStatus) permissionStatus.onchange = null; };
+      }).catch(() => setGpsStatus('prompt'));
+    };
+
+    // Check immediately on mount
+    checkPermission();
+
+    // Check when the user switches back to the browser from settings
+    window.addEventListener('focus', checkPermission);
+    document.addEventListener('visibilitychange', checkPermission);
+
+    return () => {
+      window.removeEventListener('focus', checkPermission);
+      document.removeEventListener('visibilitychange', checkPermission);
+    };
   }, []);
 
   useEffect(() => {
@@ -515,7 +523,7 @@ export default function StudentCheckIn({ sessionId }: Props) {
     <div className="w-full">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative h-137.5 overflow-y-auto transition-all duration-300">
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 sm:p-8 relative h-[550px] overflow-y-auto transition-all duration-300">
         
         <div className="w-full">
           {inAppBrowser && (

@@ -33,7 +33,6 @@ export async function POST(request: Request) {
 
     const cleanMatric = matricNumber.toUpperCase().trim();
 
-    // 1. Must be enrolled
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('id')
@@ -50,7 +49,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Check if this matric already has a registered credential
     const { data: existingDevice } = await supabase
       .from('user_devices')
       .select('credential_id')
@@ -67,7 +65,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Generate registration options (RELAXED FOR MAX COMPATIBILITY)
+    // STRICT RULES RESTORED
     const options = await generateRegistrationOptions({
       rpName,
       rpID,
@@ -75,8 +73,9 @@ export async function POST(request: Request) {
       userName: cleanMatric,
       attestationType: 'none',
       authenticatorSelection: {
-        residentKey: 'preferred', // Relaxed from 'required'
-        userVerification: 'required', // This forces FaceID/Fingerprint
+        authenticatorAttachment: 'platform', // Force local (fingerprint/PIN)
+        residentKey: 'required',             // Force device-bound
+        userVerification: 'required',        // Force biometric/PIN
       },
       excludeCredentials: [],
     });
