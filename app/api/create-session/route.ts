@@ -31,7 +31,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing course ID." }, { status: 400 });
     }
 
-    // Fetch course strictly by unique ID
     const { data: course, error: courseError } = await supabase
       .from('courses')
       .select('id, course_code')
@@ -39,13 +38,27 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (courseError || !course) {
-      return NextResponse.json({ error: 'Course not found. It may have been deleted.' }, { status: 404 });
+      return NextResponse.json({ error: 'Course not found.' }, { status: 404 });
+    }
+
+    // CHECK FOR EXISTING ACTIVE SESSION
+    const { data: existingSession } = await supabase
+      .from('lecture_sessions')
+      .select('session_id')
+      .eq('course_id', course.id)
+      .eq('is_active', true)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (existingSession) {
+      return NextResponse.json({ 
+        sessionId: existingSession.session_id, 
+        message: "Resumed existing active session" 
+      });
     }
 
     if (isRepStarting) {
-      // CLEAN the matric number before checking
       const cleanRepMatric = String(body.repMatric || '').toUpperCase().trim();
-      
       const { data: rep } = await supabase
         .from('course_reps')
         .select('id')
@@ -53,9 +66,7 @@ export async function POST(request: Request) {
         .eq('matric_number', cleanRepMatric)
         .maybeSingle();
 
-      if (!rep) {
-        return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep for this course' }, { status: 403 });
-      }
+      if (!rep) return NextResponse.json({ error: 'Unauthorized: Not a valid Class Rep' }, { status: 403 });
       finalStartedBy = 'Class Rep';
     } else {
       const auth = await verifyLecturer(request);
@@ -79,7 +90,6 @@ export async function POST(request: Request) {
 
     const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString();
 
-    // Save BOTH course_id and course_code to the session
     const { data, error } = await supabase
       .from('lecture_sessions')
       .insert([{
@@ -97,53 +107,37 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      console.error("Database Insert Error:", error);
       return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 });
     }
 
-    // ─── SEND PUSH NOTIFICATIONS ───
     try {
       const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
-      
       if (enrollments && enrollments.length > 0) {
         const matrics = enrollments.map(e => e.matric_number);
-        
-        const { data: subscriptions } = await supabase
-          .from('push_subscriptions')
-          .select('subscription')
-          .in('matric_number', matrics);
+        const { data: subscriptions } = await supabase.from('push_subscriptions').select('subscription').in('matric_number', matrics);
 
         if (subscriptions && subscriptions.length > 0) {
           const payload = JSON.stringify({
             title: `Class is Live: ${course.course_code}`,
-            body: `The lecturer has started attendance. Tap to check in now!`,
+            body: `The ${finalStartedBy} has started attendance. Tap to check in now!`,
             url: `/?sessionId=${data.session_id}`
           });
 
           const pushPromises = subscriptions.map(sub => 
-            webpush.sendNotification(sub.subscription, payload).catch(err => {
-              if (err.statusCode === 410) {
-                return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
-              }
+            webpush.sendNotification(sub.subscription, payload).catch(() => {
+              return supabase.from('push_subscriptions').delete().eq('subscription', sub.subscription);
             })
           );
-
           await Promise.all(pushPromises);
         }
       }
     } catch (pushError) {
-      console.error("Push notification failed, but session was created:", pushError);
+      console.error("Push failed:", pushError);
     }
 
-    return NextResponse.json({
-      sessionId: data.session_id,
-      expiresAt,
-      checkinOpensAfterMinutes
-    });
+    return NextResponse.json({ sessionId: data.session_id, expiresAt });
 
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("CREATE SESSION FATAL ERROR:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Unknown error" }, { status: 500 });
   }
 }

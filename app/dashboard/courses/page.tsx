@@ -53,7 +53,6 @@ export default function CourseManagement() {
   const [courseCounts, setCourseCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Create Course State
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newDept, setNewDept] = useState('');
   const [newLevel, setNewLevel] = useState('');
@@ -64,7 +63,6 @@ export default function CourseManagement() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
 
-  // Modal State
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editCode, setEditCode] = useState('');
   const [editPlanned, setEditPlanned] = useState<number | ''>(15);
@@ -73,27 +71,22 @@ export default function CourseManagement() {
   const [repMatric, setRepMatric] = useState<string | null>(null);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
-  // QUICK DESIGNATE REP STATE
   const [repCourseId, setRepCourseId] = useState('');
   const [repMatricInput, setRepMatricInput] = useState('');
   const [isSettingRep, setIsSettingRep] = useState(false);
 
-  // Single Student Add
   const [singleMatric, setSingleMatric] = useState('');
   const [targetCourseId, setTargetCourseId] = useState('');
   const [isAddingSingle, setIsAddingSingle] = useState(false);
 
-  // The Microscope (Audit & Waivers)
   const [auditMatric, setAuditMatric] = useState('');
   const [auditCourseId, setAuditCourseId] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[] | null>(null);
 
-  // Device Wipe
   const [wipeMatric, setWipeMatric] = useState('');
   const [isWiping, setIsWiping] = useState(false);
 
-  // SHARED CONFIRM MODAL
   const confirm = useConfirmModal();
   const askConfirmation = (title: string, message: string, onConfirm: () => void, isDangerous = true) => {
     confirm.ask(title, message, onConfirm, { isDangerous });
@@ -186,18 +179,8 @@ export default function CourseManagement() {
 
   const handleQuickSetRep = async () => {
     const cleanMatric = repMatricInput.trim().toUpperCase();
-    
-    if (!cleanMatric) {
-      confirm.ask('Missing Matric', 'Please enter the student matric number.', () => {}, { isDangerous: false });
-      return;
-    }
-    if (!repCourseId) {
-      confirm.ask('No Course Selected', 'Please select a course first.', () => {}, { isDangerous: false });
-      return;
-    }
-
+    if (!cleanMatric || !repCourseId) return;
     setIsSettingRep(true);
-
     try {
       const headers = await getHeaders();
       const res = await fetch('/api/set-rep', {
@@ -205,13 +188,10 @@ export default function CourseManagement() {
         headers,
         body: JSON.stringify({ courseId: repCourseId, matricNumber: cleanMatric })
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to set rep.");
-
       confirm.ask('Success', `✅ Success! ${cleanMatric} is now the Class Rep for this course.`, () => {}, { isDangerous: false });
       setRepMatricInput('');
-      
     } catch (err) {
       confirm.ask('Error', err instanceof Error ? err.message : "Failed to set rep.", () => {}, { isDangerous: false });
     } finally {
@@ -244,10 +224,7 @@ export default function CourseManagement() {
           .select('matric_number')
           .eq('course_id', course.id)
           .maybeSingle();
-          
-        if (reps) {
-          setRepMatric(reps.matric_number);
-        }
+        if (reps) setRepMatric(reps.matric_number);
       }
     }
     setIsLoadingStudents(false);
@@ -281,17 +258,12 @@ export default function CourseManagement() {
       "WARNING: This will permanently delete all enrollments, sessions, and attendance logs tied to this course. This cannot be undone.",
       async () => {
         setActioningId(courseId);
-        const { error } = await supabase
-          .from('courses')
-          .delete()
-          .eq('id', courseId);
-          
+        const { error } = await supabase.from('courses').delete().eq('id', courseId);
         if (error) {
           confirm.ask('Error', `Failed to delete course: ${error.message}`, () => {}, { isDangerous: false });
         } else {
           await fetchCourses();
         }
-        
         setActioningId(null);
       }
     );
@@ -320,15 +292,14 @@ export default function CourseManagement() {
     );
   };
 
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    courseId: string
-  ) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, courseId: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingId(courseId);
 
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isWord = file.name.endsWith('.docx');
+    const isPdf = file.name.endsWith('.pdf');
     const reader = new FileReader();
 
     reader.onload = async (event) => {
@@ -344,22 +315,51 @@ export default function CourseManagement() {
           jsonData.forEach(row => {
             row.forEach(cell => {
                if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
-                 rawMatrics.push(cell.trim().toUpperCase());
+                 rawMatrics.push(cell.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''));
                }
             });
           });
+        } else if (isWord) {
+          const mammoth = await import('mammoth');
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          const words = result.value.split(/[\s,]+/);
+          rawMatrics = words
+            .map(w => w.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''))
+            .filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
+        } else if (isPdf) {
+          const pdfjs = await import('pdfjs-dist');
+          // Use https and .mjs to prevent Vercel CSP errors
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+          
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+          let fullText = '';
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            fullText += pageText + '\n';
+          }
+          
+          const words = fullText.split(/[\s,]+/);
+          rawMatrics = words
+            .map(w => w.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''))
+            .filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
         } else {
           const csvText = event.target?.result as string;
-          const cleanMatrics = csvText
+          rawMatrics = csvText
             .split(/[\n,]+/)
-            .map(m => m.trim().toUpperCase())
+            .map(m => m.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''))
             .filter(m => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
-          rawMatrics = cleanMatrics;
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
+        
         if (uniqueMatrics.length === 0) {
-          confirm.ask('Invalid File', 'No valid matric numbers found.', () => {}, { isDangerous: false });
+          confirm.ask('Invalid File', 'No valid matric numbers found. If this is a scanned PDF, please use an Excel or CSV file.', () => {}, { isDangerous: false });
           setUploadingId(null);
           e.target.value = '';
           return;
@@ -384,21 +384,20 @@ export default function CourseManagement() {
         if (!error) {
           confirm.ask('Success', `Success! ${uniqueMatrics.length} students synced.`, () => {}, { isDangerous: false });
           await fetchCourses();
-          if (editingCourse?.id === courseId) {
-            handleOpenModal(editingCourse);
-          }
+          if (editingCourse?.id === courseId) handleOpenModal(editingCourse);
         } else {
           confirm.ask('Error', `Upload failed: ${error.message}`, () => {}, { isDangerous: false });
         }
-      } catch {
-        confirm.ask('Error', 'Failed to read file. Ensure it is a valid CSV or Excel file.', () => {}, { isDangerous: false });
+      } catch (err) {
+        console.error(err);
+        confirm.ask('Error', 'Failed to read file. Make sure it is a valid CSV, Excel, Word, or Text-based PDF.', () => {}, { isDangerous: false });
       }
       
       setUploadingId(null);
       e.target.value = '';
     };
     
-    if (isExcel) {
+    if (isExcel || isWord || isPdf) {
       reader.readAsArrayBuffer(file);
     } else {
       reader.readAsText(file);
@@ -771,7 +770,7 @@ export default function CourseManagement() {
                     {uploadingId === course.id ? "Syncing..." : "Upload"}
                     <input
                       type="file"
-                      accept=".csv, .xlsx, .xls"
+                      accept=".csv, .xlsx, .xls, .docx, .pdf"
                       className="hidden"
                       onChange={(e) => handleFileUpload(e, course.id)}
                       disabled={uploadingId === course.id}

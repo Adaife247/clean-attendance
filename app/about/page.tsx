@@ -40,14 +40,14 @@ export default function AboutPage() {
               Paper attendance sheets are broken. They are easily signed by friends, lost, torn, or destroyed by water spills. Worse still, they provide no reliable data for NUC compliance audits, leaving universities vulnerable.
             </p>
             <p>
-              CampusCheck was built to solve this. We didn&apos;t just build a digital form; we built a cryptographic vault. By combining hardware-bound biometrics (WebAuthn) with strict GPS geofencing and device fingerprinting, we make it virtually impossible for a student to check in for an absent friend.
+              CampusCheck was built to solve this. We didn&apos;t just build a digital form; we built a cryptographic vault. By combining hardware-bound biometrics (WebAuthn) with strict GPS geofencing and device fingerprinting, we make it extremely difficult and easily traceable for a student to check in for an absent friend.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-10">
               <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
                 <Lock className="text-[#2563EB] dark:text-blue-400 mb-3" size={24} />
-                <h3 className="font-bold text-gray-900 dark:text-white mb-2">Zero Proxy Guarantee</h3>
-                <p className="text-sm">One device per student. Clearing cache or switching browsers cannot bypass our hardware locks.</p>
+                <h3 className="font-bold text-gray-900 dark:text-white mb-2">Proxy-Resistant Design</h3>
+                <p className="text-sm">One device per student. Clearing cache or switching browsers flags our hardware locks for immediate review.</p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
                 <MapPin className="text-[#2563EB] dark:text-blue-400 mb-3" size={24} />

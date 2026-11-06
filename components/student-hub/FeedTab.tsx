@@ -1,5 +1,5 @@
 'use client';
-import { Megaphone, Calendar, Inbox } from 'lucide-react';
+import { Megaphone, Calendar, Inbox, PenTool } from 'lucide-react';
 import type { CampusUpdate } from '@/types/db';
 
 interface FeedTabProps {
@@ -34,15 +34,25 @@ export default function FeedTab({ feed, lastSeenTimestamp }: FeedTabProps) {
                     <span className="w-2 h-2 rounded-full bg-[#2563EB] dark:bg-blue-400 shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
                   )}
                 </div>
-                {post.course_code && (
-                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 uppercase tracking-wider">
-                    {post.course_code}
-                  </span>
-                )}
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border uppercase tracking-wider ${
+                  post.course_code 
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-800' 
+                    : 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 border-purple-100 dark:border-purple-800'
+                }`}>
+                  {post.course_code || '🌍 Global'}
+                </span>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-4">{post.content}</p>
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                <Calendar size={12} /> {new Date(post.created_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              
+              {/* Author & Date Footer */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300">
+                  <PenTool size={12} className="text-[#2563EB] dark:text-blue-400" /> 
+                  Signed by: {post.author}
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <Calendar size={12} /> {new Date(post.created_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                </div>
               </div>
             </div>
           );

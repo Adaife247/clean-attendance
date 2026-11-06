@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, Clock, FileText, Zap, PlayCircle, MapPin, Loader2 } from 'lucide-react';
+import { Upload, Clock, FileText, Zap, PlayCircle, MapPin, Loader2, XCircle, Timer } from 'lucide-react';
 import { ConfirmModal, useConfirmModal } from '@/components/ConfirmModal';
 import { getStudentHeaders } from '@/utils/api-client';
 
@@ -10,7 +10,7 @@ const MATRIC_REGEX = /[\/\-]/;
 interface RepDeskTabProps {
   records: { id: string; course_code: string }[];
   matricNumber: string;
-  activeLiveSession: { course: string; sessionId: string } | null;
+  activeLiveSession: { course: string; sessionId: string; courseId: string } | null;
   onRefresh: () => void;
   addToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -26,7 +26,9 @@ export default function RepDeskTab({
   const [repBatteryMatric, setRepBatteryMatric] = useState('');
   const [isLoggingBattery, setIsLoggingBattery] = useState(false);
   const [isUploadingList, setIsUploadingList] = useState(false);
+  const [repSessionDuration, setRepSessionDuration] = useState<number>(60);
   const [isStartingRepSession, setIsStartingRepSession] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
   const [repSessionError, setRepSessionError] = useState('');
 
   const confirm = useConfirmModal();
@@ -98,7 +100,7 @@ export default function RepDeskTab({
           jsonData.forEach((row) => {
             row.forEach((cell) => {
               if (typeof cell === 'string' && cell.length > 5 && MATRIC_REGEX.test(cell) && !cell.includes('MATRIC')) {
-                rawMatrics.push(cell.trim().toUpperCase());
+                rawMatrics.push(cell.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''));
               }
             });
           });
@@ -107,10 +109,10 @@ export default function RepDeskTab({
           const arrayBuffer = event.target?.result as ArrayBuffer;
           const result = await mammoth.extractRawText({ arrayBuffer });
           const words = result.value.split(/[\s,]+/);
-          rawMatrics = words.map(w => w.trim().toUpperCase()).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
+          rawMatrics = words.map(w => w.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, '')).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
         } else if (isPdf) {
           const pdfjs = await import('pdfjs-dist');
-          pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
           
           const arrayBuffer = event.target?.result as ArrayBuffer;
           const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
@@ -125,18 +127,18 @@ export default function RepDeskTab({
           }
           
           const words = fullText.split(/[\s,]+/);
-          rawMatrics = words.map(w => w.trim().toUpperCase()).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
+          rawMatrics = words.map(w => w.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, '')).filter(w => w.length > 5 && MATRIC_REGEX.test(w) && !w.includes('MATRIC'));
         } else {
           const csvText = event.target?.result as string;
           rawMatrics = csvText
             .split(/[\n,]+/)
-            .map((m) => m.trim().toUpperCase())
+            .map((m) => m.trim().toUpperCase().replace(/[^A-Z0-9/\-]/g, ''))
             .filter((m) => m.length > 5 && MATRIC_REGEX.test(m) && !m.includes('MATRIC'));
         }
 
         const uniqueMatrics = Array.from(new Set(rawMatrics));
         if (uniqueMatrics.length === 0) {
-          addToast('Invalid file', 'No valid matric numbers found. If this is a scanned PDF, please use an Excel or CSV file.', 'error');
+          addToast('Invalid file', 'No valid matric numbers found.', 'error');
           setIsUploadingList(false);
           e.target.value = '';
           return;
@@ -159,7 +161,7 @@ export default function RepDeskTab({
         }
       } catch (err) {
         console.error(err);
-        addToast('File read error', 'Failed to read file. Make sure it is a valid CSV, Excel, Word, or Text-based PDF.', 'error');
+        addToast('File read error', 'Failed to read file.', 'error');
       } finally {
         setIsUploadingList(false);
         e.target.value = '';
@@ -170,6 +172,7 @@ export default function RepDeskTab({
     else reader.readAsText(file);
   };
 
+  // HYBRID GPS LOGIC: Waits for the BEST possible ping, not just the first one
   const handleStartBackupSession = () => {
     if (!repCourseId) {
       addToast('No course selected', 'Select a course first.', 'error');
@@ -182,26 +185,38 @@ export default function RepDeskTab({
 
     confirm.ask(
       `Start a backup session?`,
-      'Your phone will become the GPS anchor for this class. Students will be able to check in for the next 60 minutes.',
+      'Your phone will become the GPS anchor for this class.',
       () => {
         setIsStartingRepSession(true);
-        setRepSessionError('Getting stable GPS fix (up to 20s)...');
+        setRepSessionError('Getting the best GPS signal (up to 15s)...');
 
+        let bestPos: GeolocationPosition | null = null;
+        let bestAcc = Infinity;
         let watchId = 0;
         let finished = false;
 
         const cleanup = () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
 
-        const createSession = async (lat: number, lng: number) => {
+        const finish = async () => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+
+          if (!bestPos) {
+            setRepSessionError('Could not get any GPS signal. Step outside or near a window and try again.');
+            setIsStartingRepSession(false);
+            return;
+          }
+
           try {
             const res = await fetch('/api/create-session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 courseId: repCourseId,
-                latitude: lat,
-                longitude: lng,
-                duration: 60,
+                latitude: bestPos.coords.latitude,
+                longitude: bestPos.coords.longitude,
+                duration: repSessionDuration,
                 checkinOpensAfter: 0,
                 startedBy: 'Class Rep',
                 repMatric: matricNumber,
@@ -220,40 +235,56 @@ export default function RepDeskTab({
           }
         };
 
-        const timeoutId = setTimeout(() => {
-          if (finished) return;
-          finished = true;
-          cleanup();
-          setRepSessionError('Could not lock onto GPS under 100m accuracy. Step outside or near a window and try again.');
-          setIsStartingRepSession(false);
-        }, 20000);
+        const timeoutId = setTimeout(finish, 15000);
 
         watchId = navigator.geolocation.watchPosition(
-          (position) => {
+          (pos) => {
             if (finished) return;
-            const acc = position.coords.accuracy;
-            setRepSessionError(`GPS stabilizing (±${Math.round(acc)}m)...`);
+            const acc = pos.coords.accuracy;
             
-            // Only accept highly accurate readings so the geofence is solid
-            if (acc <= 100) {
-              finished = true;
+            if (acc < bestAcc) {
+              bestAcc = acc;
+              bestPos = pos;
+              setRepSessionError(`Signal improving (±${Math.round(acc)}m)...`);
+            }
+
+            // If we get a really good ping (< 30m), stop waiting and go!
+            if (acc <= 30) {
               clearTimeout(timeoutId);
-              cleanup();
-              createSession(position.coords.latitude, position.coords.longitude);
+              finish();
             }
           },
-          (error) => {
-            clearTimeout(timeoutId);
-            if (finished) return;
-            finished = true;
-            cleanup();
-            setRepSessionError(error.code === 1 ? 'Location permission denied. Allow location to start a session.' : 'GPS signal lost. Try again.');
-            setIsStartingRepSession(false);
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+          () => {}, // Ignore individual errors, rely on the 15s timeout
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
         );
       },
       { isDangerous: false, confirmLabel: 'Start Session' }
+    );
+  };
+
+  const handleEndSession = async () => {
+    if (!activeLiveSession) return;
+    confirm.ask(
+      'End Lecture?',
+      'Students will no longer be able to check in. Are you sure?',
+      async () => {
+        setIsEndingSession(true);
+        try {
+          const headers = getStudentHeaders();
+          await fetch('/api/end-session', { 
+            method: 'POST', 
+            headers,
+            body: JSON.stringify({ sessionId: activeLiveSession.sessionId }) 
+          });
+          addToast('Session Ended', 'The lecture has been closed.', 'success');
+          onRefresh();
+        } catch {
+          addToast('Error', 'Could not end session.', 'error');
+        } finally {
+          setIsEndingSession(false);
+        }
+      },
+      { isDangerous: true, confirmLabel: 'End Lecture' }
     );
   };
 
@@ -325,15 +356,12 @@ export default function RepDeskTab({
           <PlayCircle size={18} /> Backup Anchor
         </h3>
         <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-3">
-          If the lecturer&apos;s phone is dead or missing, start a session from your phone. Your GPS becomes the anchor for the class.
+          If the lecturer&apos;s phone is dead or missing, start a session from your phone.
         </p>
 
-        {activeLiveSession ? (
-          <div className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 p-3 rounded-lg text-center text-sm font-bold text-red-600 dark:text-red-400">
-            Session already active: {activeLiveSession.course}
-          </div>
-        ) : (
-          <div className="space-y-2">
+        {/* UPDATED UI: Always show the dropdown, conditionally show Start/End based on the selected course */}
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               aria-label="Course for Backup Session"
               value={repCourseId}
@@ -346,17 +374,51 @@ export default function RepDeskTab({
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleStartBackupSession}
-              disabled={isStartingRepSession}
-              className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            
+            <div className="relative w-full sm:w-48">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                <Timer size={16} />
+              </div>
+              <select
+                aria-label="Duration"
+                value={repSessionDuration}
+                onChange={(e) => setRepSessionDuration(Number(e.target.value))}
+                className="w-full bg-white dark:bg-gray-800 border border-red-200 dark:border-red-700 text-gray-900 dark:text-white p-3 pl-10 rounded-lg text-sm font-bold outline-none cursor-pointer"
+              >
+                <option value={15}>15 Mins</option>
+                <option value={30}>30 Mins</option>
+                <option value={60}>1 Hour</option>
+                <option value={90}>1.5 Hours</option>
+                <option value={120}>2 Hours</option>
+              </select>
+            </div>
+          </div>
+
+          {activeLiveSession && activeLiveSession.courseId === repCourseId ? (
+            <div className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 p-3 rounded-lg text-center text-sm font-bold text-red-600 dark:text-red-400 mt-2">
+              Session is currently active for this course.
+              <button
+                onClick={handleEndSession}
+                disabled={isEndingSession}
+                className="w-full mt-3 bg-red-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isEndingSession ? <Loader2 size={18} className="animate-spin" /> : <XCircle size={18} />}
+                {isEndingSession ? 'Ending...' : 'End Active Session'}
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleStartBackupSession} 
+              disabled={isStartingRepSession} 
+              className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-sm hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
             >
               {isStartingRepSession ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
               {isStartingRepSession ? 'Anchoring GPS...' : 'Start Backup Session'}
             </button>
-            {repSessionError && <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-2">{repSessionError}</p>}
-          </div>
-        )}
+          )}
+          
+          {repSessionError && <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-2 text-center">{repSessionError}</p>}
+        </div>
       </div>
 
       <ConfirmModal config={confirm.config} onClose={confirm.close} />

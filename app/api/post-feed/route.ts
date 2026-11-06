@@ -22,23 +22,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title, content, and courseId are required' }, { status: 400 });
     }
 
-    const { data: course } = await supabase
-      .from('courses')
-      .select('id, course_code')
-      .eq('id', courseId)
-      .eq('lecturer_id', auth.user.id)
-      .maybeSingle();
+    const isGlobal = courseId === 'GLOBAL';
+    let courseCode: string | null = null;
 
-    if (!course) {
-      return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+    if (!isGlobal) {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('id, course_code')
+        .eq('id', courseId)
+        .eq('lecturer_id', auth.user.id)
+        .maybeSingle();
+
+      if (!course) {
+        return NextResponse.json({ error: 'Unauthorized for this course' }, { status: 403 });
+      }
+      courseCode = course.course_code;
     }
 
+    // Insert the broadcast
     const { error } = await supabase.from('campus_updates').insert([{
       title,
       content,
       author: author || 'Lecturer',
-      course_id: course.id, // ADDED
-      course_code: course.course_code,
+      course_id: isGlobal ? null : courseId,
+      course_code: isGlobal ? null : courseCode,
       link_url: link_url || null,
       expires_at: expires_at || null
     }]);
@@ -47,15 +54,27 @@ export async function POST(request: Request) {
 
     // ─── SEND PUSH NOTIFICATIONS ───
     try {
-      const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', course.id);
+      let targetMatrics: string[] = [];
 
-      if (enrollments && enrollments.length > 0) {
-        const matrics = enrollments.map(e => e.matric_number);
-        const { data: subscriptions } = await supabase.from('push_subscriptions').select('subscription').in('matric_number', matrics);
+      if (isGlobal) {
+        // Send to EVERYONE who has a subscription
+        const { data: allSubs } = await supabase.from('push_subscriptions').select('matric_number');
+        targetMatrics = allSubs?.map(s => s.matric_number) || [];
+      } else {
+        // Send only to students enrolled in that course
+        const { data: enrollments } = await supabase.from('enrollments').select('matric_number').eq('course_id', courseId);
+        targetMatrics = enrollments?.map(e => e.matric_number) || [];
+      }
+
+      if (targetMatrics.length > 0) {
+        const { data: subscriptions } = await supabase
+          .from('push_subscriptions')
+          .select('subscription')
+          .in('matric_number', targetMatrics);
 
         if (subscriptions && subscriptions.length > 0) {
           const payload = JSON.stringify({
-            title: `📢 ${course.course_code} Announcement`,
+            title: isGlobal ? `🌍 Campus Update` : `📢 ${courseCode} Announcement`,
             body: title,
             url: '/student-hub'
           });

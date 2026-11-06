@@ -88,13 +88,10 @@ export default function LecturerDashboard() {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
-    const initCheck = setTimeout(() => {
-      setIsOnline(navigator.onLine);
-    }, 0);
+    const initCheck = setTimeout(() => setIsOnline(navigator.onLine), 0);
 
     const checkLatency = async () => {
       const start = Date.now();
@@ -106,10 +103,7 @@ export default function LecturerDashboard() {
         setTimeout(() => setIsSlowNetwork(true), 0);
       }
     };
-    
-    const latencyTimeout = setTimeout(() => {
-      checkLatency();
-    }, 1000);
+    const latencyTimeout = setTimeout(checkLatency, 1000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -137,9 +131,26 @@ export default function LecturerDashboard() {
       if (profileData) setProfile({ full_name: profileData.full_name, department: profileData.department });
 
       const { data: courseData } = await supabase.from('courses').select('id, course_code, department, level').eq('lecturer_id', session.user.id).order('created_at', { ascending: false });
-      if (courseData) {
+      
+      if (courseData && courseData.length > 0) {
         setCourses(courseData);
-        if (courseData.length > 0) setSelectedCourseId(courseData[0].id);
+        setSelectedCourseId(prev => prev || courseData[0].id);
+
+        const courseIds = courseData.map(c => c.id);
+        const { data: activeSession } = await supabase
+          .from('lecture_sessions')
+          .select('session_id')
+          .in('course_id', courseIds)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (activeSession) {
+          localStorage.setItem(ACTIVE_SESSION_KEY, activeSession.session_id);
+          setActiveSessionId(activeSession.session_id);
+        }
       }
     };
     const id = setTimeout(() => { securePageAndFetchProfile(); }, 0);
@@ -252,6 +263,7 @@ export default function LecturerDashboard() {
     return () => clearTimeout(id);
   }, [viewMode, loadHistory]);
 
+  // HYBRID GPS LOGIC FOR LECTURER
   const startNewSession = () => {
     if (!selectedCourseId) { setSetupError("Please register a course first."); return; }
     setIsStarting(true);
@@ -306,8 +318,10 @@ export default function LecturerDashboard() {
       return;
     }
 
-    setSetupError("Getting stable GPS fix (up to 20s)...");
-    const readings: { lat: number; lng: number; acc: number }[] = [];
+    setSetupError("Getting the best GPS signal (up to 15s)...");
+    
+    let bestPos: GeolocationPosition | null = null;
+    let bestAcc = Infinity;
     let watchId = 0;
     let finished = false;
 
@@ -317,51 +331,36 @@ export default function LecturerDashboard() {
       if (finished) return;
       finished = true;
       cleanup();
-      
-      if (readings.length > 0) {
-        const lat = readings.reduce((s, r) => s + r.lat, 0) / readings.length;
-        const lng = readings.reduce((s, r) => s + r.lng, 0) / readings.length;
-        executeSessionCreation(lat, lng);
-      } else {
-        setSetupError("Could not get any GPS signal. Ensure location is turned on, step outside briefly, and try again.");
+
+      if (!bestPos) {
+        setSetupError("Could not get any GPS signal. Step outside or near a window and try again.");
         setIsStarting(false);
+        return;
       }
+
+      executeSessionCreation(bestPos.coords.latitude, bestPos.coords.longitude);
     };
 
-    // Force it to finish after 20 seconds no matter what
-    const timeoutId = setTimeout(finish, 20000);
+    const timeoutId = setTimeout(finish, 15000);
 
     watchId = navigator.geolocation.watchPosition(
-      (position) => {
+      (pos) => {
         if (finished) return;
-        const acc = position.coords.accuracy;
+        const acc = pos.coords.accuracy;
         
-        setSetupError(`GPS stabilizing (±${Math.round(acc)}m)...`);
-        
-        if (acc <= 100) {
-          readings.push({ 
-            lat: position.coords.latitude, 
-            lng: position.coords.longitude, 
-            acc: acc
-          });
+        if (acc < bestAcc) {
+          bestAcc = acc;
+          bestPos = pos;
+          setSetupError(`Signal improving (±${Math.round(acc)}m)...`);
         }
 
-        // If we get 3 highly accurate readings, stop waiting and start immediately
-        if (readings.length >= 3) {
+        if (acc <= 30) {
           clearTimeout(timeoutId);
           finish();
         }
       },
-      (error) => {
-        clearTimeout(timeoutId);
-        if (finished) return;
-        finished = true;
-        cleanup();
-        if (error.code === 1) setSetupError("Permission Denied: tap 'Allow' for location and try again.");
-        else setSetupError("GPS signal lost. Ensure you are near a window or outdoors.");
-        setIsStarting(false);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   };
 
@@ -471,15 +470,13 @@ export default function LecturerDashboard() {
 
   const handleManualOverride = async (targetMatric: string) => {
     const safeMatric = String(targetMatric || '').trim();
-    if (!activeSessionId) return;
-    if (!safeMatric) return;
+    if (!activeSessionId || !safeMatric) return;
 
     setIsOverriding(true);
     try {
       const headers = await getHeaders();
       const response = await fetch('/api/override-attendance', {
-        method: 'POST',
-        headers,
+        method: 'POST', headers,
         body: JSON.stringify({ sessionId: activeSessionId, matricNumber: safeMatric }),
       });
       if (response.ok) {
@@ -607,7 +604,7 @@ export default function LecturerDashboard() {
   if (!activeSessionId || viewMode === 'history') {
     return (
       <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-950 p-4 md:p-8 font-sans transition-colors duration-300">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto h-175 overflow-y-auto pb-10">
           {expiredMessage && (
             <div className="mb-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertTriangle className="text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" size={20} />
@@ -701,7 +698,7 @@ export default function LecturerDashboard() {
               </div>
             </div>
           ) : (
-            <div className="animate-in fade-in slide-in-from-bottom-4">
+            <div className="animate-in fade-in slide-in-from-bottom-4 pb-10">
               {!viewingPastSession ? (
                 <div className="space-y-4">
                   <div className="relative">

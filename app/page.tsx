@@ -57,7 +57,7 @@ function CheckInWrapper() {
         <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-20 pb-16 md:pt-32 md:pb-24 relative z-10 text-center flex flex-col items-center">
           
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-[#2563EB] dark:text-blue-400 text-xs font-bold mb-8 animate-in fade-in slide-in-from-bottom-4">
-            <ShieldCheck size={14} /> Built for NUC Compliance & Zero Proxy
+            <ShieldCheck size={14} /> Built for NUC Compliance & Proxy-Resistant
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-gray-900 dark:text-white tracking-tight leading-[1.1] mb-6 animate-in fade-in slide-in-from-bottom-6">
@@ -68,7 +68,7 @@ function CheckInWrapper() {
           </h1>
 
           <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 font-medium max-w-2xl mx-auto mb-10 animate-in fade-in slide-in-from-bottom-8">
-            Eliminate proxy attendance with hardware-bound biometrics and strict GPS verification. No downloads required.
+            Reduce proxy attendance with hardware-bound biometrics and strict GPS verification. No downloads required.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto animate-in fade-in slide-in-from-bottom-10">
@@ -301,9 +301,9 @@ function CheckInWrapper() {
               <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mb-6">
                 <ShieldCheck className="text-amber-500 dark:text-amber-400" size={24} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Zero Proxy</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Proxy-Resistant</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                One credential per student. One device per account. Our server blocks any attempt to check in multiple students from the same phone.
+                One credential per student. One device per account. Our server flags any attempt to check in multiple students from the same phone.
               </p>
             </div>
 

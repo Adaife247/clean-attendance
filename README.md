@@ -5,7 +5,7 @@ Geofenced campus attendance & verification system built for Nigerian universitie
 ## 🚀 Core Features
 
 ### Security & Anti-Proxy (The Fortress)
-*   **Zero Proxy Guarantee:** Prevents students from checking in for absent friends using our "Check-in Trap" (one device cannot check in two students).
+*   **Proxy-Resistant Design:** Reduces proxy attendance using our "Check-in Trap" (flags when one device attempts to check in two students).
 *   **WebAuthn Biometrics:** FaceID, TouchID, or PIN. Unphishable and cryptographically bound to the device.
 *   **Device Binding:** Persistent hardware fingerprinting ensures one phone = one student. Clearing the cache, using Incognito, or switching browsers does not bypass the lock.
 *   **Location Spoofing Detection:** Strict server-side geofencing combined with DeviceMotion cross-checks (detects if a phone is lying flat on a desk while a fake GPS app simulates walking).

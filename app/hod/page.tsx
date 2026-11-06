@@ -3,9 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/utils/supabase';
 import { getLecturerHeaders } from '@/utils/api-client';
-import { ShieldCheck, Users, BookOpen, Star, TrendingUp, AlertTriangle, ArrowLeft, Loader2, BarChart3, CheckCircle } from 'lucide-react';
+import { ShieldCheck, Users, BookOpen, Star, TrendingUp, AlertTriangle, ArrowLeft, Loader2, BarChart3, CheckCircle, Download } from 'lucide-react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
+import { ToastContainer, useToast } from '@/components/Toast';
 
 interface LecturerStat {
   id: string;
@@ -29,6 +30,9 @@ export default function HODPortal() {
   const [error, setError] = useState('');
   const [stats, setStats] = useState<LecturerStat[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData>({ total: 0, cleared: 0, atRisk: 0 });
+  const [isExporting, setIsExporting] = useState(false);
+
+  const { toasts, addToast, removeToast } = useToast();
 
   const fetchDepartmentData = useCallback(async () => {
     try {
@@ -76,6 +80,46 @@ export default function HODPortal() {
     return () => clearTimeout(id);
   }, [fetchDepartmentData]);
 
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data: profile } = await supabase
+        .from('lecturers')
+        .select('department')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!profile?.department) throw new Error("Department not found");
+
+      const headers = await getLecturerHeaders();
+      const res = await fetch(`/api/hod-export?department=${encodeURIComponent(profile.department)}`, { headers });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to generate export");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Department_${profile.department}_Compliance.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      addToast('Export Successful', 'Department compliance CSV downloaded.', 'success');
+    } catch (err) {
+      addToast('Export Failed', err instanceof Error ? err.message : 'Unknown error', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4 transition-colors duration-300">
@@ -116,10 +160,18 @@ export default function HODPortal() {
             </div>
             <p className="text-gray-500 dark:text-gray-400 font-medium">Department-wide analytics and NUC compliance.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <ThemeToggle />
+            <button 
+              onClick={handleExport}
+              disabled={isExporting || compliance.total === 0}
+              className="flex items-center gap-2 bg-[#2563EB] text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm"
+            >
+              {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              {isExporting ? 'Exporting...' : 'Export Dept CSV'}
+            </button>
             <Link href="/dashboard" className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
-              <ArrowLeft size={16} /> Back to Lecturer View
+              <ArrowLeft size={16} /> Lecturer View
             </Link>
           </div>
         </div>
@@ -182,7 +234,7 @@ export default function HODPortal() {
           
           <div className="flex justify-between items-center mt-3 text-sm font-bold">
             <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle size={14}/> {compliance.cleared} Cleared</span>
-            <span className="text-gray-500 dark:text-gray-400">{compliance.total} Total Students</span>
+            <span className="text-gray-500 dark:text-gray-400">{compliance.total} Total Enrollments</span>
             <span className="text-red-500 dark:text-red-400 flex items-center gap-1"><AlertTriangle size={14}/> {compliance.atRisk} At Risk</span>
           </div>
         </div>
@@ -234,6 +286,8 @@ export default function HODPortal() {
         </div>
 
       </div>
+
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

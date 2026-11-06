@@ -41,7 +41,7 @@ interface LogRow { session_id: string; status: string; }
 interface SessionRow { session_id: string; course_id: string; course_code: string; created_at: string; is_active: boolean; expires_at: string | null; }
 interface HistoryRow extends SessionRow { status: string; }
 
-const POLL_INTERVAL_MS = 10000; // 10 seconds fallback
+const POLL_INTERVAL_MS = 10000;
 const FEED_LAST_SEEN_KEY = 'campuscheck_feed_last_seen';
 const getCurrentTimestamp = () => Date.now();
 
@@ -67,7 +67,8 @@ export default function StudentPortal() {
   
   const [records, setRecords] = useState<CourseRecord[] | null>(null);
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
-  const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string } | null>(null);
+  // UPDATED: Added courseId to activeLiveSession
+  const [activeLiveSession, setActiveLiveSession] = useState<{ course: string, sessionId: string, courseId: string } | null>(null);
   const [liveSessionCheckedIn, setLiveSessionCheckedIn] = useState<boolean>(false);
   const [liveSessionCheckedInAt, setLiveSessionCheckedInAt] = useState<string | null>(null);
 
@@ -111,7 +112,13 @@ export default function StudentPortal() {
     if (!enrollmentRows || enrollmentRows.length === 0) {
       setRecords([]);
       setRepCourseIds([]);
-      setFeed([]);
+      const { data: globalFeed } = await supabase
+        .from('campus_updates')
+        .select('*')
+        .is('course_id', null)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      setFeed(globalFeed || []);
       return;
     }
 
@@ -120,7 +127,7 @@ export default function StudentPortal() {
     const { data: feedData } = await supabase
       .from('campus_updates')
       .select('*')
-      .in('course_id', courseIds)
+      .or(`course_id.in.(${courseIds.join(',')}),course_id.is.null`)
       .order('created_at', { ascending: false })
       .limit(20);
     if (feedData) setFeed(feedData);
@@ -173,7 +180,8 @@ export default function StudentPortal() {
     studentLogs.forEach(l => logStatusMap.set(l.session_id, l.status));
 
     if (liveSession) {
-      setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id });
+      // UPDATED: Pass courseId
+      setActiveLiveSession({ course: liveSession.course_code, sessionId: liveSession.session_id, courseId: liveSession.course_id });
       const existingLog = studentLogs.find(l => l.session_id === liveSession.session_id && l.status === 'verified');
       if (existingLog) {
         setLiveSessionCheckedIn(true);
@@ -320,7 +328,6 @@ export default function StudentPortal() {
     return () => clearTimeout(id);
   }, []);
 
-  // REALTIME + POLLING FALLBACK FOR LIVE SESSION
   useEffect(() => {
     if (!activeLiveSession) return;
 
@@ -344,7 +351,6 @@ export default function StudentPortal() {
       }
     };
 
-    // 1. Realtime Listener (Instant)
     const channel = supabase
       .channel(`live_session_${activeLiveSession.sessionId}`)
       .on(
@@ -360,7 +366,6 @@ export default function StudentPortal() {
       )
       .subscribe();
 
-    // 2. Polling Fallback (Every 10s)
     const intervalId = setInterval(checkSessionStatus, POLL_INTERVAL_MS);
 
     return () => {
@@ -716,7 +721,8 @@ export default function StudentPortal() {
           )
         )}
 
-        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 min-h-150 transition-all duration-300">
+        {/* UPDATED: enforce fixed height h-[600px] to prevent shake */}
+        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl rounded-3xl shadow-xl shadow-gray-200/50 dark:shadow-none border border-white dark:border-gray-800 p-6 min-h-150 h-150 overflow-y-auto transition-all duration-300">
           
           {!records && renderUnlockForm()}
 
